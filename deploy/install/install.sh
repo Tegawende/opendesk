@@ -570,7 +570,9 @@ fetch_assets() {
         fetch_verified "$_base" images.json
         _app=$(sed -n 's/.*"opendesk": *"\(sha256:[0-9a-f]\{64\}\)".*/\1/p' "$TMP/images.json")
         _gw=$(sed -n 's/.*"realtime": *"\(sha256:[0-9a-f]\{64\}\)".*/\1/p' "$TMP/images.json")
-        [ -n "$_app" ] && [ -n "$_gw" ] || die "The release's images.json does not name both image digests."
+        if [ -z "$_app" ] || [ -z "$_gw" ]; then
+            die "The release's images.json does not name both image digests."
+        fi
         IMAGE_PIN="@$_app"
         REALTIME_PIN="@$_gw"
         ok "Images pinned to the digests release $VERSION published"

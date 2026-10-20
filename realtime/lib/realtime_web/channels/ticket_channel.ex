@@ -159,8 +159,6 @@ defmodule RealtimeWeb.TicketChannel do
   end
 
   defp handle_push("typing", payload, socket) when is_map(payload) do
-    %{sub: sub, name: name, wid: wid, ticket_id: ticket_id} = socket.assigns
-
     case Map.get(payload, "contact_id") do
       nil ->
         broadcast_from!(socket, "typing", typing(socket))
@@ -169,15 +167,7 @@ defmodule RealtimeWeb.TicketChannel do
       contact_id ->
         if Ids.uuid?(contact_id) do
           broadcast_from!(socket, "typing", typing(socket))
-
-          # Only someone who can reply shows the customer they are typing: never a viewer.
-          if Map.get(socket.assigns, :role) != "viewer" do
-            Endpoint.broadcast!("contact:#{wid}:#{Ids.normalize(contact_id)}", "typing", %{
-              ticket_id: ticket_id,
-              user: %{id: sub, name: name}
-            })
-          end
-
+          typing_to_contact(socket, contact_id)
           {:noreply, socket}
         else
           Guard.invalid(socket)
@@ -186,6 +176,18 @@ defmodule RealtimeWeb.TicketChannel do
   end
 
   defp handle_push(_event, _payload, socket), do: Guard.invalid(socket)
+
+  # Only someone who can reply shows the customer they are typing: never a viewer.
+  defp typing_to_contact(%{assigns: %{role: "viewer"}}, _contact_id), do: :ok
+
+  defp typing_to_contact(socket, contact_id) do
+    %{sub: sub, name: name, wid: wid, ticket_id: ticket_id} = socket.assigns
+
+    Endpoint.broadcast!("contact:#{wid}:#{Ids.normalize(contact_id)}", "typing", %{
+      ticket_id: ticket_id,
+      user: %{id: sub, name: name}
+    })
+  end
 
   defp typing(socket),
     do: %{user_id: socket.assigns.sub, name: socket.assigns.name, team_id: socket.assigns.team_id}

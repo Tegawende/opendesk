@@ -285,7 +285,10 @@ run_installer() {
         curl -fsSL "$RELEASES/download/$_v/install.sh.sha256" -o "$_d/install.sh.sha256" || { warn "no checksum published for $_v"; return 1; }
         _want=$(cut -d' ' -f1 "$_d/install.sh.sha256")
     fi
-    [ -n "$_want" ] && [ "$(sha256 "$_d/install.sh")" = "$_want" ] || { warn "the $_v installer does not match its published checksum"; return 1; }
+    if [ -z "$_want" ] || [ "$(sha256 "$_d/install.sh")" != "$_want" ]; then
+        warn "the $_v installer does not match its published checksum"
+        return 1
+    fi
     sh "$_d/install.sh" --dir "$DIR" --version "$_v" --yes "$@"
 }
 

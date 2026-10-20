@@ -18,6 +18,11 @@ function receiver() {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
+      // A new address answers its verification challenge by echoing it back.
+      if (req.headers["od-event-type"] === "webhook.verification") {
+        res.writeHead(200, { "Content-Type": "text/plain" }).end(JSON.parse(body).data.challenge);
+        return;
+      }
       got.push({ headers: req.headers, body });
       res.writeHead(200, { "Content-Type": "text/plain" }).end("ok");
     });
@@ -114,6 +119,7 @@ export async function run(t) {
       await secretDialog.getByRole("button", { name: "I've saved it" }).click();
       const hook = await until(async () => (await api("GET", "/v1/webhooks", opts())).json?.data?.find((w) => w.url === rx.url), "webhook saved");
       assert(JSON.stringify(hook.events) === '["*"]', `all events saved as * (${JSON.stringify(hook.events)})`);
+      await until(async () => (await api("GET", "/v1/webhooks", opts())).json?.data?.find((w) => w.id === hook.id)?.verified, "webhook verified by its echo");
       await inboundEmail(t.forwarding, rawEmail({ from: `hook-${uid()}@customer.test`, to: t.supportEmail, subject: `Webhook test ${uid()}`, text: "Hello" }));
       const d = await until(() => rx.got.find((x) => x.headers["od-event-type"] === "ticket.created"), "ticket.created delivered", 20_000);
       const [ts, v1] = String(d.headers["od-signature"]).split(",").map((p) => p.split("=")[1]);
