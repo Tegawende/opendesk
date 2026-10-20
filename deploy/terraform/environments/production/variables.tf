@@ -425,3 +425,21 @@ variable "email_legal" {
     address               = "71-75 Shelton Street, London, England, WC2H 9JQ"
   }
 }
+
+variable "alb_log_retention_days" {
+  description = "Days the load balancer's access logs are kept in the logs bucket (logging.tf)."
+  type        = number
+  default     = 90
+}
+
+variable "cloudtrail" {
+  description = "Record every API call in the account with a multi-region CloudTrail trail (logging.tf). Turn off only when an organization trail already covers the account."
+  type        = bool
+  default     = true
+}
+
+variable "cloudtrail_retention_days" {
+  description = "Days CloudTrail log files are kept in the logs bucket."
+  type        = number
+  default     = 365
+}

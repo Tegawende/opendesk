@@ -2,6 +2,7 @@
 // that records console errors and failed API calls, mail links read from the
 // API's log mailer output, and small assertion helpers.
 
+import { createHmac } from "node:crypto";
 import fs from "node:fs";
 import { chromium } from "playwright";
 
@@ -99,9 +100,12 @@ export async function api(method, path, { token, workspace, body, headers = {} }
 }
 
 export async function inboundEmail(to, raw) {
+  // Signed like the Cloudflare Email Worker: HMAC-SHA256 over "<t>.<to>.<envelope from>." and the message.
+  const t = Math.floor(Date.now() / 1000);
+  const mac = createHmac("sha256", cfg.inboundSecret).update(`${t}.${to}..`).update(raw).digest("hex");
   const res = await fetch(`${cfg.api}/v1/inbound/email?to=${encodeURIComponent(to)}`, {
     method: "POST",
-    headers: { "OD-Inbound-Secret": cfg.inboundSecret, "Content-Type": "message/rfc822" },
+    headers: { "OD-Inbound-Signature": `t=${t},v1=${mac}`, "Content-Type": "message/rfc822" },
     body: raw,
   });
   if (res.status !== 202) throw new Error(`inbound -> ${res.status} ${await res.text()}`);

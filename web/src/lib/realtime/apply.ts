@@ -274,7 +274,7 @@ export function applyEnvelope(qc: QueryClient, env: Envelope, ctx: ApplyContext)
       return;
     }
     case "notification.created": {
-      // The workspace channel carries everyone's notifications; ours arrive on user:<me>.
+      // Notifications arrive on user:<me> only; a replay carries the recipient in topics.
       if (!ctx.viaUser && !env.topics?.includes(`user:${ctx.me}`)) return;
       const n = d.notification as Notification;
       if (!n) return;
@@ -418,6 +418,13 @@ export function applyEnvelope(qc: QueryClient, env: Envelope, ctx: ApplyContext)
     // Imported history is quiet, one event per import rather than per ticket: lists catch
     // up when what it wrote moves, at most every few seconds (the last refetch comes after the last event).
     if (!before || landed(before) !== landed(x) || before.status !== x.status) refreshImported(qc);
+    return;
+  }
+
+  // A mailbox event carries the members' view, without the config admins read: the list
+  // refetches so an admin's copy keeps it.
+  if (resource === "mailbox") {
+    void qc.invalidateQueries({ queryKey: qk.mailboxes });
     return;
   }
 

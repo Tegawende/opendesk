@@ -237,8 +237,9 @@ func PostMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 		reply = m
 	}
 	// The address a reply actually goes out from must be one the caller may send from: a
-	// private team's address is for that team's members (contracts/teams.md "Reply address").
-	if b.Kind == "reply" && strings.TrimSpace(b.MailboxID) == "" {
+	// private team's address is for that team's members (contracts/teams.md "Reply address"),
+	// whether the reply names it or inherits it from the ticket.
+	if b.Kind == "reply" {
 		from := mailboxID
 		if reply != nil {
 			from = reply

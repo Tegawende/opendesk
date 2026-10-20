@@ -25,7 +25,8 @@ defmodule RealtimeWeb.TicketChannel do
     * `"presence"` `{state: "viewing" | "replying" | "idle"}` updates the meta.
     * `"typing"` `{contact_id?}` sends `"typing"` `{user_id, name}` to the other
       agents here and, with a `contact_id`, `"typing"`
-      `{ticket_id, user: {id, name}}` to `contact:<wid>:<contact_id>`.
+      `{ticket_id, user: {id, name}}` to `contact:<wid>:<contact_id>` (not from a
+      viewer, who cannot reply).
   """
 
   use Phoenix.Channel, log_join: false, log_handle_in: false
@@ -169,10 +170,13 @@ defmodule RealtimeWeb.TicketChannel do
         if Ids.uuid?(contact_id) do
           broadcast_from!(socket, "typing", typing(socket))
 
-          Endpoint.broadcast!("contact:#{wid}:#{Ids.normalize(contact_id)}", "typing", %{
-            ticket_id: ticket_id,
-            user: %{id: sub, name: name}
-          })
+          # Only someone who can reply shows the customer they are typing: never a viewer.
+          if Map.get(socket.assigns, :role) != "viewer" do
+            Endpoint.broadcast!("contact:#{wid}:#{Ids.normalize(contact_id)}", "typing", %{
+              ticket_id: ticket_id,
+              user: %{id: sub, name: name}
+            })
+          end
 
           {:noreply, socket}
         else

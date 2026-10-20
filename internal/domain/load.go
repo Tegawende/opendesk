@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -34,9 +35,11 @@ var systemSending = true
 // ConfigureSending sets whether mailboxes may send through the platform mailer. Call once at boot.
 func ConfigureSending(system bool) { systemSending = system }
 
-// AttachmentURL is a link valid for 24h so <img> tags and downloads work without a bearer token.
+// AttachmentURL is a link valid for one to two hours so <img> tags and downloads work
+// without a bearer token. The expiry is rounded to the hour, so a body renders with the
+// same links for a while (browser cache); loading a message signs its links again.
 func AttachmentURL(id uuid.UUID) string {
-	exp := strconv.FormatInt(time.Now().Add(24*time.Hour).Truncate(time.Hour).Unix(), 10)
+	exp := strconv.FormatInt(time.Now().Add(2*time.Hour).Truncate(time.Hour).Unix(), 10)
 	return apiURL + "/v1/attachments/" + id.String() + "?exp=" + exp + "&sig=" + crypto.HMACHex(attachmentKey, id.String()+":"+exp)
 }
 
@@ -168,7 +171,7 @@ func ScanMessage(row pgx.Row) (Message, error) {
 	for i := range m.Attachments {
 		m.Attachments[i].URL = AttachmentURL(m.Attachments[i].ID)
 	}
-	m.BodyHTML = ResignAttachmentLinks(m.BodyHTML)
+	m.BodyHTML = ResignAttachmentLinks(m.BodyHTML, m.Attachments)
 	for _, s := range []*[]string{&m.To, &m.Cc, &m.Bcc} {
 		if *s == nil {
 			*s = []string{}
@@ -266,16 +269,18 @@ func PublicMessage(m Message) Message {
 
 var attachmentLink = regexp.MustCompile(`/v1/attachments/([0-9a-f-]{36})\?exp=\d+(&amp;|&)sig=[0-9a-f]+`)
 
-// ResignAttachmentLinks refreshes the signed attachment links inside stored HTML
-// (inline images), so bodies keep rendering after the original links expire.
-func ResignAttachmentLinks(html string) string {
+// ResignAttachmentLinks refreshes the signed attachment links inside a message's stored
+// HTML (its inline images), so a body keeps rendering after the links it was stored with
+// expire. Only links to the message's own attachments are signed again: a stored body is
+// not a way to sign links to other files.
+func ResignAttachmentLinks(html string, own []Attachment) string {
 	if !strings.Contains(html, "/v1/attachments/") {
 		return html
 	}
 	return attachmentLink.ReplaceAllStringFunc(html, func(m string) string {
 		sub := attachmentLink.FindStringSubmatch(m)
 		id, err := uuid.Parse(sub[1])
-		if err != nil {
+		if err != nil || !slices.ContainsFunc(own, func(a Attachment) bool { return a.ID == id }) {
 			return m
 		}
 		fresh := strings.TrimPrefix(AttachmentURL(id), apiURL)

@@ -722,7 +722,7 @@ export type MailHost =
   | "other";
 export type PasswordAuth = "app_password" | "password" | "oauth_only" | "unsupported";
 export type MailEndpoint = { host: string; port: number; security: "tls" | "starttls" };
-/** GET /v1/mailboxes/detect. */
+/** POST /v1/mailboxes/detect {email}. */
 export type MailDetection = {
   domain: string;
   host: MailHost | "";
@@ -845,6 +845,8 @@ export type Webhook = {
   description: string;
   events: string[];
   enabled: boolean;
+  /** The address answered its verification challenge; until then it receives no events. */
+  verified: boolean;
   created_at: string;
   private_team_ids?: string[];
   private_teams?: PrivateTeamGrant[];
@@ -1046,7 +1048,14 @@ export type AuthConfig = {
   /** The VAPID public key browsers subscribe to web pushes with; null when the server sends none. */
   web_push_key: string | null;
 };
-export type TokenResponse = { access_token: string; expires_in: number; user: User; redirect_to?: string };
+export type TokenResponse = {
+  access_token: string;
+  expires_in: number;
+  user: User;
+  redirect_to?: string;
+  /** The password signed in with is breached or shorter than the rules now ask. */
+  change_password?: boolean;
+};
 /** One account this browser is signed in to (POST /v1/auth/accounts). */
 export type Account = {
   user: Pick<User, "id" | "name" | "email" | "avatar_url">;
@@ -1203,7 +1212,7 @@ export type WidgetConfig = {
   brand?: { name: string; color: string | null };
 };
 
-/** GET /v1/public/csat/{token}. `locale` is the workspace default ("" when not set). */
+/** POST /v1/public/csat/survey {token}. `locale` is the workspace default ("" when not set). */
 export type CsatSurvey = {
   workspace_name: string;
   brand_color: string;
