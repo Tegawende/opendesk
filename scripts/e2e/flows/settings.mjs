@@ -185,10 +185,11 @@ export async function run(t) {
     await openTicket(owner, subject);
     const tid = owner.url().split("/").pop();
     await owner.getByRole("button", { name: "Solve", exact: true }).click();
-    const link = await mailLink("/csat/", email, 20_000);
+    // The survey token rides in the link's fragment: /csat#t=<token>&score=<n>.
+    const link = await mailLink("/csat#t=", email, 20_000);
     const { page, problems } = await newPage("customer");
     t.problems.push(problems);
-    await page.goto(link.replace(/\?score=\d/, "?score=4"));
+    await page.goto(link.replace(/&score=\d/, "&score=4"));
     await page.getByRole("radio", { name: /^5,/ }).click();
     await page.getByLabel(/Anything you'd like to add/).fill("Quick and kind.");
     await page.getByRole("button", { name: /Send (feedback|comment)/ }).click();
