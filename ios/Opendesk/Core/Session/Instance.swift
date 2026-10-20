@@ -157,6 +157,11 @@ struct InstanceResolver: Sendable {
             candidate.selfHosted = runtime.selfHosted ?? true
             if candidate.appOrigin.host() == Instance.cloudAppOrigin.host() { candidate.selfHosted = false }
         }
+        // The refresh token and the socket travel to these, so config.json can't point
+        // them at plain http or ws.
+        guard Self.isSecure(candidate.apiURL), candidate.gatewayURL.map(Self.isSecure) ?? true else {
+            throw InstanceError.insecure
+        }
         let auth = try await authConfig(for: candidate.apiURL)
         return (candidate, auth)
     }
@@ -202,6 +207,20 @@ struct InstanceResolver: Sendable {
         else { return nil }
         components.scheme = components.scheme == "http" ? "ws" : "wss"
         return components.url
+    }
+
+    /// https or wss; a debug build also takes http and ws on a local or private host.
+    static func isSecure(_ url: URL) -> Bool {
+        switch url.scheme?.lowercased() {
+        case "https", "wss": return true
+        case "http", "ws":
+            #if DEBUG
+            return isLocalOrPrivate(url.host()?.lowercased() ?? "")
+            #else
+            return false
+            #endif
+        default: return false
+        }
     }
 
     /// Drops a trailing slash so `appending(path:)` builds clean URLs.

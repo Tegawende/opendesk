@@ -9,9 +9,16 @@
 // their beta. Downgrades are never allowed: someone who leaves the beta keeps
 // their beta version until a stable version passes it.
 
-import { app, dialog, Notification } from "electron";
+import { app, dialog, Notification, shell } from "electron";
 import { autoUpdater, type ProgressInfo, type UpdateInfo } from "electron-updater";
-import { devArg, isDev, RELEASE_NOTES_URL, UPDATE_INTERVAL_MS } from "./env";
+import { devArg, DOWNLOAD_URL, isDev, RELEASE_NOTES_URL, UPDATE_INTERVAL_MS } from "./env";
+
+/**
+ * The app installs updates itself only where electron-updater checks the update's code
+ * signature against the running app's (macOS, Windows). Linux packages carry no such
+ * signature, so there people install a new version from the download page.
+ */
+export const selfUpdates = process.platform === "darwin" || process.platform === "win32";
 import { store, type UpdateChannel } from "./store";
 
 export type UpdateState =
@@ -76,6 +83,7 @@ export function startUpdater(onChange: (s: UpdateState, statusChanged: boolean) 
     demoState();
     return;
   }
+  if (!selfUpdates) return;
   started = true;
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
@@ -119,6 +127,12 @@ export async function checkNow(parent: Electron.BrowserWindow | null) {
     parent && !parent.isDestroyed() ? dialog.showMessageBox(parent, { message, detail, buttons: ["OK"] }) : dialog.showMessageBox({ message, detail, buttons: ["OK"] });
   if (!app.isPackaged) {
     await show("Updates are checked in installed builds", "Development builds don't update themselves.");
+    return;
+  }
+  if (!selfUpdates) {
+    const opts = { message: "Install updates from the download page", detail: `You have version ${app.getVersion()}. New versions for Linux are on the download page.`, buttons: ["Open download page", "OK"], defaultId: 0, cancelId: 1 };
+    const r = parent && !parent.isDestroyed() ? await dialog.showMessageBox(parent, opts) : await dialog.showMessageBox(opts);
+    if (r.response === 0) void shell.openExternal(DOWNLOAD_URL);
     return;
   }
   if (state.status === "ready") {

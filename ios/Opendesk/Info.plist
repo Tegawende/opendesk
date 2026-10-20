@@ -17,11 +17,13 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+#if OD_LOCAL_NETWORKING
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+#endif
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>opendesk connects to a development or self-hosted server on your local network.</string>
 	<key>UIAppFonts</key>

@@ -2,12 +2,13 @@ import SwiftUI
 import WebKit
 
 /// Stored email HTML (sanitized by the server with bluemonday) in a web view
-/// with JavaScript off and a CSP that only lets images load (https, data:,
-/// and the API's own attachments), with no referrer. It sizes itself to the
-/// content; links open outside the app.
+/// with JavaScript off and a CSP that only lets images load (data:, the API's
+/// own attachments, and https once the reader asks with remoteImages), with no
+/// referrer. It sizes itself to the content; links open outside the app.
 struct MessageWebView: UIViewRepresentable {
     let html: String
     let baseURL: URL?
+    var remoteImages = false
     @Binding var height: CGFloat
     @Environment(\.colorScheme) private var scheme
 
@@ -46,7 +47,8 @@ struct MessageWebView: UIViewRepresentable {
             dark: dark,
             textColor: UIColor(Theme.fg).resolvedColor(with: traits).cssHex,
             linkColor: UIColor(Tone.blue.solid).resolvedColor(with: traits).cssHex,
-            quoteColor: UIColor(Theme.fg3).resolvedColor(with: traits).cssHex
+            quoteColor: UIColor(Theme.fg3).resolvedColor(with: traits).cssHex,
+            remoteImages: remoteImages
         )
         guard document != context.coordinator.loaded else { return }
         context.coordinator.loaded = document

@@ -98,15 +98,23 @@ enum HTMLText {
         html.range(of: #"(?i)<table[\s>]|\sbgcolor=|background(-color|-image)?\s*:"#, options: .regularExpression) != nil
     }
 
-    /// A self-contained document for a message, for a web view with JavaScript off.
-    /// Images load over https only (and data: URIs), with no referrer, as on the web.
-    static func document(body: String, dark: Bool, textColor: String, linkColor: String, quoteColor: String, fontSize: Int = 15) -> String {
-        if isDesignedEmail(body) { return designedDocument(body: body, inset: dark, fontSize: fontSize) }
+    /// The CSP of a message document. Images and fonts from other sites are held back
+    /// until the reader asks for them (remoteImages), as on the web; data: URIs and the
+    /// base URL's own files (the API's attachments) always load.
+    static func csp(remoteImages: Bool) -> String {
+        let remote = remoteImages ? " https:" : ""
+        return "default-src 'none'; img-src 'self' data:\(remote); style-src 'unsafe-inline'; font-src data:\(remote)"
+    }
+
+    /// A self-contained document for a message, for a web view with JavaScript off, with
+    /// no referrer. Remote images load only with remoteImages.
+    static func document(body: String, dark: Bool, textColor: String, linkColor: String, quoteColor: String, fontSize: Int = 15, remoteImages: Bool = false) -> String {
+        if isDesignedEmail(body) { return designedDocument(body: body, inset: dark, fontSize: fontSize, remoteImages: remoteImages) }
         return """
         <!doctype html><html><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
         <meta name="referrer" content="no-referrer">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline'; font-src https: data:">
+        <meta http-equiv="Content-Security-Policy" content="\(csp(remoteImages: remoteImages))">
         <meta name="color-scheme" content="\(dark ? "dark" : "light")">
         <style>
         :root { color-scheme: \(dark ? "dark" : "light"); }
@@ -124,12 +132,12 @@ enum HTMLText {
     }
 
     /// A designed email in its own light document; on a dark screen the pane gets a margin.
-    private static func designedDocument(body: String, inset: Bool, fontSize: Int) -> String {
+    private static func designedDocument(body: String, inset: Bool, fontSize: Int, remoteImages: Bool) -> String {
         """
         <!doctype html><html><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
         <meta name="referrer" content="no-referrer">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline'; font-src https: data:">
+        <meta http-equiv="Content-Security-Policy" content="\(csp(remoteImages: remoteImages))">
         <meta name="color-scheme" content="light">
         <style>
         :root { color-scheme: light; }

@@ -165,8 +165,9 @@ own protections on:
   addresses in development builds).
 - **Connect flows** (Gmail, Outlook, MCP tools) open the same settings page in
   the default browser; the result reaches the app through realtime events.
-- **Updates**: from GitHub Releases over https, verified by electron-updater
-  (sha512 from the release metadata, and the code signature on macOS and
-  Windows when signed), never to an older version. The page can read the
+- **Updates**: on macOS and Windows, from GitHub Releases over https, verified
+  by electron-updater (sha512 from the release metadata, and the code signature,
+  which every tagged release carries), never to an older version. Linux builds
+  do not update themselves: "Check for updates" opens the download page. The page can read the
   update state, ask for a check, a restart into a downloaded update or a
   channel (`stable` or `beta`), nothing more.

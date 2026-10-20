@@ -143,7 +143,7 @@ final class RealtimeService {
         let instance = api.instance
         let socket = PhoenixSocket { [api] in
             let token: RealtimeToken = try await api.post("v1/realtime/token")
-            return Self.socketURL(instance: instance, token: token)
+            return Self.socketEndpoint(instance: instance, token: token)
         }
         self.socket = socket
         pump = Task { [weak self] in
@@ -210,15 +210,18 @@ final class RealtimeService {
         if lastSeq != nil { Task { await catchUp() } }
     }
 
-    nonisolated static func socketURL(instance: Instance, token: RealtimeToken) -> URL {
+    /// The gateway socket: the token goes in Sec-WebSocket-Protocol as Phoenix's auth token
+    /// ("base64url.bearer.phx." + unpadded base64 of the token), never in the URL.
+    nonisolated static func socketEndpoint(instance: Instance, token: RealtimeToken) -> PhoenixSocket.Endpoint {
         var base = instance.gatewayURL
         if base == nil, let raw = token.url, !raw.isEmpty {
             base = InstanceResolver.gatewayURL(raw, origin: instance.appOrigin)
         }
         let gateway = base ?? instance.resolvedGatewayURL
         var components = URLComponents(url: gateway.appending(path: "websocket"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "token", value: token.token), URLQueryItem(name: "vsn", value: "2.0.0")]
-        return components.url!
+        components.queryItems = [URLQueryItem(name: "vsn", value: "2.0.0")]
+        let encoded = Data(token.token.utf8).base64EncodedString().replacingOccurrences(of: "=", with: "")
+        return PhoenixSocket.Endpoint(url: components.url!, protocols: ["phoenix", "base64url.bearer.phx." + encoded])
     }
 
     // MARK: Signals

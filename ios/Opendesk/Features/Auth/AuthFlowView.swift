@@ -408,6 +408,76 @@ struct LinkAccountView: View {
     }
 }
 
+// MARK: - Password strength
+
+/// A rough strength estimate for a new password (ASVS 2.1.8), shown once it is long enough:
+/// how many kinds of characters it mixes and how long it is, less for repeats and for the
+/// person's own name or email in it. The server's rules (length, breached list) still decide.
+enum PasswordStrength: Int {
+    case weak = 1, fair, good, strong
+
+    init(_ password: String, userInputs: [String]) {
+        let scalars = Array(password.unicodeScalars)
+        var kinds = 0
+        if scalars.contains(where: { CharacterSet.lowercaseLetters.contains($0) }) { kinds += 1 }
+        if scalars.contains(where: { CharacterSet.uppercaseLetters.contains($0) }) { kinds += 1 }
+        if scalars.contains(where: { CharacterSet.decimalDigits.contains($0) }) { kinds += 1 }
+        if scalars.contains(where: { !CharacterSet.alphanumerics.contains($0) }) { kinds += 1 }
+        let distinct = Set(scalars).count
+        var score = 0
+        if scalars.count >= 12 { score += 1 }
+        if scalars.count >= 16 { score += 1 }
+        if scalars.count >= 20 { score += 1 }
+        if kinds >= 3 { score += 1 }
+        if distinct < max(4, scalars.count / 3) { score -= 2 }
+        let lower = password.lowercased()
+        for input in userInputs {
+            let parts = input.lowercased().split(whereSeparator: { " @.+-_".contains($0) })
+            if parts.contains(where: { $0.count >= 3 && lower.contains($0) }) {
+                score -= 1
+                break
+            }
+        }
+        self = PasswordStrength(rawValue: min(max(score, 1), 4)) ?? .weak
+    }
+
+    var label: String {
+        switch self {
+        case .weak: "Weak: add more words or characters."
+        case .fair: "Fair: longer is stronger."
+        case .good: "Good."
+        case .strong: "Strong."
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .weak: .red
+        case .fair: .orange
+        case .good, .strong: .green
+        }
+    }
+}
+
+struct PasswordStrengthMeter: View {
+    let strength: PasswordStrength
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                ForEach(1...4, id: \.self) { i in
+                    Capsule()
+                        .fill(i <= strength.rawValue ? strength.color : Color.secondary.opacity(0.2))
+                        .frame(height: 3)
+                }
+            }
+            Text(strength.label).font(ODFont.footnote).foregroundStyle(Theme.fg3)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Password strength: \(strength.label)")
+    }
+}
+
 // MARK: - Register
 
 struct RegisterView: View {
@@ -421,8 +491,10 @@ struct RegisterView: View {
 
     private var passwordHint: String? {
         guard !password.isEmpty else { return "At least 12 characters." }
-        if password.count < 12 { return "\(12 - password.count) more characters." }
-        if password.count > 128 { return "At most 128 characters." }
+        // Counted in code points, as the server counts them.
+        let length = password.unicodeScalars.count
+        if length < 12 { return "\(12 - length) more characters." }
+        if length > 128 { return "At most 128 characters." }
         return nil
     }
 
@@ -440,6 +512,8 @@ struct RegisterView: View {
                     }
                     if let passwordHint {
                         Text(passwordHint).font(ODFont.footnote).foregroundStyle(Theme.fg3)
+                    } else {
+                        PasswordStrengthMeter(strength: PasswordStrength(password, userInputs: [name, email]))
                     }
                 }
             }
