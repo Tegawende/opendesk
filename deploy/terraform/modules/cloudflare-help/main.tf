@@ -114,9 +114,10 @@ resource "cloudflare_zone_setting" "this" {
 }
 
 # TLS 1.2 at the edge with forward-secret AEAD suites only (no CBC, no static RSA);
-# TLS 1.3 suites are all strong and not configurable.
+# TLS 1.3 suites are all strong and not configurable. Cloudflare accepts a cipher
+# list only on a zone with Advanced Certificate Manager, so it is opt-in.
 resource "cloudflare_zone_setting" "ciphers" {
-  count = var.manage_zone_settings ? 1 : 0
+  count = var.manage_zone_settings && var.edge_cipher_suites ? 1 : 0
 
   zone_id    = var.zone_id
   setting_id = "ciphers"

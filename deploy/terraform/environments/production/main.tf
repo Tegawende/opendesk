@@ -311,6 +311,7 @@ module "cloudflare" {
   origin_hostnames     = [local.host.api, local.host.gateway]
   inbound_hostname     = local.host.inbound
   manage_zone_settings = var.manage_zone_settings
+  edge_cipher_suites   = var.edge_cipher_suites
   pages_projects = {
     site = { name = "${var.name}-site", domain = local.host.site }
     docs = { name = "${var.name}-docs", domain = local.host.docs }
@@ -330,6 +331,7 @@ module "cloudflare_help" {
   zone_id              = local.help_zone_id
   help_domain          = var.help_domain
   manage_zone_settings = var.manage_zone_settings
+  edge_cipher_suites   = var.edge_cipher_suites
 }
 
 # ── Compute ───────────────────────────────────────────────────────────────

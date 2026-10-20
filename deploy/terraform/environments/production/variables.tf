@@ -74,6 +74,12 @@ variable "manage_zone_settings" {
   default = true
 }
 
+# Needs Advanced Certificate Manager on the zones (modules/cloudflare "edge_cipher_suites").
+variable "edge_cipher_suites" {
+  type    = bool
+  default = false
+}
+
 variable "restrict_alb_to_cloudflare" {
   type    = bool
   default = true
