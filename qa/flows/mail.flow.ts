@@ -134,3 +134,31 @@ test.describe("dark", () => {
     await proof.shot("pinned-dark", { caption: "The pinned bar in the dark theme" });
   });
 });
+
+test("new mail in your own account notifies you, and you can mute it per account", async ({ page, proof }) => {
+  await page.addInitScript(() => localStorage.setItem("od-ollie-tips", JSON.stringify({ paused: Number.MAX_SAFE_INTEGER })));
+  await proof.open("/inbox/unassigned");
+  await page.getByRole("button", { name: /^Notifications/ }).click();
+  const note = page.getByRole("button", { name: /New mail from/ }).first();
+  await expect(note).toBeVisible();
+  await proof.chapter("New mail", "Mail that lands in your own account's inbox shows under the bell");
+  await proof.dwell();
+  await proof.shot("bell", { caption: "New mail in the Work account, in the notifications panel" });
+
+  await note.click();
+  await expect(page).toHaveURL(/\/mail\//);
+  await proof.dwell();
+  await proof.shot("opened", { caption: "It opens the conversation in Mail" });
+
+  await proof.open("/settings/mail-accounts");
+  await page.getByText("Work", { exact: true }).first().click();
+  const toggle = page.getByRole("switch", { name: "New mail" });
+  await expect(toggle).toBeChecked();
+  await toggle.scrollIntoViewIfNeeded();
+  await proof.chapter("Mute an account", "Choose per account whether its new mail reaches you");
+  await toggle.click();
+  await expect(page.getByText("New mail in Work is muted for you")).toBeVisible();
+  await expect(toggle).not.toBeChecked();
+  await proof.dwell();
+  await proof.shot("muted", { caption: "New mail in Work muted for you alone" });
+});
