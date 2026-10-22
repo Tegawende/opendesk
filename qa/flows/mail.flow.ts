@@ -151,7 +151,7 @@ test("new mail in your own account notifies you, and you can mute it per account
   await proof.shot("opened", { caption: "It opens the conversation in Mail" });
 
   await proof.open("/settings/mail-accounts");
-  await page.getByText("Work", { exact: true }).first().click();
+  await page.getByRole("main").getByText("Work", { exact: true }).first().click();
   const toggle = page.getByRole("switch", { name: "New mail" });
   await expect(toggle).toBeChecked();
   await toggle.scrollIntoViewIfNeeded();
