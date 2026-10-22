@@ -217,6 +217,30 @@
         }
       }
     },
+    "push.collab_new_mail.body": {
+      "comment": "Push notification body for collab_new_mail.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In the inbox of a mail account you see"
+          }
+        }
+      }
+    },
+    "push.collab_new_mail.title": {
+      "comment": "Push notification title for collab_new_mail.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New mail"
+          }
+        }
+      }
+    },
     "push.customer_replied.body": {
       "comment": "Push notification body for customer_replied. %@ is the ticket number.",
       "extractionState": "manual",

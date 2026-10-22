@@ -28,6 +28,8 @@ export const NOTIFICATION_DEFAULTS: Record<NotificationType, { group: Notificati
   // Collab mail (contracts/collab.md "Notifications"): everywhere by default, like the ticket ones.
   collab_assigned: { group: "mail", defaults: on },
   collab_mention: { group: "mail", defaults: on },
+  // New mail in an account's inbox: already in the mail, so not emailed until turned on.
+  collab_new_mail: { group: "mail", defaults: { email: false, push: true, desktop: true } },
   ai_cap_reached: { group: "ai_billing", defaults: { email: true, push: false, desktop: true } },
   ai_key_failed: { group: "ai_billing", defaults: { email: true, push: false, desktop: true } },
   ai_balance_low: { group: "ai_billing", defaults: { email: true, push: false, desktop: true } },
@@ -48,6 +50,7 @@ export const NOTIFICATION_ORDER: NotificationType[] = [
   "team_joined",
   "collab_assigned",
   "collab_mention",
+  "collab_new_mail",
   "ai_cap_reached",
   "ai_key_failed",
   "ai_balance_low",

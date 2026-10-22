@@ -1,7 +1,8 @@
 // One mail account: its name, From name and colour, the signature its mail carries, its
 // automatic reply (each synced with the provider where it can be: AccountSettings), who it
-// is shared with, its server settings (IMAP), its sync, and disconnecting it.
-// Only whoever connected it (and workspace admins, for a shared one) can change it.
+// is shared with, its server settings (IMAP), its sync, and disconnecting it, plus whether
+// new mail in it notifies the caller (their own choice, open to anyone who sees it).
+// Only whoever connected it (and workspace admins, for a shared one) can change the rest.
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -14,6 +15,7 @@ import { RichEditor } from "@/components/editor/RichEditor";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { EmptyState } from "@/components/ui/empty";
+import { Switch } from "@/components/ui/switch";
 import { TextInput } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import { ACCOUNT_TONES, ProviderMark } from "@/components/collab/bits";
@@ -141,6 +143,24 @@ export default function MailAccountDetail() {
     onError: (e) => toast.error(e),
   });
 
+  // The caller's own new-mail notifications for this account: shown at once, put back if refused.
+  const newMail = useMutation({
+    mutationFn: (on: boolean) => api.collab.accounts.setNotifications(accountId, { new_mail: on }),
+    onMutate: (on) => {
+      const before = account;
+      if (before) storeAccount(qc, { ...before, notifications: { ...before.notifications, new_mail: on } });
+      return { before };
+    },
+    onSuccess: (a) => {
+      storeAccount(qc, a);
+      toast.success(t(a.notifications.new_mail ? "detail.newMailOn" : "detail.newMailOff", { name: a.name || a.email }));
+    },
+    onError: (e, _on, c) => {
+      if (c?.before) storeAccount(qc, c.before);
+      toast.error(e);
+    },
+  });
+
   if (isLoading || (account && !form))
     return (
       <SettingsPage title={t("detail.back")} back={<BackLink to="/settings/mail-accounts">{t("detail.back")}</BackLink>}>
@@ -218,6 +238,18 @@ export default function MailAccountDetail() {
             <span className="mono break-words text-[11.5px] text-fg-2">{account.last_error}</span>
           </Row>
         )}
+      </Section>
+
+      <Section title={t("detail.notifications")} description={t("detail.notificationsHint")}>
+        <Row label={t("detail.newMail")} description={t("detail.newMailHint")} htmlFor="acc-new-mail">
+          <Switch
+            id="acc-new-mail"
+            checked={account.notifications?.new_mail ?? true}
+            disabled={newMail.isPending}
+            onCheckedChange={(on) => newMail.mutate(on)}
+            aria-label={t("detail.newMail")}
+          />
+        </Row>
       </Section>
 
       <Section title={t("detail.general")}>

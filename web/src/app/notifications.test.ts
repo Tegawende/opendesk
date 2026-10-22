@@ -38,6 +38,14 @@ group("Collab notifications", () => {
     expect(notificationPath(collab("collab_mention", { thread_id: "th1", comment_id: "c1" }))).toBe("/mail/all/th1");
   });
 
+  it("opens new mail in the inbox and names who wrote", () => {
+    const n = (data: Record<string, unknown>): Notification => ({ id: "n3", type: "collab_new_mail", ticket: null, data, read_at: null, created_at: "2026-10-13T09:00:00Z" });
+    expect(notificationPath(n({ thread_id: "th2", account_id: "a1" }))).toBe("/mail/inbox/th2");
+    expect(describe(n({ thread_id: "th2", from: { name: "Gina Lee", email: "gina@example.com" }, count: 1 }), t)).toBe("New mail from Gina Lee");
+    expect(describe(n({ thread_id: "th2", from: { name: "", email: "gina@example.com" }, count: 3 }), t)).toBe("3 new messages from gina@example.com");
+    expect(describe(n({ thread_id: "th2" }), t)).toBe("New mail in your inbox");
+  });
+
   it("names who assigned or mentioned, or says it plainly", () => {
     expect(describe(collab("collab_assigned", { thread_id: "th1", actor: { name: "Maya Chen" } }), t)).toBe("Maya Chen assigned you a conversation");
     expect(describe(collab("collab_mention", { thread_id: "th1" }), t)).toBe("You were mentioned in a comment");

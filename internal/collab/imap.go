@@ -726,6 +726,9 @@ func (s *service) syncIMAPFolder(ctx context.Context, p *pass, c *imapclient.Cli
 		}
 	}
 	imported := 0
+	// New UIDs since the folder's cursor are news; a folder read from scratch is not.
+	p.announce = !initial && p.a.LastSyncedAt != nil
+	defer func() { p.announce = false }()
 	for len(uids) > 0 {
 		n := min(len(uids), syncBatch)
 		chunk := uids[:n]

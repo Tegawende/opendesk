@@ -263,6 +263,7 @@ var summaryLabels = map[string][2]string{
 	"team_joined":      {"team change", "team changes"},
 	"collab_assigned":  {"conversation assigned", "conversations assigned"},
 	"collab_mention":   {"comment mention", "comment mentions"},
+	"collab_new_mail":  {"conversation with new mail", "conversations with new mail"},
 	"import_finished":  {"import", "imports"},
 	"ai_billing":       {"AI or billing notice", "AI or billing notices"},
 }
@@ -288,7 +289,7 @@ func summary(notes []Note, now time.Time, loc *time.Location) string {
 		count[k]++
 	}
 	var parts []string
-	for _, k := range []string{"assigned", "new_ticket", "mentioned", "customer_replied", "thread_replied", "sla_breached", "ai_handoff", "collab_assigned", "collab_mention", "team_joined", "import_finished", "ai_billing", "other"} {
+	for _, k := range []string{"assigned", "new_ticket", "mentioned", "customer_replied", "thread_replied", "sla_breached", "ai_handoff", "collab_assigned", "collab_mention", "collab_new_mail", "team_joined", "import_finished", "ai_billing", "other"} {
 		n := count[k]
 		if n == 0 {
 			continue
@@ -552,6 +553,8 @@ func describe(n Note) copyOf {
 			cta: "Open billing", subjectTail: true}
 	case "collab_assigned", "collab_mention":
 		return collabCopy(n, actor)
+	case "collab_new_mail":
+		return newMailCopy(n)
 	case "import_finished":
 		return importCopy(n.Data)
 	}
@@ -570,6 +573,7 @@ var TypeLabels = map[string]string{
 	"team_joined":          "team changes",
 	"collab_assigned":      "conversations assigned to you",
 	"collab_mention":       "mentions in conversation comments",
+	"collab_new_mail":      "new mail in your mail accounts",
 	"ai_cap_reached":       "the chat agent's monthly cap",
 	"ai_key_failed":        "AI key problems",
 	"ai_balance_low":       "a low AI balance",
@@ -614,10 +618,13 @@ func noteURL(s Site, wid uuid.UUID, n Note) string {
 			return s.App("/settings/teams/"+url.PathEscape(id), "ws", ws)
 		}
 		return s.App("/settings/teams", "ws", ws)
-	case "collab_assigned", "collab_mention":
+	case "collab_assigned", "collab_mention", "collab_new_mail":
 		box := "all"
-		if n.Type == "collab_assigned" {
+		switch n.Type {
+		case "collab_assigned":
 			box = "assigned"
+		case "collab_new_mail":
+			box = "inbox"
 		}
 		if id, err := uuid.Parse(str(n.Data, "thread_id")); err == nil {
 			return s.App("/mail/"+box+"/"+id.String(), "ws", ws)
@@ -662,6 +669,8 @@ func toneOf(n Note) string {
 		return "#3B82F6"
 	case "collab_mention":
 		return "#6366F1"
+	case "collab_new_mail":
+		return "#14B8A6"
 	case "import_finished":
 		switch str(n.Data, "status") {
 		case "completed":
@@ -691,6 +700,34 @@ func collabCopy(n Note, actor string) copyOf {
 		intro = append(intro, "“"+sn+"”")
 	}
 	return copyOf{title: who + " mentioned you in a comment", heading: who + " mentioned you" + on, intro: intro, cta: "Open conversation"}
+}
+
+// newMailCopy names who wrote to one of the member's mail accounts and the conversation's
+// subject (contracts/collab.md "Notifications"); count is how many messages came while it
+// was unread.
+func newMailCopy(n Note) copyOf {
+	who := nameIn(n.Data, "from")
+	if f, ok := n.Data["from"].(map[string]any); ok && who == "" {
+		who, _ = f["email"].(string)
+	}
+	who = or(clip(who, 60), "Someone")
+	subject := clip(str(n.Data, "subject"), 80)
+	on := ""
+	if subject != "" {
+		on = ": " + subject
+	}
+	title := "New mail from " + who
+	if c, ok := num(n.Data, "count"); ok && c > 1 {
+		title = fmt.Sprintf("%d new messages from %s", int(c), who)
+		if who == "Someone" {
+			title = fmt.Sprintf("%d new messages", int(c))
+		}
+	}
+	intro := []string{"It is in the inbox of a mail account you see."}
+	if sn := snippet(n); sn != "" {
+		intro = append(intro, "“"+sn+"”")
+	}
+	return copyOf{title: title, heading: title + on, intro: intro, cta: "Open conversation"}
 }
 
 // importCopy says how a history import ended (contracts/imports.md): done, waiting for new
@@ -783,7 +820,7 @@ func providerName(p string) string {
 // snippet is the notification's short plain-text excerpt, when it has one.
 func snippet(n Note) string {
 	switch n.Type {
-	case "mentioned", "customer_replied", "collab_mention", "thread_replied":
+	case "mentioned", "customer_replied", "collab_mention", "collab_new_mail", "thread_replied":
 		return clip(str(n.Data, "preview"), SnippetRunes)
 	}
 	return ""

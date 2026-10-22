@@ -26,9 +26,17 @@ import { publish } from "../gateway";
 import { del, get, HttpError, invalid, notFound, patch, post, put, respond, strArr, type Ctx } from "../router";
 import { escapeHtml, isRecord, nowIso, uuid } from "../util";
 
-type Account = MailAccount & { ownerId: string | null };
+type Account = Omit<MailAccount, "notifications"> & { ownerId: string | null };
 type ThreadMeta = { id: string; account_id: string; subject: string; shares: MailAudience; assignees: string[]; comments: MailComment[] };
-type State = { accounts: Account[]; folders: MailFolder[]; threads: Map<string, ThreadMeta>; messages: MailMessage[]; prefs: Record<string, SidebarPrefs> };
+type State = {
+  accounts: Account[];
+  folders: MailFolder[];
+  threads: Map<string, ThreadMeta>;
+  messages: MailMessage[];
+  prefs: Record<string, SidebarPrefs>;
+  /** "<user id>:<account id>" for each member who muted an account's new mail. */
+  muted: Set<string>;
+};
 
 const states = new Map<string, State>();
 /** Gmail's own copy of each two-way signature, by account id ("Get from Gmail"). */
@@ -351,7 +359,7 @@ function seedState(ws: WsData): State {
     });
   }
 
-  return { accounts, folders, threads, messages, prefs: {} };
+  return { accounts, folders, threads, messages, prefs: {}, muted: new Set() };
 }
 
 /** A long designed newsletter: the kind of mail that pushes everything under it out of sight. */
@@ -420,7 +428,14 @@ function accountOut(ws: WsData, a: Account): MailAccount {
   const me = db.meId;
   const { ownerId, ...rest } = a;
   const manage = (!!ownerId && ownerId === me) || (a.visibility === "shared" && isAdmin(ws, me));
-  return { ...rest, owner: userRef(ownerId), can_manage: manage, unread: unreadInbox(ws, a.id), imap: manage ? a.imap : undefined };
+  return {
+    ...rest,
+    owner: userRef(ownerId),
+    can_manage: manage,
+    unread: unreadInbox(ws, a.id),
+    imap: manage ? a.imap : undefined,
+    notifications: { new_mail: !state(ws).muted.has(`${me}:${a.id}`) },
+  };
 }
 
 const msgsOf = (s: State, threadId: string) => s.messages.filter((m) => m.thread_id === threadId).sort((a, b) => a.sent_at.localeCompare(b.sent_at));
@@ -663,6 +678,82 @@ function notifyUser(ws: WsData, uid: string, type: "collab_assigned" | "collab_m
   publish(ws, "notification.created", { notification: n }, { topics: [`user:${uid}`] });
 }
 
+/**
+ * New mail lands in an account's inbox, the way a sync stores it (contracts/collab.md
+ * "Notifications"): who sees the account and has not muted it gets a collab_new_mail, one per
+ * conversation while unread (a later message updates it). Only the signed-in member's own
+ * notifications are kept here. threadId adds a reply to that conversation; else a new one.
+ */
+export function deliverNewMail(ws: WsData, opts: { accountId?: string; threadId?: string } = {}): string | null {
+  const s = state(ws);
+  const a = (opts.accountId && s.accounts.find((x) => x.id === opts.accountId)) || s.accounts.find((x) => x.ownerId === db.meId && x.visibility === "private" && !x.reconnect);
+  if (!a) return null;
+  const inbox = s.folders.find((f) => f.account_id === a.id && f.role === "inbox");
+  if (!inbox) return null;
+  const known = opts.threadId ? s.threads.get(opts.threadId) : undefined;
+  const story = STORIES[Math.floor(r() * STORIES.length)];
+  const from = known ? (msgsOf(s, known.id).find((m) => m.from.email !== a.email)?.from ?? pickR(PEOPLE)) : pickR(PEOPLE);
+  const meta: ThreadMeta = known ?? { id: uuid(), account_id: a.id, subject: story.subject, shares: emptyAudience(), assignees: [], comments: [] };
+  if (!known) s.threads.set(meta.id, meta);
+  const text = known ? `Following up on this: any news?\n\n${from.name.split(" ")[0] || ""}`.trim() : story.body;
+  s.messages.push({
+    id: uuid(),
+    thread_id: meta.id,
+    account_id: a.id,
+    message_id: `${uuid()}@mail.example.com`,
+    from,
+    to: [{ name: a.display_name, email: a.email }],
+    cc: [],
+    bcc: [],
+    reply_to: [],
+    subject: known ? `Re: ${meta.subject}` : meta.subject,
+    snippet: text.replace(/\s+/g, " ").slice(0, 140),
+    body_html: `<p>${escapeHtml(text).replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`,
+    body_text: text,
+    sent_at: nowIso(),
+    unread: true,
+    starred: false,
+    draft: false,
+    folder_ids: [inbox.id],
+    attachments: [],
+    sent_by: null,
+  });
+  changed(ws, a.id, [meta.id]);
+  const me = db.meId;
+  if (!seesAccount(ws, a, me) || s.muted.has(`${me}:${a.id}`)) return meta.id;
+  const data = { thread_id: meta.id, account_id: a.id, subject: meta.subject, from, preview: text.replace(/\s+/g, " ").slice(0, 200) };
+  const open = ws.notifications.find((n) => n.type === "collab_new_mail" && !n.read_at && n.data.thread_id === meta.id);
+  const n = open
+    ? Object.assign(open, { data: { ...data, count: (typeof open.data.count === "number" ? open.data.count : 1) + 1 }, created_at: nowIso() })
+    : { id: uuid(), type: "collab_new_mail" as const, ticket: null, data: { ...data, count: 1 }, read_at: null, created_at: nowIso() };
+  if (open) ws.notifications.splice(ws.notifications.indexOf(open), 1);
+  ws.notifications.unshift(n);
+  publish(ws, "notification.created", { notification: n }, { topics: [`user:${me}`] });
+  return meta.id;
+}
+
+/** The signed-in member's seeded collab_new_mail: the newest unread conversation in their own inbox. */
+export function seedNewMailNotifications(ws: WsData) {
+  const s = state(ws);
+  const a = s.accounts.find((x) => x.ownerId === db.meId && x.visibility === "private" && !x.reconnect);
+  const inbox = a && s.folders.find((f) => f.account_id === a.id && f.role === "inbox");
+  if (!a || !inbox) return;
+  const latest = s.messages
+    .filter((m) => m.account_id === a.id && m.unread && !m.draft && m.folder_ids.includes(inbox.id) && m.from.email !== a.email)
+    .sort((x, y) => y.sent_at.localeCompare(x.sent_at))[0];
+  const t = latest && s.threads.get(latest.thread_id);
+  if (!latest || !t) return;
+  ws.notifications.push({
+    id: uuid(),
+    type: "collab_new_mail",
+    ticket: null,
+    data: { thread_id: t.id, account_id: a.id, subject: t.subject, from: latest.from, preview: latest.snippet, count: 1 },
+    read_at: null,
+    created_at: latest.sent_at,
+  });
+  ws.notifications.sort((x, y) => Date.parse(y.created_at) - Date.parse(x.created_at));
+}
+
 const addr = (email: string): MailAddress => {
   const known = PEOPLE.find((p) => p.email.toLowerCase() === email.toLowerCase());
   return known ?? { name: "", email };
@@ -817,6 +908,19 @@ export function registerCollab() {
     if (a.provider === "microsoft" && o.internal_only) o.contacts_only = false;
     a.out_of_office = o;
     emit(ctx.ws, "collab.accounts", { account_id: a.id }, audienceOf(ctx.ws, a.id, []));
+    return accountOut(ctx.ws, a);
+  });
+
+  // The caller's own choice: anyone who sees the account may mute its new mail for themselves.
+  put("/v1/collab/accounts/:id/notifications", (ctx) => {
+    requireCollab(ctx.ws);
+    const a = accountOr404(ctx.ws, ctx.params.id);
+    if (!seesAccount(ctx.ws, a, db.meId)) throw notFound("Account");
+    if (typeof ctx.body.new_mail !== "boolean") throw invalid("new_mail is true or false.");
+    const key = `${db.meId}:${a.id}`;
+    if (ctx.body.new_mail) state(ctx.ws).muted.delete(key);
+    else state(ctx.ws).muted.add(key);
+    emit(ctx.ws, "collab.accounts", { account_id: a.id }, [db.meId]);
     return accountOut(ctx.ws, a);
   });
 

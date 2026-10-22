@@ -19,7 +19,7 @@ import { q, qk } from "@/lib/queries";
 import { subscribeWebPush } from "@/lib/webPush";
 import { afterOwnCreations, wantsTicketSound } from "@/lib/ownTickets";
 import { i18n } from "@/i18n";
-import { collabThread, describe, joinedTeam, ticketFolder } from "./Notifications";
+import { collabBox, collabThread, describe, joinedTeam, ticketFolder } from "./Notifications";
 import { Sidebar } from "./Sidebar";
 import { SuspendedWorkspace } from "./SuspendedWorkspace";
 import { AppHeader } from "./AppHeader";
@@ -71,6 +71,7 @@ function notificationText(n: Notification) {
     case "import_finished":
     case "collab_assigned":
     case "collab_mention":
+    case "collab_new_mail":
       return describe(n, i18n.getFixedT(null, "shell"));
     default:
       return `Notification ${subject}`;
@@ -93,6 +94,7 @@ const notificationSound: Partial<Record<Notification["type"], AlertSound>> = {
   sla_breached: "assigned",
   collab_assigned: "assigned",
   collab_mention: "assigned",
+  collab_new_mail: "reply",
 };
 
 /** What a stopped import says went wrong, for its toast. */
@@ -164,7 +166,7 @@ function useRealtimeConnection() {
                 ? {
                     label: "Open",
                     onClick: () =>
-                      void navigate({ to: "/mail/$box/{-$threadId}", params: { box: n.type === "collab_assigned" ? "assigned" : "all", threadId: collabThread(n)! }, search: {} }),
+                      void navigate({ to: "/mail/$box/{-$threadId}", params: { box: collabBox(n), threadId: collabThread(n)! }, search: {} }),
                   }
               : n.type === "ai_cap_reached" || n.type === "ai_key_failed"
               ? { label: "Settings", onClick: () => void navigate({ to: n.type === "ai_key_failed" ? "/settings/ai" : "/settings/ai/behaviour" }) }

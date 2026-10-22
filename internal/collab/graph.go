@@ -351,7 +351,10 @@ func (s *service) syncGraph(ctx context.Context, p *pass, g *graphProvider) erro
 		if st.Initial && first {
 			limit = budget
 		}
+		// Changes since a delta link are news; a round from the 30-day window is not.
+		p.announce = !st.Initial && !first
 		used, err := s.graphFolderDelta(ctx, p, g, f, target, st.Initial, limit)
+		p.announce = false
 		if isNotFound(err) || isSyncStateGone(err) {
 			// The folder is gone or its delta link expired: start it over next pass.
 			if _, err := s.d.DB.Pool.Exec(ctx, `UPDATE collab_folders SET sync_state = '{}' WHERE id = $1`, f.ID); err != nil {

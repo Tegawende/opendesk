@@ -230,6 +230,7 @@ interface MailAccount {
   display_name_sync: SettingSync       // google: like the signature; microsoft: read_only until a person changes it here, then none; imap: none
   out_of_office: OutOfOffice | null    // null for IMAP, without MailboxSettings, and until first read
   out_of_office_sync: SettingSync      // google: like the signature; microsoft: two_way with MailboxSettings.ReadWrite, else none; imap: none
+  notifications: { new_mail: boolean } // the caller's own choice ("Notifications"); true unless they muted it
 }
 
 type SettingSync = "two_way" | "read_only" | "none"
@@ -382,6 +383,7 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | PUT | `/v1/collab/accounts/{id}/out-of-office` | manage | `OutOfOffice` → `MailAccount`. Written to the provider first (`502 provider_error`, nothing saved, when it refuses), then stored as the provider answered it. `422 out_of_office_read_only` (`read_only`), `422 out_of_office_unsupported` (`none`), `422` when the end is not after the start, or (Microsoft) when enabled with only one of start and end |
 | DELETE | `/v1/collab/accounts/{id}` | manage | → 204. Removes the account and its mail from opendesk; nothing is deleted at the provider |
 | POST | `/v1/collab/accounts/{id}/sync` | see | → 202, a sync now |
+| PUT | `/v1/collab/accounts/{id}/notifications` | see | `{new_mail: boolean}` → `MailAccount`. The caller's own choice for the account ("Notifications"); it changes nothing for anyone else. Publishes `collab.accounts` to the caller alone |
 | GET | `/v1/collab/accounts/{id}/folders` | see | `MailFolder[]`, special ones first, then by path |
 | POST | `/v1/collab/accounts/{id}/folders` | act | `{name: 1..100, parent_id?, kind?: "folder" \| "label", color?: tone}` → `MailFolder`, created at the provider first (`502 provider_error` with detail). Gmail makes labels either way; Microsoft makes a folder, or with `kind: "label"` an Outlook category (no `parent_id`); IMAP only folders (`422 labels_unsupported` for a label). `color` only for labels ("Labels and colours") |
 | PATCH | `/v1/collab/folders/{id}` | act | `{name?, color?: tone}`, at least one → `MailFolder`; at the provider first, then stored. `422` for a special folder; `color` only on a Gmail label or an Outlook category (`422 validation_error` otherwise); an Outlook category cannot be renamed (`422 rename_unsupported`) |
@@ -476,11 +478,34 @@ subject, body or credential.
 in-app and push like other notifications, emailed by the member's notification preferences
 (on by default). Their text names who assigned or mentioned and the conversation's subject.
 
+`collab_new_mail` (`{thread_id, account_id, subject, from: {name, email}, preview, count}`), group `mail`:
+new mail landed in an account's inbox. In-app always; push and desktop on, email off by default (the
+mail is already in the member's inbox). The app opens it at `/mail/inbox/<thread_id>`.
+
+- **What is new mail.** A message the sync stores for the first time while it reads the provider's
+  changes since its last pass (Gmail history, a Microsoft folder's delta link, IMAP UIDs above a
+  folder's cursor), that is unread, in the inbox and not in spam, trash, sent or drafts, not a draft,
+  not sent from opendesk (`sent_by`), not from the account's own address, and received in the last
+  24 hours. Never on an account's first import, a folder read from scratch (a new folder, a changed
+  UIDVALIDITY, an expired Gmail history or Microsoft delta link), or old mail moved back in bulk.
+- **Who is told.** Who sees the account (`accountAudience`): a private account its owner alone, admins
+  included; a shared one its owner and audience. Never someone who sees only one of its conversations,
+  a member who muted the account, or the person the mail is from.
+- **Mute.** Each member mutes an account's new mail for themselves (`PUT /v1/collab/accounts/{id}/notifications`,
+  `MailAccount.notifications.new_mail`), kept in `collab_account_prefs`. The type's channels follow the
+  member's notification preferences like any other.
+- **One per conversation.** While a member's `collab_new_mail` for a conversation is unread, more mail in
+  it updates that notification (`from`, `preview`, `count` adds the new messages, `created_at` moves to
+  now) and publishes `notification.created` again with the same id, which the app puts back on top. It
+  is not pushed or emailed again. Once read, the next new mail starts a new one.
+
 ## Data
 
 - `collab_accounts`, `collab_folders`, `collab_threads`, `collab_messages`, `collab_message_folders`,
   `collab_shares`, `collab_assignees`, `collab_comments`, `collab_sidebar_prefs`
   (`migrations/000636_collab.up.sql`). Everything is the workspace's and is deleted with it.
+- `collab_account_prefs` (`migrations/000651_collab_account_prefs.up.sql`): a member's own choices for one
+  account (`new_mail`), deleted with the account or the membership.
 - `collab_accounts.config` (not secret) holds the granted `scopes` and, under `settings`, the settings
   sync state: the hashes last seen at the provider, when they were read, whether a person chose the
   From name, and the automatic reply. It is written with `jsonb_set` under the row lock.

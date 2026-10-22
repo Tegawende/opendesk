@@ -965,7 +965,7 @@ export type AuditLog = {
   ip: string;
   created_at: string;
 };
-export type NotificationType = "assigned" | "new_ticket" | "mentioned" | "customer_replied" | "thread_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached" | "ai_balance_low" | "ai_balance_out" | "auto_recharge_failed" | "ai_key_failed" | "team_joined" | "import_finished" | "collab_assigned" | "collab_mention";
+export type NotificationType = "assigned" | "new_ticket" | "mentioned" | "customer_replied" | "thread_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached" | "ai_balance_low" | "ai_balance_out" | "auto_recharge_failed" | "ai_key_failed" | "team_joined" | "import_finished" | "collab_assigned" | "collab_mention" | "collab_new_mail";
 /** `ai_cap_reached`: data `{cap_usd}`, ticket null; the widget agent reached `widget_monthly_cap_usd` (once a month, owners and admins).
  * `ai_balance_low` / `ai_balance_out`: data `{remaining_usd}` (US dollars); `auto_recharge_failed`: data `{reason: AutoRechargeFailure}` (billing, owners and admins, ticket null).
  * `ai_key_failed`: data `{provider: AIKeyKind, reason: "rejected" | "no_funds"}`; the workspace's own AI key failed (at most hourly, owners and admins, ticket null).
@@ -2015,7 +2015,11 @@ export type MailAccount = {
   /** Null for IMAP, and while it was never read. */
   out_of_office: MailOutOfOffice | null;
   out_of_office_sync: MailSettingSync;
+  /** The caller's own choices for this account: new_mail off mutes its collab_new_mail notifications for them. */
+  notifications: MailAccountNotifications;
 };
+
+export type MailAccountNotifications = { new_mail: boolean };
 
 /** two_way: read from the provider and changed there too; read_only: read only; none: opendesk only (or not available). */
 export type MailSettingSync = "two_way" | "read_only" | "none";

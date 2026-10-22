@@ -468,7 +468,11 @@ func (s *service) syncGmail(ctx context.Context, p *pass, g *gmailProvider) erro
 	if st.HistoryID != "" {
 		changes, latest, err := g.history(ctx, st.HistoryID)
 		if err == nil {
-			if err := s.applyGmailChanges(ctx, p, g, changes); err != nil {
+			// Mail that arrived since the last pass is news; an import from scratch is not.
+			p.announce = p.a.LastSyncedAt != nil
+			err := s.applyGmailChanges(ctx, p, g, changes)
+			p.announce = false
+			if err != nil {
 				return err
 			}
 			return s.saveAccountState(ctx, p.a, map[string]any{"history_id": latest})

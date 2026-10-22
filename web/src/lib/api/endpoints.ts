@@ -629,6 +629,8 @@ export const api = {
       /** Removes the account and its mail from opendesk; nothing is deleted at the provider. */
       remove: (id: string) => http.del(`/v1/collab/accounts/${id}`),
       sync: (id: string) => http.post<void>(`/v1/collab/accounts/${id}/sync`),
+      /** The caller's own notifications for the account; anyone who sees it chooses for themselves. */
+      setNotifications: (id: string, b: T.MailAccountNotifications) => http.put<T.MailAccount>(`/v1/collab/accounts/${id}/notifications`, b),
       /** Gmail only: replaces the signature with Gmail's now. */
       pullSignature: (id: string) => http.post<T.MailAccount>(`/v1/collab/accounts/${id}/signature/pull`),
       /** Written to the provider first: 502 provider_error, nothing saved, when it refuses. */

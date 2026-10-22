@@ -83,7 +83,7 @@ A device belongs to the session that registered it: signing out or revoking that
 type NotificationPreferences = {
   email_cadence: "instant" | "hourly" | "daily" | "off"; digest_hour: number; timezone: string; paused_until: string | null;
   email: string; email_verified: boolean; delay_minutes: number;
-  types: { type: string; group: "tickets" | "team" | "ai_billing"; email: boolean; push: boolean; desktop: boolean;
+  types: { type: string; group: "tickets" | "team" | "ai_billing" | "workspace" | "mail"; email: boolean; push: boolean; desktop: boolean;
     defaults: { email: boolean; push: boolean; desktop: boolean } }[];
 };
 ```

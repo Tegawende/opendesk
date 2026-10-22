@@ -7,12 +7,14 @@ import (
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/useopendesk/opendesk/internal/audit"
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/displayname"
 	"github.com/useopendesk/opendesk/internal/email"
+	"github.com/useopendesk/opendesk/internal/events"
 	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
@@ -309,6 +311,43 @@ func (s *service) registerAccountRoutes(api huma.API) {
 				return nil, httpx.Wrap(err)
 			}
 			return nil, nil
+		})
+
+	collabOp(api, huma.Operation{OperationID: "set-collab-account-notifications", Method: http.MethodPut,
+		Path: "/v1/collab/accounts/{id}/notifications", Summary: "Choose what I am told about a mail account"},
+		func(ctx context.Context, in *struct {
+			ID   string `path:"id"`
+			Body AccountNotifications
+		}) (*accountBody, error) {
+			p, err := s.require(ctx, auth.RoleViewer)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			id, err := parseID(in.ID, "Account")
+			if err != nil {
+				return nil, err
+			}
+			a, err := visibleAccount(ctx, s.d.DB.Pool, p, id)
+			if err != nil {
+				return nil, notFound(err, "Account")
+			}
+			err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				if err := setNewMailPref(ctx, tx, p.WorkspaceID, a.ID, p.UserID, in.Body.NewMail); err != nil {
+					return err
+				}
+				// The caller's own choice: only their other tabs and devices hear of it.
+				_, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: EventAccounts,
+					Users: []uuid.UUID{p.UserID}, Data: map[string]any{"account_id": a.ID}})
+				return err
+			})
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			out, err := s.accountOut(ctx, s.d.DB.Pool, p, a)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return &accountBody{out}, nil
 		})
 }
 

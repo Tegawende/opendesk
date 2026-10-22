@@ -16,7 +16,7 @@ import { registerEmailAnswers } from "./handlers/emailAnswers";
 import { registerAuth, setSignedIn } from "./handlers/auth";
 import { registerBilling } from "./handlers/billing";
 import { registerBots } from "./handlers/bots";
-import { registerCollab } from "./handlers/collab";
+import { deliverNewMail, registerCollab, seedNewMailNotifications } from "./handlers/collab";
 import { registerDrafts, stageDraft } from "./handlers/drafts";
 import { registerKnowledge } from "./handlers/knowledge";
 import { registerImports } from "./handlers/imports";
@@ -50,6 +50,8 @@ declare global {
       ollie: (ticketId?: string) => Promise<string | null>;
       /** An AI client stages a reply draft on the ticket (id or number) over MCP, as `draft_reply` would. */
       draft: (ticketId: string, text: string, by?: string) => void;
+      /** New mail lands in a mail account's inbox (yours by default; a reply when threadId is given). Returns the conversation id. */
+      newMail: (opts?: { accountId?: string; threadId?: string }) => string | null;
     };
   }
 }
@@ -94,6 +96,7 @@ export function installMock(): void {
   registerSupportChannels();
   registerTemplates();
   registerCollab();
+  for (const w of db.workspaces) seedNewMailNotifications(w);
 
   setTransport((input, init) => dispatch(input, init));
   setSocketFactory(socketFactory);
@@ -132,6 +135,7 @@ export function installMock(): void {
       }
       stageDraft(ws, t, textToHtml(text), by);
     },
+    newMail: (opts) => deliverNewMail(db.workspaces[0], opts),
   };
   console.info("[opendesk] mock mode: in-memory API and gateway. window.__odMock has helpers.");
 }

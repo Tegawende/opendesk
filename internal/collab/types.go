@@ -119,6 +119,16 @@ type MailAccount struct {
 	DisplayNameSync   string       `json:"display_name_sync" enum:"two_way,read_only,none"`
 	OutOfOffice       *OutOfOffice `json:"out_of_office"`
 	OutOfOfficeSync   string       `json:"out_of_office_sync" enum:"two_way,read_only,none"`
+
+	// Notifications are the caller's own choices for this account.
+	Notifications AccountNotifications `json:"notifications"`
+}
+
+// AccountNotifications is what a member is told about one account (contracts/collab.md
+// "Notifications"); each member chooses for themselves.
+type AccountNotifications struct {
+	// NewMail: a collab_new_mail notification when new mail lands in its inbox.
+	NewMail bool `json:"new_mail"`
 }
 
 // OutOfOffice is an account's automatic reply as its provider keeps it (Gmail's vacation

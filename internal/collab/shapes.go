@@ -99,11 +99,16 @@ func (s *service) accountsOut(ctx context.Context, q db.Querier, p *auth.Princip
 	if err != nil {
 		return nil, err
 	}
+	muted, err := mutedAccounts(ctx, q, p.UserID, accountIDs)
+	if err != nil {
+		return nil, err
+	}
 	for _, a := range list {
 		m := MailAccount{ID: a.ID, Provider: a.Provider, Email: a.Email, Name: a.Name, DisplayName: a.DisplayName, Color: a.Color,
 			Owner: refOf(refs, a.OwnerID), Visibility: a.Visibility, SharedWith: Audience{TeamIDs: []uuid.UUID{}, UserIDs: []uuid.UUID{}},
 			SignatureHTML: a.SignatureHTML, Status: a.Status, Reconnect: a.Reconnect, LastError: a.LastError,
-			LastSyncedAt: a.LastSyncedAt, CanManage: canManageAccount(p, a), Unread: unread[a.ID], CreatedAt: a.CreatedAt}
+			LastSyncedAt: a.LastSyncedAt, CanManage: canManageAccount(p, a), Unread: unread[a.ID], CreatedAt: a.CreatedAt,
+			Notifications: AccountNotifications{NewMail: !slices.Contains(muted, a.ID)}}
 		if m.Name == "" {
 			m.Name = a.Email
 		}

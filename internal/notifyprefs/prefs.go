@@ -76,6 +76,9 @@ var Types = []Type{
 	// Collab conversations assigned to the member or mentioning them (contracts/collab.md).
 	{Type: "collab_assigned", Group: GroupMail, Defaults: everywhere},
 	{Type: "collab_mention", Group: GroupMail, Defaults: everywhere},
+	// New mail in the inbox of a mail account the member sees, one per conversation while
+	// unread. The mail is already in their inbox, so it is not emailed until turned on.
+	{Type: "collab_new_mail", Group: GroupMail, Defaults: Channels{Email: false, Push: true, Desktop: true}},
 	{Type: "ai_cap_reached", Group: GroupAIBilling, Defaults: notPhone, Admins: true},
 	{Type: "ai_key_failed", Group: GroupAIBilling, Defaults: notPhone, Admins: true},
 	{Type: "ai_balance_low", Group: GroupAIBilling, Defaults: notPhone, Admins: true},

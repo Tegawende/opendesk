@@ -44,6 +44,11 @@ type pass struct {
 	stored []string
 	// removedFolders are the provider ids of folders gone at the provider in this pass.
 	removedFolders []string
+	// announce: new mail stored now is news (collab_new_mail). Off for a first import, a
+	// folder imported from scratch and everything that is not a sync.
+	announce bool
+	// newMail is what the current batch stored that announces itself on commit.
+	newMail []newMail
 }
 
 func (s *service) newPass(ctx context.Context, q db.Querier, a *accountRow) (*pass, error) {
@@ -95,14 +100,14 @@ func (p *pass) touch(threadID uuid.UUID) {
 // publishes collab.changed in the same transaction.
 func (p *pass) batch(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	err := p.s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
-		p.stored = nil
+		p.stored, p.newMail = nil, nil
 		if err := fn(tx); err != nil {
 			return err
 		}
 		return p.commit(ctx, tx)
 	})
 	if err != nil {
-		p.touched = nil
+		p.touched, p.newMail = nil, nil
 		// Raw messages stored for rows that were rolled back are removed by the cleanup.
 		for _, key := range p.stored {
 			_, _ = p.s.d.DB.Pool.Exec(context.WithoutCancel(ctx), `INSERT INTO collab_storage_trash (key) VALUES ($1) ON CONFLICT DO NOTHING`, key)
@@ -112,7 +117,8 @@ func (p *pass) batch(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	return err
 }
 
-// commit recomputes the touched conversations and publishes one event, in tx.
+// commit recomputes the touched conversations, publishes one event and tells people
+// about new mail, in tx.
 func (p *pass) commit(ctx context.Context, tx pgx.Tx) error {
 	if len(p.touched) == 0 && !p.foldersChanged {
 		return nil
@@ -120,6 +126,10 @@ func (p *pass) commit(ctx context.Context, tx pgx.Tx) error {
 	if err := recomputeThreads(ctx, tx, p.a, p.touched); err != nil {
 		return err
 	}
+	if err := p.s.notifyNewMail(ctx, tx, p.a, p.newMail); err != nil {
+		return err
+	}
+	p.newMail = nil
 	threads := p.touched
 	if threads == nil {
 		threads = []uuid.UUID{}
@@ -428,6 +438,7 @@ func (p *pass) insert(ctx context.Context, tx pgx.Tx, in *newMessage) (uuid.UUID
 	p.touch(threadID)
 	p.foldersChanged = true
 	p.imported++
+	p.noteNewMail(in, threadID, from, pm.Subject, cleanLine(text, 200), sentAt)
 	return id, nil
 }
 

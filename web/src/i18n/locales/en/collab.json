@@ -442,6 +442,12 @@
     "readOnly": "Only whoever connected this account, or a workspace admin for a shared one, can change it.",
     "notFound": "This account is gone",
     "reconnectHint": "The provider refused the saved sign-in. Connect it again to resume syncing.",
+    "notifications": "Notifications",
+    "notificationsHint": "Your own choice: it changes nothing for anyone else who sees this account",
+    "newMail": "New mail",
+    "newMailHint": "Tell me when new mail lands in this account's inbox. Where it reaches you follows your notification settings.",
+    "newMailOn": "You will be told about new mail in {{name}}",
+    "newMailOff": "New mail in {{name}} is muted for you",
     "provider": {
       "google": "Google",
       "microsoft": "Microsoft",
@@ -514,6 +520,10 @@
     "assignedAnon": "A conversation was assigned to you",
     "mention": "{{who}} mentioned you in a comment",
     "mentionAnon": "You were mentioned in a comment",
+    "newMail": "New mail from {{who}}",
+    "newMailAnon": "New mail in your inbox",
+    "newMailMany": "{{n}} new messages from {{who}}",
+    "newMailManyAnon": "{{n}} new messages in your inbox",
     "open": "Open"
   },
   "shortcuts": {

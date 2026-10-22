@@ -547,6 +547,10 @@
         "label": "Mail comment mentions",
         "hint": "Someone mentions you in a comment on a mail conversation"
       },
+      "collab_new_mail": {
+        "label": "New mail",
+        "hint": "New mail lands in the inbox of a mail account you see. Mute an account in its settings"
+      },
       "team_joined": {
         "label": "Team changes",
         "hint": "An admin joins a team you lead"
