@@ -504,7 +504,7 @@ mail is already in the member's inbox). The app opens it at `/mail/inbox/<thread
 - `collab_accounts`, `collab_folders`, `collab_threads`, `collab_messages`, `collab_message_folders`,
   `collab_shares`, `collab_assignees`, `collab_comments`, `collab_sidebar_prefs`
   (`migrations/000636_collab.up.sql`). Everything is the workspace's and is deleted with it.
-- `collab_account_prefs` (`migrations/000651_collab_account_prefs.up.sql`): a member's own choices for one
+- `collab_account_prefs` (`migrations/000653_collab_account_prefs.up.sql`): a member's own choices for one
   account (`new_mail`), deleted with the account or the membership.
 - `collab_accounts.config` (not secret) holds the granted `scopes` and, under `settings`, the settings
   sync state: the hashes last seen at the provider, when they were read, whether a person chose the
