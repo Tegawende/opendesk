@@ -15,7 +15,13 @@ test("every workspace in one sidebar, grouped, and opening another one without a
   await expect(page.getByText("Lumen Labs").first()).toBeVisible();
   await proof.chapter("Together", "Every workspace in one sidebar, each under its own badge and name");
   await proof.dwell();
-  await proof.shot("grouped", { caption: "Grouped: Everywhere on top, then Margin and Lumen Labs with their own inboxes, teams and views" });
+  await proof.shot("grouped", { caption: "Grouped: Everywhere on top, then the open workspace, Margin, with its full sidebar" });
+
+  const lumen = page.getByRole("button", { name: "Fold Lumen Labs" });
+  await lumen.scrollIntoViewIfNeeded();
+  await expect(lumen).toBeInViewport();
+  await proof.dwell();
+  await proof.shot("lumen-group", { caption: "Further down, the Lumen Labs group with its own folders, team, view and mail accounts" });
 
   await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Mine 3" }).click();
   await expect(page.getByRole("button", { name: "Lumen Labs" }).first()).toBeVisible();
