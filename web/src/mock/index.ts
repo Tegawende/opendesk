@@ -17,6 +17,7 @@ import { registerAuth, setSignedIn } from "./handlers/auth";
 import { registerBilling } from "./handlers/billing";
 import { registerBots } from "./handlers/bots";
 import { registerCollab } from "./handlers/collab";
+import { registerTogether } from "./handlers/together";
 import { registerDrafts, stageDraft } from "./handlers/drafts";
 import { registerKnowledge } from "./handlers/knowledge";
 import { registerImports } from "./handlers/imports";
@@ -94,6 +95,7 @@ export function installMock(): void {
   registerSupportChannels();
   registerTemplates();
   registerCollab();
+  registerTogether();
 
   setTransport((input, init) => dispatch(input, init));
   setSocketFactory(socketFactory);

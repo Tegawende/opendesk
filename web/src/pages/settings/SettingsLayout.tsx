@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type navigation from "@/i18n/locales/en/navigation.json";
-import { atLeast, useRole } from "@/lib/session";
+import { atLeast, useRole, useSession } from "@/lib/session";
 import { useQuery } from "@tanstack/react-query";
 import { q } from "@/lib/queries";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
@@ -44,6 +44,7 @@ import {
   Webhook,
   Workflow,
   Smile,
+  LayoutPanelLeft,
 } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { BrandMark } from "@/components/settings2/teams";
@@ -53,6 +54,7 @@ type NavPath =
   | "/settings/profile"
   | "/settings/security"
   | "/settings/notifications"
+  | "/settings/workspaces"
   | "/settings/workspace"
   | "/settings/members"
   | "/settings/teams"
@@ -96,6 +98,7 @@ const groups: { title: keyof typeof navigation.groups; items: { to: NavPath; lab
       { to: "/settings/profile", label: "profile", icon: <User /> },
       { to: "/settings/security", label: "security", icon: <Shield /> },
       { to: "/settings/notifications", label: "notifications", icon: <Bell /> },
+      { to: "/settings/workspaces", label: "workspaces", icon: <LayoutPanelLeft /> },
     ],
   },
   {
@@ -170,10 +173,13 @@ function useVisibleGroups() {
   const hideAgent = !admin || (isFetched && !ai?.enabled);
   // Mail accounts are Collab's, listed only while the workspace has it.
   const collab = useCollab();
+  const workspaceCount = useSession((s) => s.memberships.length);
   return groups
     .filter((g) => !(hideAgent && g.title === AGENT_GROUP))
     .map((g) => (hideAi ? { ...g, items: g.items.filter((i) => i.to !== "/settings/ai") } : g))
-    .map((g) => (collab.enabled ? g : { ...g, items: g.items.filter((i) => i.to !== "/settings/mail-accounts") }));
+    .map((g) => (collab.enabled ? g : { ...g, items: g.items.filter((i) => i.to !== "/settings/mail-accounts") }))
+    // Arranging workspaces needs two of them.
+    .map((g) => (workspaceCount > 1 ? g : { ...g, items: g.items.filter((i) => i.to !== "/settings/workspaces") }));
 }
 
 /** With a second brand, each brand is listed under Brands (contracts/teams.md). */

@@ -105,6 +105,7 @@ function refreshImported(qc: QueryClient) {
 function refreshCounts(qc: QueryClient) {
   later("counts", 250, () => {
     void qc.invalidateQueries({ queryKey: qk.counts });
+    void qc.invalidateQueries({ queryKey: qk.of("tickets", "everywhere") });
     void qc.invalidateQueries({ queryKey: qk.overview });
   });
 }

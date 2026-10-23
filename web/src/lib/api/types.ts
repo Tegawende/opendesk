@@ -2403,3 +2403,38 @@ export type MailCounts = {
 
 /** `collab.changed` event data. */
 export type CollabChangedEvent = { account_id: string | null; thread_ids: string[]; folders: boolean };
+
+// Workspaces together (contracts/api.md "Workspaces together").
+export type TogetherMode = "together" | "separate";
+export type TogetherLayout = "grouped" | "mixed";
+export type WorkspacePrefs = {
+  mode: TogetherMode;
+  /** Whether the person chose the mode (false: the default, together). */
+  mode_set: boolean;
+  layout: TogetherLayout;
+  /** Workspace ids in sidebar order; the rest follow in joining order. */
+  order: string[];
+  /** Workspaces left out of the sidebar, the Everywhere lists and the bell. */
+  hidden: string[];
+  /** Folded sidebar groups: workspace ids, or "everywhere". */
+  collapsed: string[];
+  /** Sidebar items by workspace-qualified id (<workspace id>/view:<id>). */
+  items: { hidden: string[]; order: string[] };
+  /** The Everywhere lists: assigned to me and all mail, across workspaces. */
+  everywhere: boolean;
+  updated_at?: string;
+};
+export type WorkspacePrefsInput = Partial<Omit<WorkspacePrefs, "mode_set" | "updated_at" | "mode">> & { mode?: TogetherMode | "" };
+export type WorkspaceOverview = {
+  id: string;
+  name: string;
+  slug: string;
+  avatar_url: string | null;
+  role: Role;
+  suspended: boolean;
+  unread_notifications: number;
+  /** GET /v1/tickets/counts there; null while suspended. */
+  ticket_counts: TicketCounts | null;
+  /** GET /v1/collab/counts there; null without Collab. */
+  mail_counts: MailCounts | null;
+};

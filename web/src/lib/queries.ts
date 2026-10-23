@@ -278,6 +278,8 @@ const list = <R>(key: readonly unknown[], fn: () => Promise<R[] | Page<R> | { da
 
 export const q = {
   authConfig: () => queryOptions({ queryKey: qk.authConfig, queryFn: api.auth.config, staleTime: 5 * 60_000 }),
+  workspacePrefs: () => queryOptions({ queryKey: qk.workspacePrefs, queryFn: api.me.workspacePrefs, staleTime: 5 * 60_000 }),
+  overview: () => queryOptions({ queryKey: qk.overview, queryFn: async () => (await api.me.overview()).workspaces, staleTime: 30_000 }),
   workspace: () => queryOptions({ queryKey: qk.workspace, queryFn: api.workspaces.current }),
   sessions: () => list(qk.sessions, api.me.sessions),
   counts: () => queryOptions({ queryKey: qk.counts, queryFn: api.tickets.counts, staleTime: 30_000 }),

@@ -1,5 +1,6 @@
 {
   "titles": {
+    "everywhere": "Everywhere",
     "helpCenter": "Help center",
     "rateYourConversation": "Rate your conversation",
     "logIn": "Log in",
@@ -41,6 +42,7 @@
     "profile": "Profile",
     "security": "Security",
     "notifications": "Notifications",
+    "workspaces": "Workspaces",
     "general": "General",
     "members": "Members",
     "teams": "Teams",
@@ -92,6 +94,7 @@
     "profile": "Profile",
     "security": "Security",
     "notifications": "Notifications",
+    "workspaces": "Workspaces",
     "general": "General",
     "members": "Members",
     "teams": "Teams",

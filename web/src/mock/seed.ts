@@ -1439,9 +1439,60 @@ function seedLumen(): WsData {
     addMessage(ws, t, { kind: "reply", direction: "inbound", html: textToHtml(`Hello,\n\n${subject}. Can you help?`), at: t.created_at }, { publish: false });
     if (i === 3) t.status = "pending";
   });
+  seedLumenTogether(ws);
   seedDefaultBrand(ws);
   placeSimple(ws);
   return ws;
+}
+
+/**
+ * Lumen Labs, Maya's second workspace (she is an agent there), with enough to show
+ * Together (contracts/api.md "Workspaces together"): a team she is on, a private team
+ * she is not on (its ticket never reaches her), a view, tickets assigned to her and
+ * notifications. Its Collab mail (handlers/collab.ts) is seeded on first use.
+ */
+function seedLumenTogether(ws: WsData) {
+  const maya = db.users[0].id;
+  const owner = db.users[3].id;
+  const team = (name: string, color: Team["color"], members: string[], extra: Partial<Team> = {}): Team => ({
+    id: uuid(),
+    name,
+    description: "",
+    color,
+    private: false,
+    members: members.map((user_id, i) => ({ user_id, role: i === 0 ? "lead" : "member" })),
+    member_ids: members,
+    signature_html: "",
+    business_hours: null,
+    assign_mode: null,
+    mailbox_ids: [],
+    open_count: 0,
+    unassigned_count: 0,
+    created_at: ago(150 * DAY),
+    updated_at: ago(9 * DAY),
+    ...extra,
+  });
+  const hardware = team("Hardware", "teal", [maya, owner], { description: "Lamps, bulbs and firmware." });
+  const founders = team("Founders", "rose", [owner], { private: true, description: "Investors and the board." });
+  ws.teams = [hardware, founders];
+  const [firmware, , app] = ws.tickets;
+  for (const t of [firmware, app]) {
+    if (!t) continue;
+    t.assignee = userRef(maya);
+    t.team_id = hardware.id;
+  }
+  const board = newTicket(ws, { subject: "Board pack for the Q4 meeting", contact: contactRef(ws.contacts[3]), channel: "email", created_at: ago(3 * HOUR), mailbox_id: ws.mailboxes[0].id, team_id: founders.id });
+  board.number = 205;
+  addMessage(ws, board, { kind: "reply", direction: "inbound", html: textToHtml("Hi,\n\nThe board pack is attached for Thursday."), at: board.created_at }, { publish: false });
+  const urgent = newTicket(ws, { subject: "Lamp flickers after the 2.4 update", contact: contactRef(ws.contacts[1]), channel: "email", priority: "high", created_at: ago(40 * MIN), mailbox_id: ws.mailboxes[0].id, assignee: userRef(maya), team_id: hardware.id });
+  urgent.number = 206;
+  addMessage(ws, urgent, { kind: "reply", direction: "inbound", html: textToHtml("Since this morning's update the lamp flickers every few seconds."), at: urgent.created_at }, { publish: false });
+  ws.views = [{ id: uuid(), name: "Firmware", shared: true, filters: { status: ["open", "pending"], team_id: hardware.id }, position: 0 }];
+  const ref = (t: Ticket) => ({ id: t.id, number: t.number, subject: t.subject });
+  ws.notifications = [
+    { id: uuid(), type: "assigned", ticket: ref(urgent), data: { actor: userRef(owner) }, read_at: null, created_at: ago(38 * MIN) },
+    { id: uuid(), type: "customer_replied", ticket: ref(firmware), data: { contact: { name: ws.contacts[0].name } }, read_at: null, created_at: ago(2 * HOUR) },
+  ];
 }
 
 /** The email of the second seeded account: the same person, signed in with another address (multi-account). */

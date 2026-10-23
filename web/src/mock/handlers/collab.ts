@@ -168,6 +168,9 @@ function seedState(ws: WsData): State {
   const other = memberIds.find((id) => id !== me) ?? me;
   const meUser = db.users.find((u) => u.id === me);
   const local = (meUser?.email ?? "me@margin.app").split("@")[0];
+  // Each workspace's accounts are at its own domain (Together shows them side by side).
+  const domain = ws.mailboxes[0]?.email.split("@")[1] ?? "margin.app";
+  const org = ws.workspace.name.split(" ")[0];
   const now = Date.now();
   const mk = (p: Partial<Account> & Pick<Account, "provider" | "email" | "name" | "color" | "visibility" | "ownerId">): Account => ({
     id: uuid(),
@@ -196,13 +199,17 @@ function seedState(ws: WsData): State {
   });
   const work = mk({
     provider: "google",
-    email: `${local}@margin.app`,
+    email: `${local}@${domain}`,
     name: "Work",
     color: "blue",
     visibility: "private",
     ownerId: me,
     // Synced with Gmail both ways (contracts/collab.md "Account settings").
-    signature_html: gmailSignature(meUser?.name ?? "", `${local}@margin.app`),
+    // Margin's Work account carries the designed Gmail signature; other workspaces a plain one.
+    signature_html:
+      domain === "margin.app"
+        ? gmailSignature(meUser?.name ?? "", `${local}@margin.app`)
+        : `<p><strong>${escapeHtml(meUser?.name ?? "")}</strong><br>Customer success, ${org}<br><a href="https://${domain}">${domain}</a> · +1 415 555 0134</p>`,
     signature_sync: "two_way",
     signature_synced_at: new Date(now - 6 * MIN).toISOString(),
     display_name_sync: "two_way",
@@ -217,15 +224,15 @@ function seedState(ws: WsData): State {
   });
   const sales = mk({
     provider: "microsoft",
-    email: "sales@margin.app",
+    email: `sales@${domain}`,
     name: "Sales",
     color: "teal",
     visibility: "shared",
     ownerId: other,
     shared_with: { everyone: true, team_ids: [], user_ids: [] },
     // A shared account whose mail names whoever sends it, with their own title (contracts/collab.md "Addresses").
-    display_name: "{agent} at Margin Sales",
-    signature_html: "<p><b>{{ agent.name }}</b><br>{{ agent.title }}, Margin Sales<br>{{ mailbox.email }}</p>",
+    display_name: `{agent} at ${org} Sales`,
+    signature_html: `<p><b>{{ agent.name }}</b><br>{{ agent.title }}, ${org} Sales<br>{{ mailbox.email }}</p>`,
     // Outlook: no signature API, a From name someone chose, automatic replies both ways (on now).
     out_of_office: {
       enabled: true,
@@ -654,6 +661,11 @@ function runHistory(ws: WsData, a: Account) {
       emit(ws, "collab.accounts", { account_id: a.id }, audienceOf(ws, a.id, []));
     }, 2_000),
   );
+}
+
+/** GET /v1/collab/counts for a workspace, or null when it has no Collab (the overview, handlers/together.ts). */
+export function collabCountsFor(ws: WsData) {
+  return status(ws).enabled ? counts(ws) : null;
 }
 
 function requireCollab(ws: WsData) {

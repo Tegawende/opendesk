@@ -96,6 +96,7 @@ function flush(qc: QueryClient, wid: string) {
     void qc.invalidateQueries({ queryKey: qk.mailCounts });
     // A person's conversations may be any of them.
     void qc.invalidateQueries({ queryKey: qk.mailPeople });
+    void qc.invalidateQueries({ queryKey: qk.of("collab", "everywhere") });
     for (const id of p.threads) void qc.invalidateQueries({ queryKey: qk.mailThread(id), exact: true });
     for (const acc of p.folders) void qc.invalidateQueries({ queryKey: acc ? qk.mailFolders(acc) : qk.of("collab", "folders") });
   });
