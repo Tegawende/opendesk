@@ -42,9 +42,18 @@ func TestOverviewTicketCounts(t *testing.T) {
 	if string(mustJSON(a)) != string(mustJSON(b)) {
 		t.Fatalf("overview %s\nroute    %s", gotJSON, wantJSON)
 	}
-	// The Board is not one of her rows there.
+	// The Board is not one of her rows there, and its ticket is in none of her totals.
 	if teams, _ := a["teams"].(map[string]any); teams[private.String()] != nil {
 		t.Fatalf("private team listed: %v", teams)
+	}
+	if a["unassigned"] != float64(1) || a["open"] != float64(1) {
+		t.Fatalf("totals count the private team's ticket: unassigned %v open %v", a["unassigned"], a["open"])
+	}
+	// Someone on the Board counts it.
+	var lead map[string]any
+	e.Do("GET", "/v1/tickets/counts", other.Agent.As(other), nil).Want(t, 200).JSON(t, &lead)
+	if lead["unassigned"] != float64(2) {
+		t.Fatalf("a member of the team does not count its ticket: %v", lead["unassigned"])
 	}
 }
 
