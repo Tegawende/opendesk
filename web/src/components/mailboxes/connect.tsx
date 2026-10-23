@@ -13,18 +13,19 @@ import { cn } from "@/lib/cn";
 import { config } from "@/lib/config";
 import { tone } from "@/lib/tones";
 import { ProviderLogo } from "./ProviderLogo";
+import { qk } from "@/lib/queries";
 
 const DOCS_OAUTH = "https://docs.opendesk.sh/self-hosting/configuration/#mailbox-sign-in";
 
 export function useConnectOptions() {
-  return useQuery({ queryKey: ["mailboxes", "connect-options"], queryFn: () => api.mailboxes.connectOptions(), staleTime: 5 * 60_000 });
+  return useQuery({ queryKey: qk.of("mailboxes", "connect-options"), queryFn: () => api.mailboxes.connectOptions(), staleTime: 5 * 60_000 });
 }
 
 /** Detection for an address, keyed by its domain. */
 export function useMailDetection(email: string | null) {
   const domain = email?.split("@")[1]?.toLowerCase() ?? "";
   return useQuery({
-    queryKey: ["mailboxes", "detect", domain],
+    queryKey: qk.of("mailboxes", "detect", domain),
     queryFn: () => api.mailboxes.detect(email!),
     enabled: !!domain,
     staleTime: 10 * 60_000,

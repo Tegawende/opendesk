@@ -422,7 +422,7 @@ export const api = {
     merge: (id: string, into_id: string) => http.post<T.Ticket>(`/v1/tickets/${id}/merge`, { into_id }),
     messages: (id: string) => http.get<T.Page<T.Message>>(`/v1/tickets/${id}/messages`),
     /** `opts` pins the account and workspace a held reply started in, and lets it outlive the page. */
-    send: (id: string, b: SendMessageBody, opts?: { keepalive?: boolean; as?: string; workspaceId?: string }) =>
+    send: (id: string, b: SendMessageBody, opts?: { keepalive?: boolean; as?: string; workspace?: string }) =>
       http.create<T.Message>(`/v1/tickets/${id}/messages`, b, opts),
     editMessage: (id: string, messageId: string, b: { body_html: string }) => http.patch<T.Message>(`/v1/tickets/${id}/messages/${messageId}`, b),
     deleteMessage: (id: string, messageId: string) => http.del(`/v1/tickets/${id}/messages/${messageId}`),

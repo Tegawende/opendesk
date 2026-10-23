@@ -75,7 +75,7 @@ function HeldImages({ onLoad }: { onLoad: () => void }) {
 
 function Original({ id, inbound, remote, onLoadImages }: { id: string; inbound: boolean; remote: boolean; onLoadImages: () => void }) {
   const { t } = useTranslation("inbox");
-  const { data, isPending, isError } = useQuery({ queryKey: ["message-original", id], queryFn: () => api.messages.original(id), staleTime: Infinity });
+  const { data, isPending, isError } = useQuery({ queryKey: qk.of("message-original", id), queryFn: () => api.messages.original(id), staleTime: Infinity });
   const body = useBody(data?.full_html ?? "", inbound, inbound, remote);
   if (isPending)
     return (

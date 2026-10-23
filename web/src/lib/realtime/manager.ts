@@ -6,7 +6,7 @@ import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import { getWorkspaceId } from "../api/client";
 import { api } from "../api/endpoints";
 import type { Envelope, Notification, Page, Ticket } from "../api/types";
-import { qk } from "../queries";
+import { keyBody, keyWorkspace, qk } from "../queries";
 import { config } from "../config";
 import { applyEnvelope } from "./apply";
 import { syncDiff, syncState, type PresenceDiff, type PresenceState } from "./presence";
@@ -71,7 +71,7 @@ export class RealtimeManager {
     this.sync = new SeqSync({
       fetchSince: (since) => api.events(since),
       apply: (env) => this.apply(env),
-      resync: () => void opts.qc.invalidateQueries(),
+      resync: () => void opts.qc.invalidateQueries({ queryKey: qk.scope(opts.workspaceId) }),
     });
   }
 
@@ -146,7 +146,7 @@ export class RealtimeManager {
               // Lists loaded before the join can miss events published in between,
               // which the channel never delivers: refetch those once.
               void this.opts.qc.invalidateQueries({
-                predicate: (q) => LIVE_ROOTS.has(String(q.queryKey[0])) && q.state.dataUpdatedAt > 0 && q.state.dataUpdatedAt < joinedAt,
+                predicate: (q) => keyWorkspace(q.queryKey) === wid && LIVE_ROOTS.has(String(keyBody(q.queryKey)[0])) && q.state.dataUpdatedAt > 0 && q.state.dataUpdatedAt < joinedAt,
               });
             })
             .catch(() => {});
@@ -173,7 +173,8 @@ export class RealtimeManager {
     this.reconcileTickets();
     // A ticket's team arrives with its data (or changes): rejoin its channel with it.
     this.unsubscribeCache = this.opts.qc.getQueryCache().subscribe((e) => {
-      const key = e.query.queryKey;
+      if (keyWorkspace(e.query.queryKey) !== this.opts.workspaceId) return;
+      const key = keyBody(e.query.queryKey);
       if (e.type !== "updated" || key[0] !== "tickets" || key[1] !== "detail") return;
       const id = String(key[2]);
       const entry = this.tickets.get(id);

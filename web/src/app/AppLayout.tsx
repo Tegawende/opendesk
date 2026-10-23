@@ -199,6 +199,7 @@ export function AppLayout() {
   const { t: tNav } = useTranslation("navigation");
   // The top-level area (inbox, views, contacts, settings/...) keys the route transition.
   const section = useRouterState({ select: (s) => { const p = s.location.pathname.split("/").filter(Boolean); return p[0] ?? ""; } });
+  const focus = useSession((s) => s.workspaceId);
   useRealtimeConnection();
   useHeartbeat();
   useDesktopBadge();
@@ -270,8 +271,9 @@ export function AppLayout() {
           <AiBalanceBanner />
           <DesktopUpdateBanner />
           <AllowNotificationsBanner />
-          {/* Moving between areas cross-fades the panel; moving within one (ticket to ticket) does not. */}
-          <div key={section} className="flex min-h-0 flex-1 flex-col animate-route-in motion-reduce:animate-none">
+          {/* Moving between areas cross-fades the panel; moving within one (ticket to ticket) does not. A page belongs
+              to the focus workspace: moving the focus remounts it, so nothing keeps another workspace's keys. */}
+          <div key={`${focus}:${section}`} className="flex min-h-0 flex-1 flex-col animate-route-in motion-reduce:animate-none">
             <Outlet />
           </div>
         </main>
