@@ -84,10 +84,10 @@ function Row({
   const { t } = useTranslation("together");
   const content = (
     <>
+      {/* Mixed rows lead with their workspace's badge, so rows of two workspaces never read alike. */}
       {badge ? (
-        <span className="relative flex size-[15px] shrink-0 items-center justify-center [&>svg]:size-[15px] [&>svg]:text-fg-3">
-          {icon}
-          <WorkspaceBadge name={badge.name} logo={badge.avatar_url} size="xs" decorative className="absolute -bottom-1 -right-1.5 ring-2 ring-chrome" />
+        <span className="flex size-[15px] shrink-0 items-center justify-center">
+          <WorkspaceBadge name={badge.name} logo={badge.avatar_url} size="sm" decorative />
         </span>
       ) : (
         icon
