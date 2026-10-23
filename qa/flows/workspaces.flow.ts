@@ -28,15 +28,15 @@ test("every workspace in one sidebar, grouped, and opening another one without a
 test("Assigned to me across every workspace, each ticket marked with its workspace", async ({ page, proof }) => {
   await open(page, proof, "/everywhere/mine");
   await expect(page.getByRole("heading", { name: "Assigned to me everywhere" })).toBeVisible();
-  await expect(page.getByText("In Lumen Labs").first()).toBeAttached();
+  await expect(page.getByRole("img", { name: "In Lumen Labs" }).first()).toBeVisible();
   await proof.chapter("Everywhere", "Tickets assigned to you in every workspace, newest activity first");
   await proof.dwell();
   await proof.shot("everywhere-mine", { caption: "Assigned to me everywhere: Margin and Lumen Labs tickets together, each with its badge" });
 });
 
-test("mixed layout combines the sidebar, and separate keeps one workspace at a time", async ({ page, proof }) => {
-  await open(page, proof, "/inbox/unassigned", { mock_together: "mixed" });
-  await expect(page.getByText("Everywhere", { exact: true })).toBeVisible();
+test("mixed layout combines the sidebar, each row marked with its workspace", async ({ page, proof }) => {
+  await open(page, proof, "/inbox/unassigned?mock_together=mixed");
+  await expect(page.getByRole("button", { name: "Mine, In Lumen Labs" })).toBeVisible();
   await proof.chapter("Mixed", "Inbox, teams, views and mail combined, each row led by its workspace badge");
   await proof.dwell();
   await proof.shot("mixed", { caption: "Mixed: one combined sidebar, each row led by its workspace badge" });
