@@ -275,6 +275,48 @@ type NotificationPreferences = {
 | PATCH | `/v1/me/passkeys/{id}` | `{name}` → `Passkey` |
 | DELETE | `/v1/me/passkeys/{id}` | → 204. Needs the second factor (when on) and a sign-in within 12 hours, like adding one (`403 mfa_required` / `reauth_required`) |
 | DELETE | `/v1/me` | `{password?, code?}` → 204. `password` when the account has one, `code` when 2FA is on. Deletes the account and every workspace it solely owns (`409 sole_owner` while owner of a workspace with other members) |
+| GET | `/v1/me/workspace-prefs` | `WorkspacePrefs` (below; the defaults until the person changes something). No `OD-Workspace` |
+| PUT | `/v1/me/workspace-prefs` | any of `{mode, layout, order, hidden, collapsed, items, everywhere}` → `WorkspacePrefs`. Fields left out keep their value; `mode: ""` goes back to the default. `422` for an unknown mode or layout, more than 100 workspace ids, or an item id not shaped `<workspace id>/<kind>[:<id>]` (or `everywhere/<list>`), at most 500 items |
+| GET | `/v1/me/overview` | `{workspaces: WorkspaceOverview[]}`: every workspace the person is in, in joining order (below). No `OD-Workspace` |
+
+#### Workspaces together
+
+A person in several workspaces can work them side by side in the web app ("Together"), or one at a
+time ("Separate"). Every request still targets exactly one workspace (`OD-Workspace`), with that
+workspace's role and private teams: a view across workspaces is made of one request per workspace.
+The app keeps each workspace's data under its own cache keys and opens anything of another workspace
+by moving its focus there, without reloading. Links to a workspace's pages carry `?ws=<id>` (above).
+
+`WorkspacePrefs` is the person's own, one per user, whatever the workspace, and deleted with them:
+
+```jsonc
+{
+  "mode": "together" | "separate",  // the default is together (it only shows with two or more workspaces)
+  "mode_set": false,                // read only: whether the person chose the mode
+  "layout": "grouped" | "mixed",    // grouped: a sidebar group per workspace; mixed: sections combined, rows badged
+  "order": ["<wid>"],               // sidebar order; workspaces not listed follow in joining order
+  "hidden": ["<wid>"],              // left out of the sidebar, the Everywhere lists and the bell
+  "collapsed": ["<wid>" | "everywhere"],
+  "items": { "hidden": ["<wid>/view:<id>"], "order": ["<wid>/team:<id>"] },
+  "everywhere": true,               // the Everywhere lists: assigned to me, and all mail
+  "updated_at": "..."
+}
+```
+
+Ids in it only arrange the sidebar. They are never checked against memberships and never grant
+anything: a workspace the person is not in is simply not shown.
+
+`WorkspaceOverview` is one workspace's sidebar numbers, each computed as that workspace's own route
+answers the person (a principal for that workspace alone: their role there, its private teams):
+
+```jsonc
+{ "id": "<wid>", "name": "Acme", "slug": "acme", "avatar_url": "", "role": "agent", "suspended": false,
+  "unread_notifications": 3,
+  "ticket_counts": TicketCounts | null,   // GET /v1/tickets/counts there; null while suspended
+  "mail_counts": CollabCounts | null }    // GET /v1/collab/counts there; null without Collab
+```
+
+A suspended workspace is listed with its name and nothing else.
 
 ### Workspace (owner: backend-core)
 | method | path | notes |

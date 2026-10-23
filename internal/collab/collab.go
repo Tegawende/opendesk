@@ -6,6 +6,7 @@ package collab
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/deps"
 	"github.com/useopendesk/opendesk/internal/email"
 	"github.com/useopendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/plan"
 )
 
 // Limits (contracts/collab.md "Sync").
@@ -84,6 +86,22 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	s.registerDetailRoutes(api)
 	s.registerSidebarRoutes(api)
 	r.Get("/v1/collab/attachments/{message_id}/{index}", s.attachmentHandler)
+	d.Overview.MailCounts = s.overviewCounts
+}
+
+// overviewCounts is GET /v1/collab/counts for one workspace of the caller's overview, or
+// nil when that workspace has no Collab.
+func (s *service) overviewCounts(ctx context.Context, p *auth.Principal) (any, error) {
+	if p.Kind != auth.KindUser || p.Assistant || p.GrantID != uuid.Nil {
+		return nil, nil
+	}
+	if err := s.d.Plan.RequireCollab(ctx, s.d.DB.Pool, p.WorkspaceID); err != nil {
+		if errors.Is(err, plan.ErrCollab) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return s.counts(ctx, s.d.DB.Pool, p)
 }
 
 // RegisterWorkers adds this area's River workers.

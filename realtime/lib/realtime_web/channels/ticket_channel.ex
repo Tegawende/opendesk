@@ -2,7 +2,9 @@ defmodule RealtimeWeb.TicketChannel do
   @moduledoc """
   `ticket:<wid>:<ticket_id>`: Presence of agents on a ticket, typing, and the
   widget agent's live reply previews (`"live"`, from `Realtime.Fanout`).
-  Joined by `ws` tokens with `kind=user` in the same workspace.
+  Joined by `ws` tokens with `kind=user` that cover the workspace (their own, or
+  for a person one of the others their `workspaces` claim lists); the channel
+  acts with the role and private teams the token gives in that workspace.
 
   Join params:
 
@@ -33,6 +35,7 @@ defmodule RealtimeWeb.TicketChannel do
 
   intercept ["live", "typing", "presence_diff"]
 
+  alias Realtime.Auth
   alias Realtime.Ids
   alias RealtimeWeb.Channels.Guard
   alias RealtimeWeb.Endpoint
@@ -41,9 +44,13 @@ defmodule RealtimeWeb.TicketChannel do
   @states ~w(viewing replying idle)
 
   @impl true
-  def join("ticket:" <> rest, payload, %{assigns: %{kind: :user, wid: wid}} = socket) do
-    with [^wid, ticket_id] <- String.split(rest, ":"),
+  def join("ticket:" <> rest, payload, %{assigns: %{kind: :user} = assigns} = socket) do
+    with [wid, ticket_id] <- String.split(rest, ":"),
+         %{role: role, teams: teams} <- Auth.workspace(assigns, wid),
          true <- Ids.uuid?(ticket_id) and ticket_id == Ids.normalize(ticket_id),
+         # This channel acts in the topic's workspace: the role and private teams the
+         # token gives there, whichever workspace the token was issued in.
+         socket = socket |> assign(:wid, wid) |> assign(:role, role) |> assign(:teams, teams),
          {:ok, team_id} <- join_team(payload, socket) do
       if Guard.join_allowed?(socket) do
         send(self(), :after_join)

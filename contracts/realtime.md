@@ -30,16 +30,21 @@ URL, where proxies and access logs keep it. A token in the query string is not r
 4. The `ws` token's `teams` claim (at most 200 uuids; a malformed claim refuses the token) is kept
    for the socket's life. A change to someone's private teams disconnects them, and the reconnect
    fetches a token with the new list. Tokens are at most 8 KB.
+5. A person's token may also carry `workspaces` (contracts/tokens.md): the other workspaces it
+   covers, each with the role and private teams there. "The token covers `wid`" below means
+   `wid` is the token's own or one of those; every join checks the topic's workspace with the
+   role and teams the token gives in that workspace. A malformed claim, or one on an API key's
+   token, refuses the token.
 
 ## Channels
 
 | topic                         | who may join                                   | server pushes |
 | ----------------------------- | ---------------------------------------------- | ------------- |
-| `workspace:<wid>`             | `ws` token with that `wid`                     | `"event"` with every envelope for that workspace (visibility `agents` or `public`); for an event of a private team's ticket, or one scoped to people (`private` in `topics`, contracts/events.md), only the stand-in `{id, seq, workspace_id, type: "event.hidden", visibility: "agents", data: {}, occurred_at}`, so `seq` stays contiguous |
+| `workspace:<wid>`             | `ws` token that covers `wid`                   | `"event"` with every envelope for that workspace (visibility `agents` or `public`); for an event of a private team's ticket, or one scoped to people (`private` in `topics`, contracts/events.md), only the stand-in `{id, seq, workspace_id, type: "event.hidden", visibility: "agents", data: {}, occurred_at}`, so `seq` stays contiguous |
 | | | Pushed envelopes omit `topics`: per-user events (`notification.created`) are told apart by the channel they arrive on (`user:<uid>`), not by `topics` |
-| `team:<wid>:<tid>`            | `ws` token with that `wid` and `tid` in its `teams` claim | `"event"` envelopes of a private team's tickets in full (contracts/teams.md "Visibility"); `workspace:<wid>` gets their stand-in. They may arrive before or after the stand-in: apply them when they arrive, track `seq` on the workspace channel |
+| `team:<wid>:<tid>`            | `ws` token that covers `wid` with `tid` among its private teams there | `"event"` envelopes of a private team's tickets in full (contracts/teams.md "Visibility"); `workspace:<wid>` gets their stand-in. They may arrive before or after the stand-in: apply them when they arrive, track `seq` on the workspace channel |
 | `user:<uid>`                  | `ws` token, `kind=user`, `sub == uid`          | `"event"` envelopes whose topics include `user:<uid>`, in full (their notifications and assignments, which go only to users who can see the ticket) |
-| `ticket:<wid>:<ticket_id>`    | `ws` token, `kind=user`, same `wid`; with `team_id` in the join params, that team in its `teams` claim | Presence (`presence_state`, `presence_diff`), `"typing"` and `"live"`; those of a private team's ticket only to sockets with the team (below) |
+| `ticket:<wid>:<ticket_id>`    | `ws` token, `kind=user`, that covers `wid`; with `team_id` in the join params, that team among its private teams there. The channel acts with the role the token gives in `wid` (a viewer there never types to the customer) | Presence (`presence_state`, `presence_diff`), `"typing"` and `"live"`; those of a private team's ticket only to sockets with the team (below) |
 | `contact:<wid>:<contact_id>`  | widget socket: `widget_ws` token with `sub == contact_id`, same `wid` | `"event"` for public envelopes with that topic, `"typing"` from agents and `"live"`. Envelopes list `contact:<wid>:<contact_id>:<brand_id>` (the chat's brand) and live previews carry `brand_id`: they are pushed only to sockets whose token's `bid` is that brand, without `brand_id`, so a visitor's chats of another brand never reach this widget (a token without `bid` gets every brand's) |
 
 Join params on `ticket:<wid>:<tid>`: `{"watch": true}` watches a ticket (the inbox list
@@ -101,10 +106,12 @@ message as `message.created`.
 
 ## Missed events
 
-Each `"event"` carries `seq`. The web app tracks the last `seq` it applied for its
-workspace. On reconnect, or when `seq` is not `last + 1`, it calls
+Each `"event"` carries `seq`, counted per workspace. The web app tracks the last `seq` it
+applied for each workspace it follows (one socket joins `workspace:<wid>` for each workspace its
+token covers). On reconnect, or when `seq` is not `last + 1`, it calls
 `GET /v1/events?since=<last>` and applies those first. If that returns
-`{"resync": true}` (gap older than retention), it invalidates all queries.
+`{"resync": true}` (gap older than retention), it invalidates that workspace's queries. The replay of
+another workspace than the focus sends that workspace's `OD-Workspace`.
 
 ## Ops
 

@@ -251,7 +251,9 @@ func (s *svc) registerPlatform(api huma.API) {
 
 	register(s, api, huma.Operation{OperationID: "realtime-token", Method: http.MethodPost, Path: "/v1/realtime/token",
 		Summary: "Get a short-lived token for the realtime gateway", Tags: []string{"Realtime"}},
-		func(ctx context.Context, _ *struct{}) (*struct {
+		func(ctx context.Context, in *struct {
+			AllWorkspaces bool `query:"all_workspaces" doc:"A signed-in person's token also carries their other workspaces (contracts/tokens.md), so one socket follows them all"`
+		}) (*struct {
 			CacheControl string `header:"Cache-Control"`
 			Body         coreRealtimeToken
 		}, error) {
@@ -283,6 +285,13 @@ func (s *svc) registerPlatform(api huma.API) {
 			}
 			for _, t := range teams {
 				c.Teams = append(c.Teams, t.String())
+			}
+			// Only a person's own token spans workspaces; an API key, an OAuth grant and the
+			// assistant stay in the one they act in.
+			if in.AllWorkspaces && p.Kind == auth.KindUser && p.GrantID == uuid.Nil && !p.Assistant {
+				if c.Workspaces, err = s.realtimeWorkspaces(ctx, p); err != nil {
+					return nil, httpx.Wrap(err)
+				}
 			}
 			tok, exp, err := s.d.Tokens.Sign(c, sub, auth.WSTTL)
 			if err != nil {
