@@ -458,9 +458,12 @@ struct TicketPatch: Encodable, Sendable {
     var tags: [String]?
     var addTags: [String]?
     var removeTags: [String]?
+    var subject: String?
+    /// Custom field values, merged; `.null` clears one.
+    var fields: [String: JSONValue]?
 
     enum CodingKeys: String, CodingKey {
-        case status, priority, severity, spam, tags
+        case status, priority, severity, spam, tags, subject, fields
         case assigneeID = "assignee_id"
         case teamID = "team_id"
         case snoozedUntil = "snoozed_until"
@@ -480,6 +483,8 @@ struct TicketPatch: Encodable, Sendable {
         try c.encodeIfPresent(tags, forKey: .tags)
         try c.encodeIfPresent(addTags, forKey: .addTags)
         try c.encodeIfPresent(removeTags, forKey: .removeTags)
+        try c.encodeIfPresent(subject, forKey: .subject)
+        try c.encodeIfPresent(fields, forKey: .fields)
     }
 
     private static func encode<V>(_ value: Reference<V>?, forKey key: CodingKeys, in c: inout KeyedEncodingContainer<CodingKeys>) throws {
@@ -523,6 +528,10 @@ struct TicketPatch: Encodable, Sendable {
         case nil: break
         }
         if let spam { next.spam = spam }
+        if let subject { next.subject = subject }
+        for (key, value) in fields ?? [:] {
+            next.fields[key] = value.isNull ? nil : value
+        }
         return next
     }
 }
@@ -740,6 +749,10 @@ struct Message: Codable, Hashable, Sendable, Identifiable {
     var isPartial = false
     /// A deleted message, or a note sent as a reply: a marker the app does not show yet.
     var isHidden = false
+    /// Set on the messages of a side conversation (a third-party thread).
+    var threadID: String?
+    /// When the author last edited a note.
+    var editedAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id, kind, direction, author, subject, to, cc, attachments, ai
@@ -752,12 +765,16 @@ struct Message: Codable, Hashable, Sendable, Identifiable {
         case deliveryStatus = "delivery_status"
         case deliveryError = "delivery_error"
         case createdAt = "created_at"
+        case threadID = "thread_id"
+        case editedAt = "edited_at"
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         ticketID = c.lenient(String.self, forKey: .ticketID) ?? ""
+        threadID = c.lenient(String.self, forKey: .threadID)
+        editedAt = c.lenient(Date.self, forKey: .editedAt)
         kind = c.lenient(MessageKind.self, forKey: .kind) ?? .reply
         direction = c.lenient(String.self, forKey: .direction) ?? "inbound"
         let author = c.lenient(MessageAuthor.self, forKey: .author)
@@ -842,6 +859,7 @@ struct Message: Codable, Hashable, Sendable, Identifiable {
         if update.attachments.isEmpty { next.attachments = attachments }
         if update.author.user == nil, update.author.contact == nil, update.author.bot == nil { next.author = author }
         if update.fromEmail.isEmpty { next.fromEmail = fromEmail }
+        if update.threadID == nil { next.threadID = threadID }
         next.isPartial = false
         return next
     }
