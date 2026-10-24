@@ -25,4 +25,6 @@ regexes = [
 paths = [
   '''internal/auth/passwords/breached\.txt''',
   '''(^|/)pnpm-lock\.yaml$''',
+  # The iPhone app's demo world: sample data on the device, never a credential (DemoMode).
+  '''^ios/Opendesk/Core/Demo/''',
 ]
