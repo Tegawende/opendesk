@@ -10,6 +10,13 @@ enum DeepLink: Hashable, Sendable {
     case ticket(id: String, scope: InboxScope?)
     case scope(InboxScope)
     case notifications
+    case contact(String?)
+    case company(String?)
+    /// Collab mail, optionally one conversation (`/mail/<box>/<thread_id>`).
+    case mail(String?)
+    case article(String?)
+    case kb
+    case reports
 
     /// From a push or a link that names its server and workspace.
     struct Target: Hashable, Sendable {
@@ -18,7 +25,8 @@ enum DeepLink: Hashable, Sendable {
         var workspaceID: String?
     }
 
-    /// An app path such as `/inbox/mine/<id>`, `/views/<view>/<id>` or `/inbox/open`.
+    /// An app path such as `/inbox/mine/<id>`, `/views/<view>/<id>`, `/inbox/open`, `/contacts/<id>`,
+    /// `/companies/<id>`, `/mail/<box>/<thread_id>`, `/kb/articles/<id>` or `/reports`.
     static func parse(path raw: String) -> DeepLink? {
         let path = raw.split(separator: "?", maxSplits: 1).first.map(String.init) ?? raw
         let segments = path.split(separator: "/").map { String($0).removingPercentEncoding ?? String($0) }.filter { !$0.isEmpty }
@@ -39,6 +47,17 @@ enum DeepLink: Hashable, Sendable {
             return .scope(view)
         case "notifications":
             return .notifications
+        case "contacts":
+            return .contact(segments.count > 1 ? segments[1] : nil)
+        case "companies":
+            return .company(segments.count > 1 ? segments[1] : nil)
+        case "mail":
+            return .mail(segments.count > 2 ? segments.last : nil)
+        case "kb":
+            if segments.count >= 3, segments[1] == "articles" { return .article(segments[2]) }
+            return .kb
+        case "reports":
+            return .reports
         default:
             return nil
         }

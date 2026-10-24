@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Folders with live counts, then the workspace's views.
+/// Folders with live counts, the workspace's views, then the app's other areas.
 struct ScopeSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
@@ -32,6 +32,13 @@ struct ScopeSheet: View {
                             }
                         }
                     }
+                    SectionLabel("Workspace")
+                    Panel {
+                        ForEach(Array(areas.enumerated()), id: \.element) { index, area in
+                            if index > 0 { Hairline(inset: 46) }
+                            areaRow(area)
+                        }
+                    }
                 }
                 .padding(20)
             }
@@ -44,40 +51,62 @@ struct ScopeSheet: View {
         }
     }
 
-    private func row(scope: InboxScope, title: String, symbol: String, count: Int?) -> some View {
-        let selected = env.inbox.scope == scope
+    private var areas: [AppArea] {
+        AppArea.allCases.filter { $0 != .tickets && ($0 != .mail || env.directory.collab.enabled) }
+    }
+
+    private func areaRow(_ area: AppArea) -> some View {
+        let selected = env.router.area == area
         return Button {
             Haptics.selection()
-            env.inbox.setScope(scope)
+            env.router.show(area, [])
             dismiss()
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: symbol)
-                    .font(.system(size: 15))
-                    .foregroundStyle(selected ? Theme.fg : Theme.fg3)
-                    .frame(width: 20)
-                Text(title)
-                    .font(ODFont.sans(15, weight: selected ? .semibold : .regular))
-                    .foregroundStyle(Theme.fg)
-                Spacer()
-                if let count, count > 0 {
-                    Text("\(count)")
-                        .font(ODFont.mono(12.5))
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.fg3)
-                        .contentTransition(.numericText())
-                }
-                if selected {
-                    Image(systemName: "checkmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.fg)
-                }
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 46)
-            .background(selected ? Theme.hover : .clear)
-            .contentShape(Rectangle())
+            label(title: area.title, symbol: area.symbol, count: nil, selected: selected)
         }
         .buttonStyle(RowPressStyle())
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func row(scope: InboxScope, title: String, symbol: String, count: Int?) -> some View {
+        let selected = env.router.area == .tickets && env.inbox.scope == scope
+        return Button {
+            Haptics.selection()
+            env.inbox.setScope(scope)
+            env.router.show(.tickets, [])
+            dismiss()
+        } label: {
+            label(title: title, symbol: symbol, count: count, selected: selected)
+        }
+        .buttonStyle(RowPressStyle())
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func label(title: String, symbol: String, count: Int?, selected: Bool) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 15))
+                .foregroundStyle(selected ? Theme.fg : Theme.fg3)
+                .frame(width: 20)
+            Text(title)
+                .font(ODFont.sans(15, weight: selected ? .semibold : .regular))
+                .foregroundStyle(Theme.fg)
+            Spacer()
+            if let count, count > 0 {
+                Text("\(count)")
+                    .font(ODFont.mono(12.5))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.fg3)
+                    .contentTransition(.numericText())
+            }
+            if selected {
+                Image(systemName: "checkmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.fg)
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 46)
+        .background(selected ? Theme.hover : .clear)
+        .contentShape(Rectangle())
     }
 }
 

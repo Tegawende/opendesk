@@ -6,9 +6,9 @@ struct InboxRootView: View {
     var body: some View {
         @Bindable var router = env.router
         NavigationStack(path: $router.inboxPath) {
-            InboxListView()
-                .navigationDestination(for: TicketRoute.self) { route in
-                    TicketView(route: route)
+            AreaRootView()
+                .navigationDestination(for: AppRoute.self) { route in
+                    AppRouteDestination(route: route)
                 }
         }
     }
