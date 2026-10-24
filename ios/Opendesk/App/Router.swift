@@ -203,6 +203,10 @@ final class Router {
     #if DEBUG
     @ObservationIgnored private var pendingDemoScreen: String?
 
+    /// A screen state the QA harness asked for (`/demo/<action>`, e.g. `/demo/ticket-details`).
+    /// Screens with sheets or modes no path names watch this and clear it once handled.
+    var demoAction: String?
+
     /// Demo mode takes app paths without the system's "Open in" prompt, for the QA harness:
     /// `OPENDESK_DEMO_OPEN=<path>` at launch, and during a run the path written to the app's
     /// `tmp/opendesk-demo-open` followed by the Darwin notification `sh.opendesk.demo.open`.
@@ -241,6 +245,8 @@ final class Router {
         case "search":
             showOllie = false
             show(area, [.search])
+        case "demo":
+            demoAction = parts.dropFirst().joined(separator: "/")
         default:
             guard let link = DeepLink.parse(path: path) else { return }
             open(DeepLink.Target(link: link, server: nil, workspaceID: nil))
