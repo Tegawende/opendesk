@@ -133,6 +133,7 @@ export default function Workspaces() {
 /** One workspace's rows: inbox folders, teams and views, each with a switch. */
 function WorkspaceItems({ m, hiddenItems, onChange }: { m: Membership; hiddenItems: string[]; onChange: (hidden: string[]) => void }) {
   const { t } = useTranslation("together");
+  const { t: tNav } = useTranslation("navigation");
   const me = useSession((s) => s.user?.id ?? "");
   const wid = m.workspace.id;
   const teams = useQuery(inWorkspace(wid, () => q.teams())).data ?? [];
@@ -158,7 +159,7 @@ function WorkspaceItems({ m, hiddenItems, onChange }: { m: Membership; hiddenIte
       <div className="grid gap-x-6 sm:grid-cols-3">
         <div>
           <div className="label-caps px-2 py-1">{t("customize.folders")}</div>
-          {folders.filter((f) => f.id !== "solved" && f.id !== "spam").map((f) => line(itemId(wid, "ticket_folder", f.id), f.label))}
+          {folders.filter((f) => f.id !== "solved" && f.id !== "spam").map((f) => line(itemId(wid, "ticket_folder", f.id), tNav(f.labelKey)))}
         </div>
         <div>
           <div className="label-caps px-2 py-1">{t("customize.teams")}</div>

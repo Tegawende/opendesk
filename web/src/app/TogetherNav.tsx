@@ -188,6 +188,7 @@ function GroupHeader({
 /** The rows of a workspace that is not the focus: inbox folders, teams, views, mail. */
 function CompactRows({ ws, overview, rail, hidden }: { ws: Membership; overview: WorkspaceOverview | undefined; rail: boolean; hidden: Set<string> }) {
   const { t } = useTranslation("together");
+  const { t: tNav } = useTranslation("navigation");
   const me = useSession((s) => s.user?.id ?? "");
   const wid = ws.workspace.id;
   const counts = overview?.ticket_counts ?? undefined;
@@ -208,7 +209,7 @@ function CompactRows({ ws, overview, rail, hidden }: { ws: Membership; overview:
             focus={false}
             rail={rail}
             icon={folderIcons[id]}
-            label={f.label}
+            label={tNav(f.labelKey)}
             count={counts ? (f.count(counts) ?? undefined) : undefined}
             to={{ to: "/inbox/$folder/{-$ticketId}", params: { folder: id, ticketId: undefined } }}
           />
@@ -359,6 +360,7 @@ function MixedNav({
   hidden: Set<string>;
 }) {
   const { t } = useTranslation("together");
+  const { t: tNav } = useTranslation("navigation");
   const { shown, focus } = useTogether();
   const live = shown.filter((m) => !m.suspended);
   const focusWs = shown.find((m) => m.workspace.id === focus);
@@ -379,7 +381,7 @@ function MixedNav({
                   focus={m.workspace.id === focus}
                   rail={rail}
                   icon={folderIcons[id]}
-                  label={f.label}
+                  label={tNav(f.labelKey)}
                   count={counts ? (f.count(counts) ?? undefined) : undefined}
                   badge={m.workspace}
                   to={{ to: "/inbox/$folder/{-$ticketId}", params: { folder: id, ticketId: undefined } }}
