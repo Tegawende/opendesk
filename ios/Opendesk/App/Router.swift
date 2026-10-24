@@ -85,7 +85,12 @@ final class Router {
         // OAuth callbacks are answered by the web authentication session itself.
         if url.scheme == "opendesk", url.host() == "auth" { return }
         #if DEBUG
-        if DemoMode.isOn, url.scheme == "opendesk", url.host() == "demo" { return openDemo(url.path()) }
+        if url.scheme == "opendesk", url.host() == "demo" {
+            if DemoMode.isOn { return openDemo(url.path()) }
+            // `opendesk://demo` on the sign-in screen opens the demo workspace.
+            if env.session.phase == .signedOut { Task { await env.session.enterDemo() } }
+            return
+        }
         #endif
         guard let target = DeepLink.parse(url: url, instance: env.session.instance) else {
             if url.scheme == "opendesk" { env.toasts.show("That link isn't one the app can open.") }

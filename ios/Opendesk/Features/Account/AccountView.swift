@@ -135,18 +135,27 @@ private struct AccountHome: View {
 
     private var ending: some View {
         VStack(spacing: 10) {
-            Button {
-                confirm = AccountConfirm(
-                    title: "Sign out of opendesk?",
-                    message: "This iPhone stops getting notifications for \(session.user?.email ?? "this account") until you sign in again.",
-                    confirmTitle: "Sign out"
-                ) {
-                    await env.session.signOut()
+            if inAppDemo {
+                Button {
+                    Task { await env.session.signOut() }
+                } label: {
+                    ButtonLabel(title: "Leave the demo", symbol: "rectangle.portrait.and.arrow.right")
                 }
-            } label: {
-                ButtonLabel(title: "Sign out", symbol: "rectangle.portrait.and.arrow.right")
+                .buttonStyle(OutlineButtonStyle())
+            } else {
+                Button {
+                    confirm = AccountConfirm(
+                        title: "Sign out of opendesk?",
+                        message: "This iPhone stops getting notifications for \(session.user?.email ?? "this account") until you sign in again.",
+                        confirmTitle: "Sign out"
+                    ) {
+                        await env.session.signOut()
+                    }
+                } label: {
+                    ButtonLabel(title: "Sign out", symbol: "rectangle.portrait.and.arrow.right")
+                }
+                .buttonStyle(OutlineButtonStyle(tint: Tone.red.text))
             }
-            .buttonStyle(OutlineButtonStyle(tint: Tone.red.text))
             Button("Delete account") { deleting = true }
                 .font(ODFont.sans(14, weight: .medium))
                 .foregroundStyle(Theme.fg3)
@@ -156,6 +165,15 @@ private struct AccountHome: View {
     }
 
     // MARK: Values
+
+    /// A demo started from the sign-in screen, which signing out leaves.
+    private var inAppDemo: Bool {
+        #if DEBUG
+        DemoMode.isOn && !DemoMode.launchedInDemo
+        #else
+        false
+        #endif
+    }
 
     private var phoneValue: String {
         if env.push.mode == .off { return "Off" }

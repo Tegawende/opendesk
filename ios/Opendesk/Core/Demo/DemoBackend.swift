@@ -72,6 +72,16 @@ actor DemoBackend {
 
     // MARK: Entry points
 
+    /// The seed's world again, for a demo entered anew from the sign-in screen.
+    func restart() {
+        world = DemoSeed.world()
+        outbox = []
+        pending = [:]
+        uploads = [:]
+        tick = 0
+        serial = 0
+    }
+
     func listen(_ handler: @escaping @Sendable (Envelope) -> Void) {
         listener = handler
     }
