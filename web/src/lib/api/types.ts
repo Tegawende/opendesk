@@ -1194,6 +1194,9 @@ export type ReportsOverview = {
 export type ReportsGroup = { created: number; solved: number; open_now: number; first_response_p50_minutes: number | null };
 
 export type MailboxTestLeg = { ok: boolean; error: string; /** The server's reply, scrubbed. */ detail?: string };
+/** GET /v1/mailboxes/{id}/usage: the tickets that reply from a mailbox, before removing it. */
+export type MailboxUsage = { tickets: number; open: number };
+
 export type MailboxTest = {
   inbound: MailboxTestLeg;
   outbound: MailboxTestLeg;

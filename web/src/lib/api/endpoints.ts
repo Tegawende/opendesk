@@ -527,6 +527,7 @@ export const api = {
     ...crud<T.Mailbox, Partial<CreateMailboxBody> & Partial<Pick<T.Mailbox, "signature_html" | "auto_reply_enabled" | "auto_reply_subject" | "auto_reply_html" | "status" | "ai_answers" | "ai_answers_mode" | "ai_answers_outside_hours" | "trusted_form_senders" | "personal_replies">> & { bot_id?: string | null; alias_settings?: Record<string, T.AliasSettingsInput> }>("/v1/mailboxes"),
     create: (b: CreateMailboxBody) => http.create<T.Mailbox>("/v1/mailboxes", b),
     test: (id: string) => http.post<T.MailboxTest>(`/v1/mailboxes/${id}/test`),
+    usage: (id: string) => http.get<T.MailboxUsage>(`/v1/mailboxes/${id}/usage`),
     /** Reads Gmail's send-as list again (422 send_as_unreadable for a send-only connection). */
     checkSendAs: (id: string) => http.post<T.Mailbox>(`/v1/mailboxes/${id}/send-as/check`),
     /**

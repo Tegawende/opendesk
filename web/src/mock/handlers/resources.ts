@@ -441,6 +441,11 @@ export function registerResources() {
     publish(ctx.ws, "mailbox.updated", { mailbox: m });
     return respond(200, m);
   });
+  get("/v1/mailboxes/:id/usage", (ctx) => {
+    const m = findMailbox(ctx);
+    const replying = ctx.ws.tickets.filter((t) => t.mailbox_id === m.id);
+    return respond(200, { tickets: replying.length, open: replying.filter((t) => t.status === "open" || t.status === "pending" || t.status === "on_hold").length });
+  });
   post("/v1/mailboxes/:id/test", (ctx) => {
     const m = findMailbox(ctx);
     // Forwarding in, SMTP out: only the SMTP server signs in, with the stored password

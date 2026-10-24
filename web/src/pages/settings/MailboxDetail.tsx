@@ -836,7 +836,7 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
           </Button>
         </Row>
         <Row label={t("detail.removeTitle")} description={t("detail.removeHint")}>
-          <Button variant="danger" onClick={() => remove(mailbox, () => void navigate({ to: "/settings/mailboxes" }))}>
+          <Button variant="danger" onClick={() => void remove(mailbox, () => void navigate({ to: "/settings/mailboxes" }))}>
             {t("detail.remove")}
           </Button>
         </Row>

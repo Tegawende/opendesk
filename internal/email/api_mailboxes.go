@@ -21,6 +21,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/displayname"
+	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/events"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
@@ -127,6 +128,12 @@ type personalRepliesInput struct {
 
 type idInput struct {
 	ID string `path:"id"`
+}
+
+// mailboxUsage is what removing a mailbox touches: the tickets that reply from it.
+type mailboxUsage struct {
+	Tickets int `json:"tickets" doc:"Tickets the caller can see whose reply address is this mailbox"`
+	Open    int `json:"open" doc:"Of those, the ones open, pending or on hold"`
 }
 
 func parseID(s string) (uuid.UUID, error) {
@@ -522,6 +529,34 @@ func (s *service) registerMailboxRoutes(api huma.API) {
 			}
 			go s.deleteObjects(keys)
 			return nil, nil
+		})
+
+	huma.Register(api, huma.Operation{OperationID: "get-mailbox-usage", Method: http.MethodGet, Path: "/v1/mailboxes/{id}/usage",
+		Summary: "Count a mailbox's tickets", Description: "How many tickets the caller can see reply from this mailbox, and how many of them are open, pending or on hold. Deleting the mailbox keeps them, without this reply address.",
+		Tags: tags},
+		func(ctx context.Context, in *idInput) (*struct{ Body mailboxUsage }, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleAdmin, auth.ScopeSettingsRead)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			id, err := parseID(in.ID)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := loadMailbox(ctx, s.d.DB.Pool, p.WorkspaceID, id); err != nil {
+				return nil, wrapMailboxErr(err)
+			}
+			hidden, err := domain.HiddenTeams(ctx, s.d.DB.Pool, p)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			var out mailboxUsage
+			if err := s.d.DB.Pool.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE t.status IN ('open', 'pending', 'on_hold'))
+				FROM tickets t WHERE t.workspace_id = $1 AND t.mailbox_id = $2 AND t.deleted_at IS NULL AND `+domain.VisibleSQL("t", 3),
+				p.WorkspaceID, id, hidden).Scan(&out.Tickets, &out.Open); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return &struct{ Body mailboxUsage }{out}, nil
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "test-mailbox", Method: http.MethodPost, Path: "/v1/mailboxes/{id}/test",

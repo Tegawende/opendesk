@@ -101,6 +101,8 @@
   "actions": {
     "removeTitle": "Remove mailbox?",
     "removeBody": "Mail sent to {{email}} stops arriving in opendesk. Existing tickets stay.",
+    "removeBodyTickets_one": "Mail sent to {{email}} stops arriving in opendesk. The ticket that replies from it stays ({{open}} open), but its replies will no longer go out from {{email}}.",
+    "removeBodyTickets_other": "Mail sent to {{email}} stops arriving in opendesk. The {{count}} tickets that reply from it stay ({{open}} open), but their replies will no longer go out from {{email}}.",
     "removeConfirm": "Remove",
     "removed": "Mailbox removed",
     "testTitle": "Connection test",
