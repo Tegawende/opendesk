@@ -928,7 +928,7 @@ extension DemoBackend {
         var dates: [Date] = []
         var files: [MailPerson.File] = []
         for thread in threads {
-            for message in mail.messages[thread.id] ?? [] {
+            for message in mail.messages[thread.id] ?? [] where !message.draft {
                 let from = message.from.email.lowercased() == key
                 if from || (message.to + message.cc).contains(where: { $0.email.lowercased() == key }) { dates.append(message.sentAt) }
                 if from {

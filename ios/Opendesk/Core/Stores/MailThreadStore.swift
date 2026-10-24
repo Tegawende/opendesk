@@ -5,7 +5,8 @@ import Observation
 @MainActor
 @Observable
 final class MailThreadStore {
-    let threadID: String
+    /// The conversation's id; a link may name it some other way until it loads.
+    private(set) var threadID: String
     private(set) var detail: MailThreadDetail?
     private(set) var loading = false
     private(set) var error: String?
@@ -60,6 +61,7 @@ final class MailThreadStore {
                 freshComments.formUnion(value.comments.map(\.id).filter { !known.contains($0) })
             }
             detail = value
+            threadID = value.thread.id
             error = nil
             notFound = false
             mail.update(value.thread)
