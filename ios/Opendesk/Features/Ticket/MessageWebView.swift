@@ -29,9 +29,10 @@ struct MessageWebView: UIViewRepresentable {
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        context.coordinator.observation = webView.scrollView.observe(\.contentSize, options: [.new]) { scrollView, _ in
-            let measured = scrollView.contentSize.height
-            Task { @MainActor [weak coordinator = context.coordinator] in
+        let coordinator = context.coordinator
+        coordinator.observation = webView.scrollView.observe(\.contentSize, options: [.new]) { [weak coordinator] _, change in
+            guard let measured = change.newValue?.height else { return }
+            Task { @MainActor [weak coordinator] in
                 guard let coordinator, measured > 1, abs(coordinator.parent.height - measured) > 1 else { return }
                 coordinator.parent.height = measured
             }

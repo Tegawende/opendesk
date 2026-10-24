@@ -133,9 +133,12 @@ extension DemoBackend {
 
         // Definitions and lookups another area may answer too: theirs wins.
         if call.match("GET", "custom-fields") != nil {
-            if let answer = try directoryRoutes(call, in: &ws) { return answer }
-            if let answer = try accountRoutes(call, in: &ws) { return answer }
-            return .some(encode(ListBody(data: ws.ticketExtras.fields)))
+            // Ticket fields live here, contact and company fields in the directory area.
+            switch call.query["entity"] {
+            case "ticket": return .some(encode(ListBody(data: ws.ticketExtras.fields.filter { $0.entity == "ticket" })))
+            case nil: return .some(encode(ListBody(data: ws.ticketExtras.fields.filter { $0.entity == "ticket" } + ws.directory.fields)))
+            default: return try directoryRoutes(call, in: &ws)
+            }
         }
         if call.match("GET", "mailboxes") != nil {
             if let answer = try accountRoutes(call, in: &ws) { return answer }
