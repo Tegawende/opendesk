@@ -123,6 +123,8 @@ interface AISettings {
   widget_answers: boolean          // the AI agent answers chat widget conversations, default false
   assistant: boolean               // Ollie, the assistant panel, default true
   assistant_peer: boolean          // members may let teammates' Ollie ask theirs about their own mail ("Asking a teammate"), default false
+  assistant_auto: string[]         // built-in changes Ollie makes without asking ("Approvals"), default []: some of update_ticket,
+                                   // bulk_update_tickets, add_note, create_kb_draft, create_view, create_automation_draft
   tone: string                     // "friendly" | "professional" | "concise" | free text up to 200 chars; drafts and rewrites (the agent uses its bot's tone, contracts/bots.md)
   reply_language: "customer" | "workspace"  // reply in the customer's language (default) or the workspace's
   instructions: string             // extra guidance for drafts, up to 2,000 chars
@@ -144,7 +146,8 @@ containing `<`, `>` or control characters, or `instructions` over 2,000 characte
 characters other than newline and tab are stripped), and writes the audit entry
 `ai.settings_updated` with the changed keys (not their values). `reply_language: "workspace"`
 means English unless `instructions` name another language. `widget_max_replies` outside 1..100 is
-`422`. What the agent should know and how it sounds are its bot's personality (contracts/bots.md).
+`422`. `assistant_auto` replaces the list and takes only the six names above (`422` for any other,
+repeats dropped); a stored name outside them reads as absent. Admins only, like every key. What the agent should know and how it sounds are its bot's personality (contracts/bots.md).
 
 ## Models
 
@@ -344,6 +347,7 @@ interface PageContext { path?: string; page?: "inbox"|"view"|"ticket"|"contacts"
 interface Step { id: string; tool: string; label: string;
   status: "running"|"done"|"error"|"awaiting_approval"|"approved"|"denied"|"expired";
   summary?: string; refs?: Ref[]; action_id?: string;
+  auto?: boolean /* ran without asking ("Approvals") */; preview?: Preview /* what an auto step ran */;
   peer?: { user: { id: string; name: string; avatar_url: string }; result: "answered"|"declined"|"not_shared"|"failed"; sources: number } }
   // peer: an ask_teammate step, whose Ollie answered and how ("Asked Maya's Ollie · answered from 3 conversations")
 interface Ref { kind: "ticket"|"contact"|"article"|"view"|"automation"|"member"|"external" /* id is the https link */; id: string; label: string; number?: number }
@@ -409,7 +413,7 @@ and activities:
 - connected (agent+): the workspace's integrations' MCP tools, named `<slug>__<tool>`
   (`contracts/integrations.md`). Server-marked read-only tools are reads unless an admin set
   them to ask first; every other one is a write with `preview.system` set and the complete
-  arguments in `preview.arguments`.
+  arguments in `preview.arguments`, proposed unless an admin lets it run without asking.
 
 Approvals:
 - A write is stored as an `assistant_actions` row (`pending`, 15 minutes) and the client
@@ -422,6 +426,24 @@ Approvals:
 - An approved write runs with the user's permissions, attributed `actor_type = "ai"` with
   `actor.user` = the user, and is audit-logged as `assistant.action` (tool and status, not
   content) with `data.actor = "ai"`. POSTs carry the idempotency key `assistant-<action id>`.
+- Without asking: a write runs as soon as it is proposed when the workspace allows it, the
+  built-in ones in `settings.ai.assistant_auto` and connected ones in their integration's
+  `auto_tools` (`contracts/integrations.md`). It is proposed (validated and described) and then
+  applied on the path of an approved write: the same permissions and role checks, an
+  `assistant_actions` row with `auto = true` that ends `done` or `failed` (never `pending`, so no
+  decision can claim it), the idempotency key `assistant-<action id>`, and the `assistant.action`
+  audit entry with `data.auto = true`. The setting is read again just before it runs, so turning it
+  off stops a run in progress. The model gets the result as for an approved write; the step ends
+  `done` (or `error`) with `auto: true` and its `preview`, and the panel marks it "Ran without asking".
+- These always ask, whatever the settings say, checked on the server when the change runs: a
+  proposal whose preview is `external` (replies and every other write that reaches someone outside),
+  `api_change` (so every write that stays with the person, such as credentials, sessions and owner-only
+  operations, stays behind `api_change`'s own refusals and an approval), and any built-in write not in
+  the six names above. A connected tool runs without asking only while it is a write, on `auto_tools`
+  and not on `ask_tools`.
+- At most 20 changes run without asking per message from the user (counted across the approvals that
+  continue it); past that, writes are proposals again. A change that ran without asking does not hold
+  back the next call; a call after a pending proposal in the same turn still waits for it.
 
 Data: tool outputs are wrapped in `<tool_output>` data blocks and the page in a
 `<page_context>` block, with the same delimiter escaping as every other feature.

@@ -38,11 +38,14 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// step is one scripted model turn: text and/or one tool call.
+// step is one scripted model turn: text and/or one tool call (repeat: that many calls
+// of it). before runs as the turn is served.
 type step struct {
-	text string
-	tool string
-	args any
+	text   string
+	tool   string
+	args   any
+	repeat int
+	before func()
 }
 
 // model is a scripted OpenAI-compatible endpoint that records every request.
@@ -65,6 +68,9 @@ func newModel(t *testing.T) *model {
 			st, m.script = m.script[0], m.script[1:]
 		}
 		m.mu.Unlock()
+		if st.before != nil {
+			st.before()
+		}
 		if body["stream"] != true {
 			// A call without tools (a teammate's Ollie): one JSON completion.
 			w.Header().Set("Content-Type", "application/json")
@@ -84,9 +90,11 @@ func newModel(t *testing.T) *model {
 		finish := "stop"
 		if st.tool != "" {
 			args, _ := json.Marshal(st.args)
-			send(map[string]any{"choices": []any{map[string]any{"delta": map[string]any{"tool_calls": []any{map[string]any{
-				"index": 0, "id": "call_" + ids.New().String()[:8], "type": "function",
-				"function": map[string]any{"name": st.tool, "arguments": string(args)}}}}}}})
+			for i := 0; i < max(st.repeat, 1); i++ {
+				send(map[string]any{"choices": []any{map[string]any{"delta": map[string]any{"tool_calls": []any{map[string]any{
+					"index": i, "id": "call_" + ids.New().String()[:8], "type": "function",
+					"function": map[string]any{"name": st.tool, "arguments": string(args)}}}}}}})
+			}
 			finish = "tool_calls"
 		}
 		send(map[string]any{"choices": []any{map[string]any{"delta": map[string]any{}, "finish_reason": finish}}})

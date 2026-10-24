@@ -24,7 +24,8 @@ interface Integration { id: string; provider: string /* catalog key or "custom" 
 interface ToolInfo { name: string; title: string; description: string;
   read_only: boolean /* runs without approval: read_only_hint and not ask_first */;
   read_only_hint: boolean /* the server marks it read-only (its readOnlyHint) */;
-  ask_first: boolean /* an admin set it to wait for approval */; enabled: boolean }
+  ask_first: boolean /* an admin set it to wait for approval */;
+  auto_run: boolean /* a write that runs without the user's approval: on auto_tools, not read-only, not ask_first */; enabled: boolean }
 interface Link { id: string; ticket_id: string; integration_id: string | null; provider: string /* key, custom or link */;
   url: string; title: string; actor_type: "user"|"ai"|"api"; created_by: string | null; created_at: string }
 ```
@@ -36,7 +37,7 @@ interface Link { id: string; ticket_id: string; integration_id: string | null; p
 | POST | `/v1/integrations` | admin user | `{provider, name?, url? /* custom */, auth? /* custom: oauth (default), token, none */, token?}` → 201 `{integration, authorize_url?}` |
 | POST | `/v1/integrations/{id}/authorize` | admin user | → `{integration, authorize_url}` (sign in again) |
 | POST | `/v1/integrations/{id}/sync` | admin user | → `Integration` (fetches the tool list again) |
-| PATCH | `/v1/integrations/{id}` | admin user | `{name?, enabled?, disabled_tools? /* replaces */, ask_tools? /* replaces */, token?}` → `Integration` |
+| PATCH | `/v1/integrations/{id}` | admin user | `{name?, enabled?, disabled_tools? /* replaces */, ask_tools? /* replaces */, auto_tools? /* replaces */, token?}` → `Integration` |
 | DELETE | `/v1/integrations/{id}` | admin user | → 204. Credentials are deleted; ticket links stay as plain links |
 | GET | `/v1/integrations/oauth/callback` | browser | → 302 `APP_URL/settings/integrations?connected=<id>` or `?error=<code>&id=<id>` |
 | GET | `/v1/integrations/oauth/client` | public | opendesk's OAuth client ID metadata document |
@@ -107,8 +108,8 @@ current icon. A new icon publishes `integration.updated`.
 
 Connected tools are offered to Ollie (agent role and up) as `<slug>__<tool>` (at most 64
 characters), with the integration's name leading the description; at most 120 per run.
-Tools turned off in settings are neither offered nor run. `disabled_tools` and `ask_tools`
-keep only names of the connection's tools, and outlast a sync.
+Tools turned off in settings are neither offered nor run. `disabled_tools`, `ask_tools` and
+`auto_tools` keep only names of the connection's tools, and outlast a sync.
 
 - A tool its server marks `readOnlyHint` runs as a read, unless an admin set it to ask first
   (`ask_tools`; the server's hint stays visible as `read_only_hint`). Everything else is a
@@ -120,6 +121,12 @@ keep only names of the connection's tools, and outlast a sync.
   as their own text, so the approved call sends exactly what the preview showed.
 - Whether a tool may run without approval is checked again when it runs: a call made as a
   read is refused once the tool is turned off or set to ask first.
+- Runs without asking: a write on `auto_tools` runs as soon as Ollie proposes it, on the path of an
+  approved change (`contracts/ai.md` "Approvals": an `assistant_actions` row with `auto`, the
+  `assistant.action` audit entry with `data.auto = true`). Only a write counts: a tool that is
+  read-only needs no approval anyway, and `ask_tools` wins over `auto_tools` for a tool on both.
+  A change whose preview reaches someone outside (`external`) still asks. Whether it may run so is
+  checked again just before it runs, and the call itself is refused once it no longer may.
 - Results and errors from a server reach the model inside `<tool_output>` data blocks.
 - A write made from a ticket (the page context) whose name reads as creating something,
   and whose result has a link on the provider's hosts, is linked back to the ticket

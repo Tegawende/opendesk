@@ -10,7 +10,7 @@ import Callout from '../../../components/Callout.astro';
 import Legend from '../../../components/Legend.astro';
 import Fold from '../../../components/Fold.astro';
 
-Ollie is opendesk's assistant: the violet blob in the top bar. Ask it about your queue in plain words. It reads tickets, customers, help articles, views, reports and the team's workload, explains what it finds, and prepares changes for you. **Nothing changes until you approve it.**
+Ollie is opendesk's assistant: the violet blob in the top bar. Ask it about your queue in plain words. It reads tickets, customers, help articles, views, reports and the team's workload, explains what it finds, and prepares changes for you. **Nothing changes until you approve it**, unless an admin lets Ollie make some changes without asking.
 
 <Screenshot src="/guides/ollie/overview" alt="The inbox with Ollie's panel open on a ticket: the Ollie button ringed as 1, the Conversations and New chat buttons as 2, the steps Ollie took as 3, an approval card as 4 and the message box as 5" />
 
@@ -59,6 +59,8 @@ When Ollie wants to change something, it shows an approval card with exactly wha
 - **Approve** (<kbd>mod</kbd> <kbd>enter</kbd>) makes the change with your permissions, once.
 - **Deny** leaves everything as it is, and Ollie asks what you want instead.
 - Sending a new message instead skips the change.
+
+If an admin lets Ollie make a kind of change without asking, it makes it right away instead of showing a card, and the step is marked **Ran without asking**. **Show what it ran** opens the same fields and arguments the card would have shown.
 
 </Step>
 </Steps>
@@ -118,9 +120,11 @@ Your conversations with Ollie are private to you. Open past ones from **Conversa
 
 Ollie can change the assignee, status, priority, labels and fields, add notes, send replies you approved, save help article drafts and personal views, and (for admins) save automations, switched off for you to review. It prepares one change at a time.
 
+Admins can let Ollie make some of these without asking, in **Settings, AI**, under **Changes Ollie makes without asking**: updating a ticket or several, adding a note, saving a draft article, a personal view or an automation (switched off). It is off by default. Ollie still makes them with the permissions of the person who asked, records each one in the audit log, and stops after 20 such changes for one message. Replies, messages to people outside the team and changes to other settings always ask first, whatever the setting says.
+
 Bulk changes cover at most 50 tickets per approval, and the tickets are fixed when Ollie proposes the change, so a ticket that arrives later is not swept in.
 
-With [integrations](/guides/integrations/) connected, Ollie can also look things up in Linear, GitHub, Jira, Sentry, Stripe and others, and create or update things there with the same kind of approval, marked **Runs in** the product.
+With [integrations](/guides/integrations/) connected, Ollie can also look things up in Linear, GitHub, Jira, Sentry, Stripe and others, and create or update things there with the same kind of approval, marked **Runs in** the product, or without asking for the tools an admin chose.
 
 </Fold>
 

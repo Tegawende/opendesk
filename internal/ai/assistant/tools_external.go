@@ -91,10 +91,10 @@ func (rc *runCtx) lookup(ctx context.Context, name string) *tool {
 
 func externalTool(x integrations.Tool) *tool {
 	t := &tool{Name: x.Name, Description: x.Description, Schema: x.Schema, Write: !x.ReadOnly, MinRole: auth.RoleAgent,
-		Active: "Checking " + x.Integration, Done: "Checked " + x.Integration}
+		Active: "Checking " + x.Integration, Done: "Checked " + x.Integration, ext: &x}
 	if x.ReadOnly {
 		t.Read = func(ctx context.Context, rc *runCtx, in json.RawMessage) (output, error) {
-			text, err := callExternal(ctx, rc, x, x.IntegrationID, x.Remote, in, true)
+			text, err := callExternal(ctx, rc, x, x.IntegrationID, x.Remote, in, integrations.CallRead)
 			if err != nil {
 				return output{}, err
 			}
@@ -129,14 +129,19 @@ func externalTool(x integrations.Tool) *tool {
 	return t
 }
 
-// applyExternal runs an approved connected tool call with its stored arguments.
+// applyExternal runs an approved connected tool call, or one that runs without asking
+// (autoRunning), with its stored arguments.
 func applyExternal(x integrations.Tool) func(ctx context.Context, rc *runCtx, w *caller, raw json.RawMessage, key string) (output, error) {
 	return func(ctx context.Context, rc *runCtx, w *caller, raw json.RawMessage, key string) (output, error) {
 		a, err := decode[externalArgs](raw)
 		if err != nil {
 			return output{}, err
 		}
-		text, err := callExternal(ctx, rc, x, a.IntegrationID, a.Remote, a.input(), false)
+		mode := integrations.CallApproved
+		if autoRunning(ctx) {
+			mode = integrations.CallAuto
+		}
+		text, err := callExternal(ctx, rc, x, a.IntegrationID, a.Remote, a.input(), mode)
 		if err != nil {
 			return output{}, err
 		}
@@ -162,13 +167,13 @@ func applyExternal(x integrations.Tool) func(ctx context.Context, rc *runCtx, w 
 }
 
 // callExternal runs one connected tool and returns its text. The server's own words
-// stay inside a data block, both for results and for errors. read is a call without
-// the user's approval, which the integration allows only for a read-only tool.
-func callExternal(ctx context.Context, rc *runCtx, x integrations.Tool, iid uuid.UUID, remote string, in json.RawMessage, read bool) (string, error) {
+// stay inside a data block, both for results and for errors. mode says why it may run;
+// the integration checks it against how the workspace has the tool now.
+func callExternal(ctx context.Context, rc *runCtx, x integrations.Tool, iid uuid.UUID, remote string, in json.RawMessage, mode integrations.CallMode) (string, error) {
 	if len(in) == 0 || string(in) == "null" {
 		in = json.RawMessage(`{}`)
 	}
-	res, err := integrations.For(rc.svc.d).Call(ctx, rc.p.WorkspaceID, iid, remote, in, read)
+	res, err := integrations.For(rc.svc.d).Call(ctx, rc.p.WorkspaceID, iid, remote, in, mode)
 	if err != nil {
 		var re *integrations.RemoteError
 		if errors.As(err, &re) {

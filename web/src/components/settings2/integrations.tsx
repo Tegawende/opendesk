@@ -228,19 +228,22 @@ export function ConnectDialog({ provider, onClose, onConnected }: { provider: In
 
 /**
  * Each tool with its switch. Lookups run on their own unless an admin sets them to ask
- * first; everything else asks first.
+ * first; everything else asks first unless an admin lets it run without asking.
  */
 export function ToolList({
   x,
   disabled,
   onToggle,
   onAsk,
+  onAuto,
 }: {
   x: Integration;
   disabled?: boolean;
   onToggle: (name: string, on: boolean) => void;
   /** Sets a tool its server marks read-only to wait for approval. */
   onAsk: (name: string, ask: boolean) => void;
+  /** Lets a write run without the user's approval. */
+  onAuto: (name: string, on: boolean) => void;
 }) {
   const { t } = useTranslation("settingsDev");
   const reduce = useReducedMotion();
@@ -265,13 +268,18 @@ export function ToolList({
             <div className={cn("min-w-0 flex-1", !tl.enabled && "opacity-55")}>
               <div className="flex items-center gap-2">
                 <span className="truncate text-[12.5px] font-medium text-fg">{tl.title}</span>
-                <span className={cn("inline-flex h-[18px] shrink-0 items-center rounded-sm px-1.5 text-[10.5px] font-medium", tl.read_only ? tone.gray.chip : tone.amber.chip)}>
-                  {tl.read_only ? t("integrations.tools.lookup") : t("integrations.tools.asks")}
+                <span
+                  className={cn(
+                    "inline-flex h-[18px] shrink-0 items-center rounded-sm px-1.5 text-[10.5px] font-medium",
+                    tl.read_only ? tone.gray.chip : tl.auto_run ? tone.violet.chip : tone.amber.chip,
+                  )}
+                >
+                  {tl.read_only ? t("integrations.tools.lookup") : tl.auto_run ? t("integrations.tools.auto") : t("integrations.tools.asks")}
                 </span>
               </div>
               {tl.description && <p className="mt-0.5 line-clamp-1 text-[11.5px] text-fg-3">{tl.description}</p>}
             </div>
-            {tl.read_only_hint && (
+            {tl.read_only_hint ? (
               <label className={cn("flex shrink-0 items-center gap-1.5 text-[11.5px] text-fg-3", !disabled && tl.enabled && "cursor-pointer hover:text-fg-2", !tl.enabled && "opacity-55")}>
                 {t("integrations.tools.askFirst")}
                 <Switch
@@ -279,6 +287,16 @@ export function ToolList({
                   disabled={disabled || !tl.enabled}
                   onCheckedChange={(ask) => onAsk(tl.name, ask)}
                   aria-label={t("integrations.tools.askFirstFor", { name: tl.title })}
+                />
+              </label>
+            ) : (
+              <label className={cn("flex shrink-0 items-center gap-1.5 text-[11.5px] text-fg-3", !disabled && tl.enabled && "cursor-pointer hover:text-fg-2", !tl.enabled && "opacity-55")}>
+                {t("integrations.tools.autoRun")}
+                <Switch
+                  checked={tl.auto_run}
+                  disabled={disabled || !tl.enabled}
+                  onCheckedChange={(on) => onAuto(tl.name, on)}
+                  aria-label={t("integrations.tools.autoRunFor", { name: tl.title })}
                 />
               </label>
             )}

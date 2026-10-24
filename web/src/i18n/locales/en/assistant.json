@@ -68,6 +68,11 @@
     "hideArguments": "Hide arguments",
     "arguments": "Everything this change sends"
   },
+  "step": {
+    "auto": "Ran without asking",
+    "showRan": "Show what it ran",
+    "hideRan": "Hide what it ran"
+  },
   "status": {
     "running": "Working",
     "done": "Done",

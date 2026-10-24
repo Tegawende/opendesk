@@ -133,6 +133,15 @@ describe("mock backend", () => {
     const search = asked.body.tools.find((x: { name: string }) => x.name === "search_issues");
     expect(search).toMatchObject({ read_only: false, read_only_hint: true, ask_first: true, enabled: true });
     expect(asked.body.tools.filter((x: { ask_first: boolean }) => x.ask_first)).toHaveLength(1);
+    // Runs without asking: only writes, and asking first wins.
+    const auto = await call("PATCH", `/v1/integrations/${created.body.integration.id}`, { auto_tools: ["create_issue", "search_issues", "get_issue"] });
+    const runs = auto.body.tools.filter((x: { auto_run: boolean }) => x.auto_run).map((x: { name: string }) => x.name);
+    expect(runs).toEqual(["create_issue"]);
+    // Settings, AI: only the built-in changes that may run on their own.
+    expect((await call("PATCH", "/v1/ai/settings", { assistant_auto: ["draft_reply"] })).status).toBe(422);
+    const ai = await call("PATCH", "/v1/ai/settings", { assistant_auto: ["add_note", "add_note"] });
+    expect(ai.body.assistant_auto).toEqual(["add_note"]);
+    await call("PATCH", "/v1/ai/settings", { assistant_auto: [] });
     const oauth = await call("POST", "/v1/integrations", { provider: "sentry" });
     expect(oauth.body.authorize_url).toContain("/settings/integrations?connected=");
     expect((await call("POST", "/v1/integrations", { provider: "custom", url: "https://10.0.0.4/mcp" })).status).toBe(422);

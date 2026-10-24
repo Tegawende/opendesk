@@ -84,7 +84,7 @@ func (s *Service) Models() (def, fast string) { return s.models.Default, s.model
 // ai_disabled, 403 ai_off).
 func (s *Service) WorkspaceAI(ctx context.Context, wid uuid.UUID) (AISettingsView, error) {
 	a, err := s.workspaceAI(ctx, wid)
-	return AISettingsView{Enabled: a.Enabled, Assistant: a.Assistant, AssistantPeer: a.AssistantPeer}, err
+	return AISettingsView{Enabled: a.Enabled, Assistant: a.Assistant, AssistantPeer: a.AssistantPeer, AssistantAuto: a.AssistantAuto}, err
 }
 
 // AISettingsView is the part of settings.ai other packages read.
@@ -93,6 +93,8 @@ type AISettingsView struct {
 	Assistant bool
 	// AssistantPeer: members' Ollie may ask a teammate's (contracts/ai.md "Asking a teammate").
 	AssistantPeer bool
+	// AssistantAuto: the built-in changes Ollie makes without asking (contracts/ai.md "Approvals").
+	AssistantAuto []string
 }
 
 // Complete runs one billed model call without tools for feature, attributed to userID: it

@@ -411,6 +411,23 @@ func TestAskFirstMakesAReadAWrite(t *testing.T) {
 	}
 }
 
+func TestAutoToolsRunOnlyWritesAndAskFirstWins(t *testing.T) {
+	x := &row{Tools: []StoredTool{{Name: "fetch", ReadOnly: true}, {Name: "search", ReadOnly: true}, {Name: "create"}, {Name: "close"}, {Name: "post"}},
+		AskTools: []string{"search", "close"}, AutoTools: []string{"fetch", "search", "create", "close"}}
+	// fetch: a lookup already; search: asks first; create: auto; close: on both lists, ask first wins; post: not listed.
+	for name, want := range map[string]bool{"fetch": false, "search": false, "create": true, "close": false, "post": false} {
+		i := slices.IndexFunc(x.Tools, func(t StoredTool) bool { return t.Name == name })
+		if got := x.autoRun(x.Tools[i]); got != want {
+			t.Errorf("autoRun(%s) = %v, want %v", name, got, want)
+		}
+	}
+	for _, tl := range x.api().Tools {
+		if tl.AutoRun != (tl.Name == "create") {
+			t.Errorf("api %s auto_run = %v", tl.Name, tl.AutoRun)
+		}
+	}
+}
+
 func TestLinkProvider(t *testing.T) {
 	cases := map[string]string{
 		"https://linear.app/acme/issue/ACM-1":        "linear",

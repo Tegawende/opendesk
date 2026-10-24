@@ -925,6 +925,8 @@ export type IntegrationTool = {
   read_only_hint: boolean;
   /** An admin set it to wait for approval anyway. */
   ask_first: boolean;
+  /** A write an admin lets run without asking (auto_tools); ask_first wins over it. */
+  auto_run: boolean;
   enabled: boolean;
 };
 export type Integration = {
@@ -1457,6 +1459,9 @@ export type BillingUsage = {
 
 // AI (contracts/ai.md).
 export type Sentiment = "positive" | "neutral" | "negative" | "frustrated";
+/** The built-in changes a workspace may let Ollie make without asking. Replies and the API's changes always ask. */
+export const ASSISTANT_AUTO_TOOLS = ["update_ticket", "bulk_update_tickets", "add_note", "create_kb_draft", "create_view", "create_automation_draft"] as const;
+export type AssistantAutoTool = (typeof ASSISTANT_AUTO_TOOLS)[number];
 export type AISettings = {
   enabled: boolean;
   auto_triage: boolean;
@@ -1466,6 +1471,8 @@ export type AISettings = {
   assistant: boolean;
   /** Members may let teammates' Ollie ask theirs about their own mail (contracts/ai.md "Asking a teammate"). Default false. */
   assistant_peer?: boolean;
+  /** Built-in changes Ollie makes without asking (contracts/ai.md "Approvals"). Default empty. */
+  assistant_auto?: AssistantAutoTool[];
   tone: string;
   reply_language: "customer" | "workspace";
   instructions: string;

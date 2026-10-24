@@ -69,6 +69,11 @@
     "hideArguments": "Masquer les arguments",
     "arguments": "Tout ce que cette modification envoie"
   },
+  "step": {
+    "auto": "Fait sans demander",
+    "showRan": "Voir ce qui a été fait",
+    "hideRan": "Masquer ce qui a été fait"
+  },
   "status": {
     "running": "En cours",
     "done": "Terminé",

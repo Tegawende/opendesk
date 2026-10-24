@@ -376,6 +376,12 @@ func (s *Service) loop(ctx context.Context, rc *runCtx, sid uuid.UUID, emit emit
 		t := ext[name]
 		specs = append(specs, ai.ToolSpec{Name: t.Name, Description: t.Description, Schema: t.Schema})
 	}
+	// Changes that ran without asking since the user's message, across approvals.
+	autoUsed, err := autoActionsSince(ctx, s.d.DB.Pool, p.WorkspaceID, sid)
+	if err != nil {
+		return httpx.Wrap(err)
+	}
+	rc.loadAuto(ctx)
 	for step := 0; step < maxSteps; step++ {
 		turns, err := loadTurns(ctx, s.d.DB.Pool, p.WorkspaceID, sid)
 		if err != nil {
@@ -445,6 +451,30 @@ func (s *Service) loop(ctx context.Context, rc *runCtx, sid uuid.UUID, emit emit
 				continue
 			}
 			raw, _ := json.Marshal(args)
+			// A change the workspace lets run without asking runs now, on the approved path;
+			// the settings are read again just before it runs.
+			if autoUsed < maxAutoPerMessage && rc.mayAuto(ctx, t, pv, false) && rc.mayAuto(ctx, t, pv, true) {
+				autoUsed++
+				a, out, runErr, err := s.runAuto(ctx, rc, sid, seq, c, t, raw, pv)
+				if err != nil {
+					return httpx.Wrap(err)
+				}
+				st.ActionID, st.Auto, st.Preview, st.Label = &a.ID, true, &pv, doneLabel
+				if runErr != nil {
+					st.Status, st.Summary = "error", toolErrorText(runErr)
+					results = append(results, storedResult{ToolResult: ai.ToolResult{CallID: c.ID, IsError: true,
+						Content: "It ran without asking (the workspace allows it), but failed: " + toolErrorContent(runErr)}})
+				} else {
+					st.Status, st.Summary, st.Refs = "done", out.Summary, out.Refs
+					if out.Label != "" {
+						st.Label = out.Label
+					}
+					results = append(results, storedResult{ToolResult: ai.ToolResult{CallID: c.ID, Content: out.Content}})
+				}
+				steps[c.ID] = st
+				emit("tool", st)
+				continue
+			}
 			prop = &proposal{call: c, tool: t, args: raw, pv: pv}
 			results = append(results, storedResult{ToolResult: ai.ToolResult{CallID: c.ID}, Pending: true})
 			st.Status, st.Label = "awaiting_approval", pv.Title

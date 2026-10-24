@@ -2,7 +2,8 @@
 // and KB article drafts. `?mock_ai=off` behaves like an instance with no
 // provider: config says disabled and every other AI route answers 404.
 
-import type { AIConfig, AIModels, AISettings, DecisionEngine, KbArticle, KBArticleDraft, SearchResults, Ticket } from "@/lib/api/types";
+import type { AIConfig, AIModels, AISettings, AssistantAutoTool, DecisionEngine, KbArticle, KBArticleDraft, SearchResults, Ticket } from "@/lib/api/types";
+import { ASSISTANT_AUTO_TOOLS } from "@/lib/api/types";
 import { db, userRef, type WsData } from "../db";
 import { configCosts, effectiveModels, offeredModels, offersModel, reserve, spend } from "../aiBalance";
 import { aiKeyOf } from "../aiKey";
@@ -215,6 +216,13 @@ function settingsPatch(ctx: Ctx): Partial<AISettings> {
       if (typeof b[k] !== "boolean") throw invalid(`${k} must be true or false`);
       out[k] = b[k];
     }
+  }
+  if ("assistant_auto" in b) {
+    const list = b.assistant_auto;
+    if (!Array.isArray(list) || list.some((x) => !(ASSISTANT_AUTO_TOOLS as readonly unknown[]).includes(x))) {
+      throw invalid(`assistant_auto takes only ${ASSISTANT_AUTO_TOOLS.join(", ")}`);
+    }
+    out.assistant_auto = [...new Set(list as AssistantAutoTool[])];
   }
   if ("tone" in b) {
     if (typeof b.tone !== "string") throw invalid("tone must be text");

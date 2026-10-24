@@ -205,6 +205,7 @@ export function defaultAi(): AISettings {
     widget_answers: false,
     assistant: true,
     assistant_peer: false,
+    assistant_auto: [],
     tone: "friendly",
     reply_language: "customer",
     instructions: "",

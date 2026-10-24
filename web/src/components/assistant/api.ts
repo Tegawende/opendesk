@@ -29,6 +29,10 @@ export type AssistantStep = {
   action_id?: string;
   /** ask_teammate: whose Ollie answered, and how (contracts/ai.md "Asking a teammate"). */
   peer?: StepPeer;
+  /** A change that ran without asking, because the workspace allows it (contracts/ai.md "Approvals"). */
+  auto?: boolean;
+  /** What a change that ran without asking ran. */
+  preview?: Preview;
 };
 export type PeerResult = "answered" | "declined" | "not_shared" | "failed";
 export type StepPeer = { user: { id: string; name: string; avatar_url?: string | null }; result: PeerResult; sources: number };

@@ -126,6 +126,7 @@ type row struct {
 	Tools          []StoredTool
 	DisabledTools  []string
 	AskTools       []string
+	AutoTools      []string
 	Enabled        bool
 	LastError      string
 	Icon           domain.Avatar
@@ -135,13 +136,13 @@ type row struct {
 }
 
 const rowSelect = `SELECT id, workspace_id, provider, slug, name, url, auth_type, status, credentials_enc, oauth_enc, tools,
-	disabled_tools, ask_tools, enabled, last_error, icon, synced_at, created_at, updated_at FROM integrations`
+	disabled_tools, ask_tools, auto_tools, enabled, last_error, icon, synced_at, created_at, updated_at FROM integrations`
 
 func scanRow(r pgx.Row) (*row, error) {
 	var x row
 	var tools []byte
 	if err := r.Scan(&x.ID, &x.WorkspaceID, &x.Provider, &x.Slug, &x.Name, &x.URL, &x.AuthType, &x.Status, &x.CredentialsEnc,
-		&x.OAuthEnc, &tools, &x.DisabledTools, &x.AskTools, &x.Enabled, &x.LastError, &x.Icon, &x.SyncedAt, &x.CreatedAt, &x.UpdatedAt); err != nil {
+		&x.OAuthEnc, &tools, &x.DisabledTools, &x.AskTools, &x.AutoTools, &x.Enabled, &x.LastError, &x.Icon, &x.SyncedAt, &x.CreatedAt, &x.UpdatedAt); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal(tools, &x.Tools)
@@ -152,6 +153,13 @@ func scanRow(r pgx.Row) (*row, error) {
 // and no admin asked for it to wait for approval.
 func (x *row) readOnly(t StoredTool) bool {
 	return t.ReadOnly && !slices.Contains(x.AskTools, t.Name)
+}
+
+// autoRun says whether a write runs without the user's approval: an admin listed it in
+// auto_tools, and it is a write that is not also set to ask first (ask_tools wins).
+// A read-only tool needs no approval anyway, so it is never counted as auto-run.
+func (x *row) autoRun(t StoredTool) bool {
+	return !x.readOnly(t) && slices.Contains(x.AutoTools, t.Name) && !slices.Contains(x.AskTools, t.Name)
 }
 
 // knownTools keeps the names in list that are tools of the connection, once each.
@@ -396,8 +404,23 @@ type Tool struct {
 	// ReadOnly: the tool runs without approval (its server marks it read-only and no
 	// admin asked for approval first).
 	ReadOnly bool
-	Hosts    []string
+	// AutoRun: a write an admin lets run without the user's approval (auto_tools, and
+	// not on ask_tools). Call checks it again when the call runs.
+	AutoRun bool
+	Hosts   []string
 }
+
+// CallMode is why a call may run: as a read, approved by the user, or as an auto-run write.
+type CallMode int
+
+const (
+	// CallRead runs without approval and only while the tool is read-only.
+	CallRead CallMode = iota
+	// CallApproved runs a call the user approved.
+	CallApproved
+	// CallAuto runs without approval and only while the tool is set to run without asking.
+	CallAuto
+)
 
 // maxOffered bounds the connected tools offered to the model in one run.
 const maxOffered = 120
@@ -433,16 +456,16 @@ func (s *Service) Tools(ctx context.Context, wid uuid.UUID) ([]Tool, error) {
 			}
 			out = append(out, Tool{Name: toolName(x.Slug, t.Name), Remote: t.Name, IntegrationID: x.ID, Integration: x.Name,
 				Provider: x.Provider, Title: firstNonEmpty(t.Title, humanize(t.Name)),
-				Description: clip("["+x.Name+"] "+desc, 1100), Schema: schema, ReadOnly: x.readOnly(t), Hosts: prov.Hosts})
+				Description: clip("["+x.Name+"] "+desc, 1100), Schema: schema, ReadOnly: x.readOnly(t), AutoRun: x.autoRun(t), Hosts: prov.Hosts})
 		}
 	}
 	return out, nil
 }
 
-// Call runs one tool on its server. read is a call made without the user's approval:
-// it runs only while the tool is read-only as the workspace has it now, so a tool an
-// admin set to ask first never runs as a read.
-func (s *Service) Call(ctx context.Context, wid, integrationID uuid.UUID, remote string, args json.RawMessage, read bool) (*CallResult, error) {
+// Call runs one tool on its server. A call without the user's approval (CallRead,
+// CallAuto) runs only while the workspace has the tool that way now: a tool an admin set
+// to ask first never runs as a read, and one taken off auto_tools never runs on its own.
+func (s *Service) Call(ctx context.Context, wid, integrationID uuid.UUID, remote string, args json.RawMessage, mode CallMode) (*CallResult, error) {
 	x, err := loadRow(ctx, s.d.DB.Pool, wid, integrationID)
 	if err != nil {
 		if db.IsNotFound(err) {
@@ -457,8 +480,8 @@ func (s *Service) Call(ctx context.Context, wid, integrationID uuid.UUID, remote
 	if i < 0 || slices.Contains(x.DisabledTools, remote) {
 		return nil, errors.New("this tool is turned off for the workspace")
 	}
-	if read && !x.readOnly(x.Tools[i]) {
-		return nil, errors.New("this tool needs the user's approval now. Propose it again")
+	if (mode == CallRead && !x.readOnly(x.Tools[i])) || (mode == CallAuto && !x.autoRun(x.Tools[i])) {
+		return nil, ErrNeedsApproval
 	}
 	var res *CallResult
 	err = s.withSession(ctx, x, func(sess *session) error {
@@ -469,6 +492,24 @@ func (s *Service) Call(ctx context.Context, wid, integrationID uuid.UUID, remote
 		return err
 	})
 	return res, err
+}
+
+// ErrNeedsApproval: the call may not run without the user's approval as the workspace
+// has the tool now.
+var ErrNeedsApproval = errors.New("this tool needs the user's approval now. Propose it again")
+
+// AutoRun reports whether a connected tool runs without asking as the workspace has it
+// now: connected, on, and set to run without asking.
+func (s *Service) AutoRun(ctx context.Context, wid, integrationID uuid.UUID, remote string) (bool, error) {
+	x, err := loadRow(ctx, s.d.DB.Pool, wid, integrationID)
+	if db.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	i := slices.IndexFunc(x.Tools, func(t StoredTool) bool { return t.Name == remote })
+	return x.Enabled && x.Status == "connected" && i >= 0 && !slices.Contains(x.DisabledTools, remote) && x.autoRun(x.Tools[i]), nil
 }
 
 var nameUnsafe = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
