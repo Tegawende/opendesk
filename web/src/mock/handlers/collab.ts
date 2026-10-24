@@ -349,6 +349,7 @@ function seedState(ws: WsData): State {
         folder_ids: fromUs ? [roleId(a.id, "sent"), ...(place === "inbox" ? [roleId(a.id, "inbox")] : [])] : [roleId(a.id, place), ...labels],
         attachments,
         sent_by: fromUs && k === 1 && a.visibility === "shared" ? userRef(other) : null,
+        outgoing: fromUs,
       });
     }
   };
@@ -397,6 +398,7 @@ function seedState(ws: WsData): State {
       folder_ids: [roleId(work.id, "drafts")],
       attachments: [],
       sent_by: userRef(me),
+      outgoing: true,
     });
   }
   {
@@ -428,6 +430,7 @@ function seedState(ws: WsData): State {
       folder_ids: [roleId(work.id, "drafts")],
       attachments: [],
       sent_by: userRef(me),
+      outgoing: true,
     });
   }
 
@@ -462,6 +465,7 @@ function seedState(ws: WsData): State {
       folder_ids: [roleId(work.id, "inbox")],
       attachments: [],
       sent_by: null,
+      outgoing: false,
     });
     const firstHtml = html(first.text);
     messages.push(msg(first.text, firstHtml, first.at, false, subject));
@@ -495,6 +499,7 @@ function seedState(ws: WsData): State {
       folder_ids: [roleId(work.id, "inbox")],
       attachments: [],
       sent_by: null,
+      outgoing: false,
     });
   }
 
@@ -526,6 +531,7 @@ function seedState(ws: WsData): State {
       folder_ids: [roleId(work.id, "inbox")],
       attachments: [],
       sent_by: null,
+      outgoing: false,
     });
   }
 
@@ -566,6 +572,7 @@ function seedState(ws: WsData): State {
       folder_ids: [roleId(sales.id, "inbox")],
       attachments: [],
       sent_by: null,
+      outgoing: false,
     });
   }
 
@@ -1691,6 +1698,7 @@ export function registerCollab() {
         ...(mode === "forward" && b.forward_attachments && replied ? replied.attachments.map((x, i) => ({ ...x, id: String(uploads.length + i) })) : []),
       ],
       sent_by: a.visibility === "shared" ? userRef(db.meId) : null,
+      outgoing: true,
     };
     s.messages.push(m);
     changed(ctx.ws, a.id, [thread.id], true);
@@ -1730,6 +1738,7 @@ export function registerCollab() {
       sent_at: nowIso(),
       attachments: [...kept, ...uploads.map((u) => ({ id: "", filename: u.filename, content_type: u.content_type, size: u.size_bytes, inline: false, content_id: "", url: u.url }))].map((x, i) => ({ ...x, id: String(i) })),
       sent_by: userRef(db.meId),
+      outgoing: true,
     });
     // A conversation of drafts alone is named by them.
     const t = state(ws).threads.get(m.thread_id);
@@ -1775,6 +1784,7 @@ export function registerCollab() {
       folder_ids: [roleIdOf(s, a.id, "drafts")].filter((x): x is string => !!x),
       attachments: mode === "forward" && b.forward_attachments && replied ? replied.attachments.filter((x) => !x.inline) : [],
       sent_by: userRef(db.meId),
+      outgoing: true,
     };
     s.messages.push(m);
     writeDraft(ctx.ws, m, b, a);
@@ -1814,7 +1824,7 @@ export function registerCollab() {
     if (!all.length) throw invalid("Add a recipient.");
     if (all.some((x) => x.email.endsWith("@bounce.test"))) throw new HttpError(502, "send_failed", "The provider refused the message: 550 5.1.1 mailbox unavailable");
     const sentId = roleIdOf(s, a.id, "sent");
-    Object.assign(m, { draft: false, draft_id: null, folder_ids: sentId ? [sentId] : [], sent_at: nowIso(), sent_by: a.visibility === "shared" ? userRef(db.meId) : null });
+    Object.assign(m, { draft: false, draft_id: null, folder_ids: sentId ? [sentId] : [], sent_at: nowIso(), outgoing: true, sent_by: a.visibility === "shared" ? userRef(db.meId) : null });
     changed(ctx.ws, a.id, [m.thread_id], true);
     return m;
   });

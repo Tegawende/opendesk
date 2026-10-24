@@ -671,10 +671,10 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
                 </button>
               );
             }
-            return <MailMessageItem key={m.id} m={m} ownEmail={ownEmail} open={isOpen(m.id, i)} onToggle={() => (i === last ? setFoldedLast((f) => (f === m.id ? null : m.id)) : toggle(m.id))} />;
+            return <MailMessageItem key={m.id} m={m} open={isOpen(m.id, i)} onToggle={() => (i === last ? setFoldedLast((f) => (f === m.id ? null : m.id)) : toggle(m.id))} />;
           })}
 
-          {drafts.map((m) => (canAct ? <DraftRow key={m.id} m={m} onOpen={() => editDraft(m)} /> : <MailMessageItem key={m.id} m={m} ownEmail={ownEmail} open={false} onToggle={() => undefined} />))}
+          {drafts.map((m) => (canAct ? <DraftRow key={m.id} m={m} onOpen={() => editDraft(m)} /> : <MailMessageItem key={m.id} m={m} open={false} onToggle={() => undefined} />))}
 
           <AnimatePresence initial={false}>
             {detail.comments.length > 0 && (

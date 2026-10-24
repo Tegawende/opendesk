@@ -941,9 +941,16 @@ at (`mailbox_id`).
   never names a forwarding address: it answers to the mailbox's own address, or the alias the
   customer wrote to (`Reply-To` only when `From` is not that address), so the customer's reply comes
   back the way their first message did and threads by `In-Reply-To` and `References`.
-- **Sender checks.** `Authentication-Results` (or `ARC-Authentication-Results`) count only from an
-  authserv-id in `INBOUND_AUTHSERV_ID`, plus `mx.google.com` for Google mailboxes and Microsoft's
-  for Microsoft 365 ones; the first such header from the top is the verdict. A DMARC `fail` opens a
+  A sender new to the conversation, who is neither the ticket's contact nor in the `To` or `Cc` of a
+  message the team sent or the contact wrote (what a newcomer's own message names never counts),
+  still joins it: the message is stored, and no `customer_replied` automation or Ollie answer runs.
+- **Sender checks.** `Authentication-Results` (or `ARC-Authentication-Results`) count only from a
+  server the message passed through, by the route it arrived (`inbound_emails.via`): mail read from
+  the mailbox believes an authserv-id in `INBOUND_AUTHSERV_ID`, plus `mx.google.com` for Google
+  mailboxes and Microsoft's for Microsoft 365 ones; mail to a forwarding address, through
+  `POST /v1/inbound/email` or from a relay in `INBOUND_SMTP_RELAYS` to the built-in SMTP receiver,
+  believes `INBOUND_AUTHSERV_ID` alone; mail the built-in receiver takes straight from the sending
+  server believes none. The first such header from the top is the verdict. A DMARC `fail` opens a
   new ticket as spam; on an existing conversation the message is stored with `auth_failed`, the
   ticket's status does not change (it is never reopened; a `status_changed` activity with
   `from` = `to`, `reason: "sender_unverified"` and the `message_id` records that it was kept), and no

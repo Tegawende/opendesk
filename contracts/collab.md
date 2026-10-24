@@ -441,6 +441,7 @@ interface MailMessage {
   draft_id: string | null      // drafts: the id the /v1/collab/drafts routes take (the message's id)
   in_reply_to_id: string | null  // the message of the conversation it answers (its In-Reply-To), when stored
   own_address: string | null   // the account's address (its own or an alias) it was sent from, else the first in its To, Cc, then Delivered-To / X-Original-To
+  outgoing: boolean            // mail the account wrote: sent from opendesk (sent_by), a draft, or filed by the provider in Sent or Drafts. Its From alone never makes mail outgoing, since a sender writes their own From. Mail that is not outgoing holds back its remote images until the reader loads them
 }
 
 interface MailAttachment {
@@ -450,7 +451,7 @@ interface MailAttachment {
   size: number
   inline: boolean
   content_id: string
-  url: string                  // signed, valid for an hour, works in <img> and as a download link
+  url: string                  // signed, valid for one to two hours (the expiry is rounded to the hour), works in <img> and as a download link. The link is the permission: whoever holds it can fetch the file until it expires, so a link handed out before a conversation was unshared works until then, and no new one is signed for someone who can no longer see the message
 }
 
 interface MailComment {

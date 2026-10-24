@@ -6,6 +6,8 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 
@@ -83,16 +85,38 @@ const (
 	authFail
 )
 
+// Routes inbound mail arrives by (inbound_emails.via). Each decides whose sender checks
+// (Authentication-Results) are believed for it: only a server the mail passed through
+// writes results above what the sender wrote.
+const (
+	// viaMailbox: read from the mailbox's own provider or IMAP server.
+	viaMailbox = ""
+	// viaForward: a forwarding address, through the signed inbound endpoint or a relay
+	// listed in INBOUND_SMTP_RELAYS.
+	viaForward = "forward"
+	// viaDirect: the built-in SMTP receiver, straight from the sending server, which
+	// writes every header the message carries.
+	viaDirect = "direct"
+)
+
 // trustedAuthserv lists the authserv-ids whose results are believed for mail that arrived
-// at m: INBOUND_AUTHSERV_ID, plus the provider of a connected Google or Microsoft mailbox,
-// which is the server that received the mail. Microsoft writes its results without an
-// authserv-id ("").
-func (s *service) trustedAuthserv(m *mailboxRow) []string {
+// at m by via. Mail read from the mailbox believes INBOUND_AUTHSERV_ID and the provider of
+// a connected Google or Microsoft mailbox, which is the server that received the mail
+// (Microsoft writes its results without an authserv-id, ""). Forwarded mail believes
+// INBOUND_AUTHSERV_ID alone: the provider never saw it. Mail straight from a sender's
+// server believes none.
+func (s *service) trustedAuthserv(m *mailboxRow, via string) []string {
+	if via == viaDirect {
+		return nil
+	}
 	var out []string
 	if s.d != nil && s.d.Cfg != nil {
 		for _, v := range s.d.Cfg.InboundAuthservIDs {
 			out = append(out, strings.ToLower(strings.TrimSpace(v)))
 		}
+	}
+	if via != viaMailbox {
+		return out
 	}
 	switch m.InboundKind {
 	case KindGoogle:
@@ -101,6 +125,25 @@ func (s *service) trustedAuthserv(m *mailboxRow) []string {
 		out = append(out, "", "mx.microsoft.com")
 	}
 	return out
+}
+
+// relayed reports a connection from a relay listed in INBOUND_SMTP_RELAYS.
+func (s *service) relayed(addr net.Addr) bool {
+	tcp, ok := addr.(*net.TCPAddr)
+	if !ok || s.d == nil || s.d.Cfg == nil {
+		return false
+	}
+	ip, ok := netip.AddrFromSlice(tcp.IP)
+	if !ok {
+		return false
+	}
+	ip = ip.Unmap()
+	for _, p := range s.d.Cfg.InboundSMTPRelays {
+		if p.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // dmarcVerdict reads the DMARC result from the first Authentication-Results or

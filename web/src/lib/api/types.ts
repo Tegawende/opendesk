@@ -2297,6 +2297,8 @@ export type MailMessage = {
   in_reply_to_id?: string | null;
   /** The account's address (its own or an alias) it was sent from or written to; null when none. */
   own_address?: string | null;
+  /** Mail the account wrote: sent from opendesk, a draft, or in its Sent or Drafts at the provider. A From naming the account does not make mail outgoing. */
+  outgoing: boolean;
 };
 
 /** How a message came, read from its source (GET /v1/collab/messages/{id}/details). */

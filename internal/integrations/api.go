@@ -662,6 +662,12 @@ func (s *Service) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		fail("oauth_state")
 		return
 	}
+	// A response that names its issuer must name this connection's (RFC 9207), and one from
+	// a server that says it names itself must: a code is only ever sent back to its issuer.
+	if iss := q.Get("iss"); (iss != "" || c.IssParam) && !sameIssuer(iss, c.Issuer) {
+		fail("oauth_state")
+		return
+	}
 	t, err := s.exchange(ctx, c, code, string(verifier))
 	if err != nil {
 		s.d.Log.Warn("integration sign-in failed", "provider", x.Provider, "workspace_id", wid, "err", err.Error())

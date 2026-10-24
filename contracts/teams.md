@@ -338,6 +338,9 @@ A ticket in a **private** team is visible only to:
   or webhook's `private_team_ids` in the same change: audit `api_key.updated` / `webhook.updated
   {private_team_ids, removed_private_team_ids, reason: "granter_left_team"}`, `webhook.updated` is
   published, and the key's sockets close. A role change within the team keeps the grant.
+  A webhook delivery of a private team's event goes out only while the webhook is still granted the
+  team (or the team is no longer private): one queued or retrying when the grant ends is marked
+  `failed` with `last_error` "private team no longer granted".
 
 Admins and owners are not exempt: they see a private team's tickets after `POST /v1/teams/{id}/join`.
 

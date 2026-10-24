@@ -181,7 +181,7 @@ func (w *world) receive(m *mailboxRow, raw string) uuid.UUID {
 	w.t.Helper()
 	raw = strings.ReplaceAll(raw, "\r\n", "\n")
 	raw = strings.ReplaceAll(raw, "\n", "\r\n")
-	id, dup, err := w.s.ingest(w.ctx, m, []byte(raw), w.forwardAddr(m, ""), nil)
+	id, dup, err := w.s.ingest(w.ctx, m, []byte(raw), w.forwardAddr(m, ""), nil, viaForward)
 	if err != nil {
 		w.t.Fatal(err)
 	}

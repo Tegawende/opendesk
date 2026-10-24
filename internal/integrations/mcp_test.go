@@ -343,7 +343,7 @@ func TestDiscoverRefusesNonPKCE(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"authorization_servers": []string{origin}})
 	})
 	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"authorization_endpoint": origin + "/a", "token_endpoint": origin + "/t"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": origin, "authorization_endpoint": origin + "/a", "token_endpoint": origin + "/t"})
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -426,5 +426,32 @@ func TestRegisteredAppSignIn(t *testing.T) {
 	t.Setenv("MCP_SLACK_CLIENT_SECRET", "secret")
 	if c, err := s.identify(context.Background(), "slack", asm); err != nil || c.AuthMethod != "client_secret_basic" {
 		t.Fatalf("identify slack: %+v %v", c, err)
+	}
+}
+
+// TestOAuthIssuerMustMatch: an authorization server's metadata counts only when it names the
+// issuer it was fetched for.
+func TestOAuthIssuerMustMatch(t *testing.T) {
+	var origin, named string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"resource": origin + "/mcp", "authorization_servers": []string{origin + "/auth"}})
+	})
+	mux.HandleFunc("/.well-known/oauth-authorization-server/auth", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": named, "authorization_endpoint": origin + "/auth/authorize",
+			"token_endpoint": origin + "/auth/token", "code_challenge_methods_supported": []string{"S256"}})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	origin = srv.URL
+	s := testService(t)
+	for _, c := range []struct {
+		named string
+		ok    bool
+	}{{origin + "/auth", true}, {origin + "/auth/", true}, {"https://other.example/auth", false}, {"", false}} {
+		named = c.named
+		if _, _, _, err := s.discover(context.Background(), origin+"/mcp"); (err == nil) != c.ok {
+			t.Fatalf("issuer %q: err %v", c.named, err)
+		}
 	}
 }

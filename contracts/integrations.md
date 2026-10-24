@@ -71,7 +71,8 @@ current icon. A new icon publishes `integration.updated`.
 
 - Discovery: the server's `401` `WWW-Authenticate: Bearer resource_metadata=…` (or the
   well-known protected resource metadata, RFC 9728) names the authorization server;
-  its metadata comes from RFC 8414 or OpenID locations. PKCE `S256` is required; a server
+  its metadata comes from RFC 8414 or OpenID locations, and counts only when its `issuer` is the
+  one it was fetched for (a trailing slash aside; RFC 8414 3.3). PKCE `S256` is required; a server
   without it is refused.
 - Client identity, in order: an operator's pre-registered client (`MCP_<KEY>_CLIENT_ID`,
   `MCP_<KEY>_CLIENT_SECRET`), the client ID metadata document (https instances), dynamic
@@ -81,6 +82,9 @@ current icon. A new icon publishes `integration.updated`.
 - The flow uses an `oauth_state` JWT (`data.flow = "integration"`, with the integration id and the
   sealed PKCE verifier) and an `od_integration_oauth` HttpOnly cookie (Path `/v1/integrations/oauth`)
   binding it to the browser. The callback checks the cookie and that the user is still an admin.
+  A callback carrying `iss` (RFC 9207) must name the connection's issuer, and one from a server whose
+  metadata says `authorization_response_iss_parameter_supported` must carry it; otherwise the code
+  is never exchanged (`?error=oauth_state`).
 - Requests carry `resource` (RFC 8707). Access tokens refresh under a row lock; a refused
   refresh marks the connection `error` ("Reconnect the integration").
 

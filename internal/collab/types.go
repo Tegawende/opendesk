@@ -257,6 +257,9 @@ type MailMessage struct {
 	// OwnAddress is the account's address (its own or another) the message was sent from
 	// or written to; null when none.
 	OwnAddress *string `json:"own_address"`
+	// Outgoing is mail the account wrote: sent from opendesk, a draft, or in its Sent or
+	// Drafts at the provider. Mail from anyone else, whatever its From says, is not.
+	Outgoing bool `json:"outgoing"`
 }
 
 type MailAttachment struct {
