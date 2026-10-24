@@ -536,10 +536,19 @@ struct TicketCounts: Codable, Hashable, Sendable {
     var solved: Int
     var spam: Int
     var views: [String: Int]
+    /// Open and unassigned tickets per team the caller can see, and summed over the caller's teams.
+    var teams: [String: TeamCount] = [:]
+    var myTeams: TeamCount?
+
+    struct TeamCount: Codable, Hashable, Sendable {
+        var open: Int
+        var unassigned: Int
+    }
 
     enum CodingKeys: String, CodingKey {
-        case unassigned, mine, open, pending, solved, spam, views
+        case unassigned, mine, open, pending, solved, spam, views, teams
         case onHold = "on_hold"
+        case myTeams = "my_teams"
     }
 
     init(from decoder: Decoder) throws {
@@ -552,6 +561,8 @@ struct TicketCounts: Codable, Hashable, Sendable {
         solved = c.lenient(Int.self, forKey: .solved) ?? 0
         spam = c.lenient(Int.self, forKey: .spam) ?? 0
         views = c.lenient([String: Int].self, forKey: .views) ?? [:]
+        teams = c.lenient([String: TeamCount].self, forKey: .teams) ?? [:]
+        myTeams = c.lenient(TeamCount.self, forKey: .myTeams)
     }
 }
 

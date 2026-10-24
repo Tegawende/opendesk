@@ -45,6 +45,13 @@ enum DeepLink: Hashable, Sendable {
                 return .ticket(id: id, scope: view)
             }
             return .scope(view)
+        case "teams":
+            // A team inbox (`/teams/<id|mine>[/<ticket_id>][?tab=open]`).
+            guard segments.count >= 2 else { return nil }
+            let tab = URLComponents(string: raw)?.queryItems?.first { $0.name == "tab" }?.value.flatMap(TeamTab.init(rawValue:)) ?? .unassigned
+            let team = InboxScope.team(segments[1], tab)
+            if segments.count >= 3, let id = segments.last { return .ticket(id: id, scope: team) }
+            return .scope(team)
         case "notifications":
             return .notifications
         case "contacts":
@@ -79,7 +86,7 @@ enum DeepLink: Hashable, Sendable {
               let host = url.host()?.lowercased()
         else { return nil }
         // Links for another server are opened on the web instead.
-        guard host == instance.appOrigin.host()?.lowercased(), let link = parse(path: url.path()) else { return nil }
+        guard host == instance.appOrigin.host()?.lowercased(), let link = parse(path: url.path() + (url.query().map { "?" + $0 } ?? "")) else { return nil }
         return Target(link: link, server: instance.apiURL.absoluteString, workspaceID: nil)
     }
 }
