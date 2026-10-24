@@ -189,6 +189,7 @@ final class Router {
             case let .view(id):
                 context.page = "view"
                 context.viewID = id
+            case .team: break
             }
             return context
         case (.inbox, .contacts), (.inbox, .companies): return AssistantPageContext(page: "contacts", path: "/" + area.rawValue)
