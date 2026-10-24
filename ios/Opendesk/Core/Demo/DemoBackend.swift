@@ -149,6 +149,7 @@ actor DemoBackend {
 
     /// The answer's body, or nil for 204.
     func handle(_ call: Call) throws -> Data? {
+        if let answer = try meRoutes(call) { return answer }
         // Signing in: any email and password open Maya's account.
         for route in ["auth/login", "auth/register", "auth/mfa", "auth/oauth/exchange", "auth/oauth/link", "auth/passkey/login/finish", "auth/refresh"] where call.match("POST", route) != nil {
             return encode(JSONValue.object([
@@ -169,7 +170,10 @@ actor DemoBackend {
         }
         if call.match("DELETE", "me") != nil || call.match("POST", "me/heartbeat") != nil { return nil }
         if call.match("GET", "me/sessions") != nil { return encode(ListBody(data: world.sessions)) }
-        if call.match("DELETE", "me/sessions/*") != nil { return nil }
+        if let id = call.match("DELETE", "me/sessions/*")?.first {
+            world.sessions.removeAll { $0.id == id }
+            return nil
+        }
         if call.match("GET", "me/devices") != nil { return encode(world.devices) }
         if call.match("POST", "me/devices") != nil { return encode(world.devices[0]) }
         if let id = call.match("PATCH", "me/devices/*")?.first, let index = world.devices.firstIndex(where: { $0.id == id }) {
@@ -177,7 +181,6 @@ actor DemoBackend {
             return encode(world.devices[index])
         }
         if call.match("DELETE", "me/devices/*") != nil { return nil }
-        if let answer = try meRoutes(call) { return answer }
         if call.match("POST", "realtime/token") != nil { return encode(JSONValue.object(["token": .string("demo"), "url": .null])) }
         if call.match("POST", "workspaces") != nil { return createWorkspace(name: call.string("name") ?? "New workspace") }
 

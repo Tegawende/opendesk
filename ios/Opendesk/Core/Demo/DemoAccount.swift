@@ -83,6 +83,10 @@ struct DemoAccountWorkspace: Sendable {
 extension DemoBackend {
     /// Routes without a workspace. The answer (nil inside for 204), or nil when not this area's.
     func meRoutes(_ call: Call) throws -> Data?? {
+        // Two-factor and email confirmation for the signed-in person, ahead of the demo's sign-in routes.
+        if call.method == "POST", ["auth/totp/setup", "auth/totp/enable", "auth/totp/disable", "auth/email/resend"].contains(call.path.joined(separator: "/")) {
+            return .some(try accountAuthRoute(call.path.joined(separator: "/"), body: call.body))
+        }
         // Photo.
         if call.match("PUT", "me/avatar") != nil {
             guard !call.raw.isEmpty else { throw Failure(status: 422, code: "invalid_file", detail: "Choose a PNG, JPEG, GIF or WebP image.") }
@@ -248,19 +252,6 @@ extension DemoBackend {
             return .some(nil)
         }
         return nil
-    }
-
-    /// The `/v1/auth/` calls of a signed-in person, which the demo's sign-in routes stop before
-    /// `meRoutes` (`AccountStore.authCall` asks here in demo mode).
-    func accountAuth(_ path: String, body: JSONValue) throws -> Data? {
-        let route = path.hasPrefix("v1/") ? String(path.dropFirst(3)) : path
-        do {
-            let answer = try accountAuthRoute(route, body: body)
-            flush()
-            return answer
-        } catch let failure as Failure {
-            throw APIError(status: failure.status, code: failure.code, title: nil, detail: failure.detail, fieldErrors: [])
-        }
     }
 
     private func accountAuthRoute(_ route: String, body: JSONValue) throws -> Data? {

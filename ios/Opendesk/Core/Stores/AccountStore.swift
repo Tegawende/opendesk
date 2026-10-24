@@ -170,14 +170,6 @@ final class AccountStore {
 
     /// Calls under `/v1/auth/` that need a signed-in person.
     func authCall<T: Decodable & Sendable>(_ path: String, body: some Encodable & Sendable) async throws -> T {
-        #if DEBUG
-        if DemoMode.isOn {
-            let json = (try? JSONValue.from(body)) ?? .null
-            let data = try await DemoBackend.shared.accountAuth(path, body: json)
-            if T.self == EmptyBody.self { return EmptyBody() as! T }
-            return try APICoding.decoder.decode(T.self, from: data ?? Data("{}".utf8))
-        }
-        #endif
         guard let api else { throw APIError.signedOut }
         return try await api.post(path, body: body, workspace: .none)
     }
