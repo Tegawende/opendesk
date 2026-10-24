@@ -90,8 +90,8 @@ struct SignInView: View {
             VStack(alignment: .leading, spacing: 14) {
                 ODWordmark(size: 22, color: .white)
                 HeroTitle(
-                    title: "Every customer conversation, in one place.",
-                    subtitle: emailOpen ? nil : "Email, live chat and your help center in one shared inbox, with Ollie drafting replies.",
+                    title: "Every conversation, shared with your team.",
+                    subtitle: emailOpen ? nil : "Support email, live chat and your team's own mail in one inbox, with Ollie drafting replies.",
                     size: 31
                 )
             }
@@ -337,12 +337,14 @@ struct OrDivider: View {
     }
 }
 
-/// A provider's mark: a symbol where the system has one, else its initial.
+/// A provider's mark: its own logo, a symbol where the system has one, else its initial.
 struct ProviderGlyph: View {
     let id: String
 
     var body: some View {
         switch id {
+        case "google":
+            Image("provider-google").resizable().frame(width: 17, height: 17)
         case "github":
             Image(systemName: "chevron.left.forwardslash.chevron.right").font(.system(size: 13, weight: .semibold))
         case "oidc":
