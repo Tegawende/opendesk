@@ -480,10 +480,11 @@ export function registerResources() {
     }
     const email = s(ctx, "email")?.toLowerCase() || `support@${provider === "google" ? "margin.app" : "margin.onmicrosoft.com"}`;
     // A new mailbox receives as asked; a reconnect keeps how it receives, moving to
-    // forwarding where the instance no longer receives over IMAP.
+    // forwarding where the instance no longer receives over IMAP, or to reading over IMAP
+    // when asked.
     const wasDirect = m?.config.oauth_grant === "api" && m.inbound_kind !== "forwarding";
     const direct = receive === "api" || (wasDirect && mockApiSyncOn());
-    const inbound = direct || (m ? m.inbound_kind !== "forwarding" && !wasDirect && mockImapOn() : receive === "sync") ? provider : "forwarding";
+    const inbound = direct || (m ? (m.inbound_kind !== "forwarding" || receive === "sync") && !wasDirect && mockImapOn() : receive === "sync") ? provider : "forwarding";
     const grant = direct ? "api" : inbound === provider ? "sync" : "send";
     if (!m) {
       if (ctx.ws.mailboxes.some((x) => x.email === email || x.aliases.includes(email))) throw new HttpError(409, "conflict", "A mailbox with this address already exists");

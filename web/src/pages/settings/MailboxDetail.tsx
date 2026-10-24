@@ -33,7 +33,9 @@ import {
   connectFailure,
   imapOn,
   sendProviders,
+  SyncStartField,
   syncOn,
+  syncProvider,
   systemSendOn,
   useConnectOptions,
   useMailDetection,
@@ -58,7 +60,7 @@ import { useBrands, useTeams } from "@/components/settings2/teams";
 import { ContactFormsField } from "@/components/settings/ContactFormsField";
 import { api, type MailboxReceive } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
-import type { Mailbox, MailboxConfig, MailboxPersonalReplies, MailboxTest, TemplatePreviewBody, TemplateProblem, TlsMode } from "@/lib/api/types";
+import type { Mailbox, MailboxConfig, MailboxPersonalReplies, MailboxTest, SyncStart, TemplatePreviewBody, TemplateProblem, TlsMode } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { relLong } from "@/lib/format";
 import { tone } from "@/lib/tones";
@@ -372,6 +374,23 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
     onError: (e) => toast.error(e),
   });
 
+  // A forwarding mailbox, sending through its provider or not, can start reading its Google or
+  // Microsoft inbox over IMAP instead, keeping its address and its tickets. It starts with only
+  // new mail by default: a mailbox that already has tickets usually got its history another way.
+  const syncWith = syncProvider(forwarding, signedInProvider(mailbox), detection, opts);
+  const [syncStart, setSyncStart] = useState<SyncStart>("new");
+  const readSync = useMutation({
+    mutationFn: async (p: Provider) => {
+      if (isDesktop) {
+        openInBrowser(location.pathname);
+        return null;
+      }
+      return api.mailboxes.oauthStart(p, { mailbox_id: mailbox.id, name: mailbox.name, email: mailbox.email, receive: "sync", sync_start: syncStart });
+    },
+    onSuccess: (r, p) => (r ? window.location.assign(r.url) : setOpenedInBrowser(p)),
+    onError: (e) => toast.error(e),
+  });
+
   // Receiving by forwarding instead of over IMAP. Replies keep going out the way they do.
   const toForwarding = useMutation({
     mutationFn: () => api.mailboxes.update(mailbox.id, { inbound_kind: "forwarding" }),
@@ -525,6 +544,23 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
           </Row>
         )}
         {directOffered && directProvider && readDirect.data === null && <InBrowserNote name={providerName(directProvider)} opened className="my-3" />}
+        {syncWith && (
+          <Row label={t("detail.syncTitle")} description={t("detail.syncHint", { email: mailbox.email, provider: providerName(syncWith) })} stack>
+            <div className="flex flex-col gap-3">
+              <SyncStartField value={syncStart} onChange={setSyncStart} />
+              <Button
+                size="sm"
+                className="self-start"
+                icon={syncWith === "google" ? <GoogleGlyph className="size-3.5" /> : <MicrosoftGlyph className="size-3.5" />}
+                loading={readSync.isPending}
+                onClick={() => readSync.mutate(syncWith)}
+              >
+                {t("detail.syncButton", { provider: providerName(syncWith) })}
+              </Button>
+            </div>
+          </Row>
+        )}
+        {syncWith && readSync.data === null && <InBrowserNote name={providerName(syncWith)} opened className="my-3" />}
         {receivesOverImap(mailbox) && !off && (
           <Row
             label={t("receiving.title")}
