@@ -223,3 +223,107 @@ struct CollabAvailability: Codable, Hashable, Sendable {
 
     static let off = CollabAvailability(enabled: false)
 }
+
+// MARK: - Directory helpers
+
+extension Contact {
+    /// The first word of the name, for "Email Dana"; the email's local part without a name.
+    var firstName: String {
+        if let first = name.split(separator: " ").first { return String(first) }
+        return email.map { String($0.split(separator: "@").first ?? "") } ?? "them"
+    }
+
+    /// The email's domain, lowercased (`oakridgehealth.org`).
+    var emailDomain: String? {
+        guard let email, let at = email.lastIndex(of: "@") else { return nil }
+        return String(email[email.index(after: at)...]).lowercased()
+    }
+}
+
+/// A contact or a company: the two records the directory edits the same way.
+enum DirectoryEntity: String, Sendable {
+    case contact, company
+
+    /// The custom field entity (`CustomField.entity`).
+    var fieldEntity: String { rawValue }
+    /// The label scope (`Tag.applies_to`).
+    var tagScope: String { self == .contact ? "contacts" : "companies" }
+    /// The collection path under `/v1`.
+    var path: String { self == .contact ? "v1/contacts" : "v1/companies" }
+}
+
+/// A write body for a contact or company: only the members set are sent, `null` clears.
+struct DirectoryPatch: Encodable, Sendable {
+    private(set) var values: [String: JSONValue] = [:]
+
+    init() {}
+
+    var isEmpty: Bool { values.isEmpty }
+
+    subscript(key: String) -> JSONValue? {
+        get { values[key] }
+        set { values[key] = newValue }
+    }
+
+    /// A text member; `clearsWhenEmpty` sends `null` for an empty value (email, company, external id).
+    mutating func text(_ key: String, _ value: String, clearsWhenEmpty: Bool = false) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        values[key] = trimmed.isEmpty && clearsWhenEmpty ? .null : .string(trimmed)
+    }
+
+    /// Replaces the labels by name.
+    static func tags(_ names: [String]) -> DirectoryPatch {
+        var patch = DirectoryPatch()
+        patch["tags"] = .array(names.map(JSONValue.string))
+        return patch
+    }
+
+    /// Sets one custom field (`nil` clears it).
+    static func field(_ key: String, _ value: JSONValue?) -> DirectoryPatch {
+        var patch = DirectoryPatch()
+        patch["fields"] = .object([key: value ?? .null])
+        return patch
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try JSONValue.object(values).encode(to: encoder)
+    }
+}
+
+/// How the contacts list is ordered: newest first (the API's order) or by name in letter sections.
+enum ContactSort: String, CaseIterable, Identifiable, Sendable {
+    case recent, name
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .recent: "Recently added"
+        case .name: "Name"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .recent: "clock"
+        case .name: "textformat"
+        }
+    }
+}
+
+extension CustomField.Kind {
+    var symbol: String {
+        switch self {
+        case .text: "textformat"
+        case .longText: "text.alignleft"
+        case .number: "number"
+        case .select: "chevron.up.chevron.down"
+        case .multiSelect: "checklist"
+        case .date: "calendar"
+        case .checkbox: "checkmark.square"
+        case .url: "link"
+        case .email: "at"
+        case .user: "person.crop.circle"
+        }
+    }
+}
