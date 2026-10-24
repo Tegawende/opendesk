@@ -572,11 +572,17 @@ struct TicketFilters: Codable, Hashable, Sendable {
     var channel: String?
     var q: String?
     var fields: [FieldFilter]?
+    var receivedAt: String?
+    var brandID: String?
+    var widgetID: String?
 
     enum CodingKeys: String, CodingKey {
         case status, priority, severity, assignee, tag, channel, q, fields
         case teamID = "team_id"
         case mailboxID = "mailbox_id"
+        case receivedAt = "received_at"
+        case brandID = "brand_id"
+        case widgetID = "widget_id"
     }
 }
 
@@ -885,6 +891,9 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
     case autoRechargeFailed = "auto_recharge_failed"
     case teamJoined = "team_joined"
     case importFinished = "import_finished"
+    case threadReplied = "thread_replied"
+    case collabAssigned = "collab_assigned"
+    case collabMention = "collab_mention"
 
     var id: String { rawValue }
 
@@ -904,6 +913,9 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
         case .autoRechargeFailed: "Auto-recharge failed"
         case .teamJoined: "Team joins"
         case .importFinished: "Imports"
+        case .threadReplied: "Side conversation answers"
+        case .collabAssigned: "Mail assigned to you"
+        case .collabMention: "Mail comment mentions"
         }
     }
 
@@ -922,6 +934,9 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
         case .autoRechargeFailed: "Owners and admins"
         case .teamJoined: "An admin joins a team you lead"
         case .importFinished: "An import you started ends or needs new credentials"
+        case .threadReplied: "Someone outside your team answers a side conversation on your ticket"
+        case .collabAssigned: "A teammate assigns you a mail conversation"
+        case .collabMention: "Someone mentions you in a comment on a mail conversation"
         }
     }
 
@@ -937,6 +952,9 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
         case .aiBalanceLow, .aiBalanceOut, .autoRechargeFailed: "creditcard"
         case .teamJoined: "person.2"
         case .importFinished: "square.and.arrow.down"
+        case .threadReplied: "bubble.left.and.bubble.right"
+        case .collabAssigned: "envelope.badge.person.crop"
+        case .collabMention: "at"
         }
     }
 
@@ -999,6 +1017,11 @@ struct AppNotification: Codable, Hashable, Sendable, Identifiable {
             return data["reason"]?.string == "no_funds"
                 ? "Your AI provider account is out of funds"
                 : "Your AI provider rejected the workspace's key"
+        case .threadReplied:
+            let from = data["from"]?["name"]?.string.flatMap { $0.isEmpty ? nil : $0 } ?? data["from"]?["email"]?.string.flatMap { $0.isEmpty ? nil : $0 }
+            return from.map { "\($0) answered your side conversation" } ?? "Someone answered your side conversation"
+        case .collabAssigned: return who.map { "\($0) assigned you a conversation" } ?? "A conversation was assigned to you"
+        case .collabMention: return who.map { "\($0) mentioned you in a comment" } ?? "You were mentioned in a comment"
         case .teamJoined:
             let joiner = data["user"]?["name"]?.string.flatMap { $0.isEmpty ? nil : $0 } ?? "Someone"
             guard let team = data["team"]?["name"]?.string, !team.isEmpty else { return "\(joiner) joined a team you lead" }
