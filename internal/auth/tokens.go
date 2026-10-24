@@ -61,6 +61,9 @@ type Claims struct {
 	Avatar    string `json:"avatar,omitempty"`
 	// Teams are the private teams a ws token may join (contracts/teams.md).
 	Teams []string `json:"teams,omitempty"`
+	// IssuedAtMs is a ws token's issue time in milliseconds: the gateway refuses a token
+	// issued at or before a revocation of its subject or session (contracts/realtime.md).
+	IssuedAtMs int64 `json:"iat_ms,omitempty"`
 	// Brand binds a widget_ws token to the brand of the widget it was issued for.
 	Brand string `json:"bid,omitempty"`
 	// Free-form payload for oauth_state (provider, redirect, mailbox flow).

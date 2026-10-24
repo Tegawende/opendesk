@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -81,6 +82,9 @@ type Principal struct {
 	// HiddenTeams caches the private teams this caller may not see (domain.HiddenTeams).
 	HiddenTeams       []uuid.UUID
 	HiddenTeamsLoaded bool
+	// ResolvedAt is when the credential began to be resolved, before any lookup: what
+	// the request reads from here on is at least as recent as this.
+	ResolvedAt time.Time
 }
 
 func (p *Principal) HasScope(s string) bool { return slices.Contains(p.Scopes, s) }

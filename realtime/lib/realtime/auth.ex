@@ -26,7 +26,9 @@ defmodule Realtime.Auth do
           name: String.t() | nil,
           avatar: String.t() | nil,
           teams: [String.t()],
-          brand: String.t() | nil
+          brand: String.t() | nil,
+          sid: String.t() | nil,
+          issued_ms: integer()
         }
 
   @doc "The smallest `AUTH_SECRET` the gateway boots with."
@@ -102,7 +104,8 @@ defmodule Realtime.Auth do
          {:ok, wid} <- uuid(c["wid"]),
          {:ok, kind} <- Map.fetch(@kinds, c["kind"]),
          role when role in @roles <- c["role"],
-         {:ok, teams} <- teams(c["teams"]) do
+         {:ok, teams} <- teams(c["teams"]),
+         {:ok, sid} <- optional_uuid(c["sid"]) do
       {:ok,
        %{
          kind: kind,
@@ -112,7 +115,9 @@ defmodule Realtime.Auth do
          name: string(c["name"], 200),
          avatar: string(c["avatar"], 2048),
          teams: teams,
-         brand: nil
+         brand: nil,
+         sid: sid,
+         issued_ms: issued_ms(c)
        }}
     else
       _ -> {:error, :invalid_claims}
@@ -134,7 +139,9 @@ defmodule Realtime.Auth do
          name: nil,
          avatar: nil,
          teams: [],
-         brand: brand
+         brand: brand,
+         sid: nil,
+         issued_ms: issued_ms(c)
        }}
     else
       _ -> {:error, :invalid_claims}
@@ -142,6 +149,13 @@ defmodule Realtime.Auth do
   end
 
   defp identity(_claims), do: {:error, :wrong_purpose}
+
+  # The issue time in ms that revocations are compared with (`Realtime.Revocations`):
+  # `iat_ms`, else whole-second `iat`. A token with neither counts as issued at 0, before
+  # any revocation.
+  defp issued_ms(%{"iat_ms" => ms}) when is_integer(ms) and ms > 0, do: ms
+  defp issued_ms(%{"iat" => iat}) when is_integer(iat) and iat > 0, do: iat * 1000
+  defp issued_ms(_claims), do: 0
 
   defp teams(nil), do: {:ok, []}
 

@@ -54,8 +54,12 @@ and a consumer accepts exactly one purpose. `exp` is required.
 // ws (agent / API-key socket)
 { "purpose": "ws", "sub": "<user_id or api_key_id>", "kind": "user" | "api_key",
   "wid": "<workspace_id>", "role": "owner|admin|agent|viewer",
-  "name": "Anna", "avatar": "https://...", "teams": ["<private team id>"], "jti": "<uuid>", "iat": 0, "exp": 0 }
+  "name": "Anna", "avatar": "https://...", "teams": ["<private team id>"], "sid": "<session_id>" /* users */,
+  "jti": "<uuid>", "iat": 0, "iat_ms": 0, "exp": 0 }
 // teams: the private teams whose topics the socket may join (contracts/teams.md "Visibility"); omitted when none
+// sid: the session the token was issued to (users only). iat_ms: the issue time in ms, taken before the API
+// reads what the claims say. The gateway refuses a token whose sub or sid was revoked (od.control.disconnect)
+// at or after it (contracts/realtime.md "Connect"); without iat_ms it compares iat * 1000
 
 // widget_ws (end customer in the chat widget)
 { "purpose": "widget_ws", "sub": "<contact_id>", "wid": "<workspace_id>", "bid": "<brand_id>" /* the widget's brand: the socket receives only that brand's chats */, "jti": "<uuid>", "iat": 0, "exp": 0 }

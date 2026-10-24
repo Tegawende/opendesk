@@ -259,7 +259,13 @@ func (s *svc) registerPlatform(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			c := auth.Claims{Purpose: auth.PurposeWS, Workspace: p.WorkspaceID.String()}
+			// The token is as old as the oldest read behind its claims: the gateway refuses it
+			// when its subject or session was revoked at or after this moment.
+			issued := p.ResolvedAt
+			if issued.IsZero() {
+				issued = time.Now()
+			}
+			c := auth.Claims{Purpose: auth.PurposeWS, Workspace: p.WorkspaceID.String(), IssuedAtMs: issued.UnixMilli()}
 			var sub string
 			switch p.Kind {
 			case auth.KindUser:
@@ -268,6 +274,9 @@ func (s *svc) registerPlatform(api huma.API) {
 					return nil, httpx.Wrap(err)
 				}
 				sub, c.Kind, c.Role, c.Name, c.Avatar = p.UserID.String(), string(auth.KindUser), string(p.Role), name, domain.Avatar(avatar).URL()
+				if p.SessionID != uuid.Nil {
+					c.SessionID = p.SessionID.String()
+				}
 			case auth.KindAPIKey:
 				var name string
 				if err := s.d.DB.Pool.QueryRow(ctx, `SELECT name FROM api_keys WHERE id = $1 AND workspace_id = $2`, p.APIKeyID, p.WorkspaceID).Scan(&name); err != nil {

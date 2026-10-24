@@ -268,13 +268,19 @@ export class RealtimeManager {
     if (e?.mode === "active") e.ch.push("presence", { state });
   }
 
+  /**
+   * Tells the other agents on the open ticket (the socket) and, on a chat with a
+   * contact, its visitor (the API, which checks the ticket) that a reply is being written.
+   */
   typing(contactId?: string | null) {
     if (!this.active) return;
     const now = Date.now();
     if (now - this.lastTyping < 2500) return;
     this.lastTyping = now;
     const e = this.tickets.get(this.active);
-    if (e?.mode === "active") e.ch.push("typing", contactId ? { contact_id: contactId } : {});
+    if (e?.mode !== "active") return;
+    e.ch.push("typing", {});
+    if (contactId) void api.tickets.typing(this.active).catch(() => {});
   }
 
   private reconcileTickets() {
