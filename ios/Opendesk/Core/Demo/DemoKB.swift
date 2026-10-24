@@ -524,14 +524,17 @@ extension DemoBackend {
             var solved = 0
             if day <= today {
                 let age = Double(calendar.dateComponents([.day], from: day, to: today).day ?? 0)
-                let weekday = [0.42, 1.22, 1.1, 1.04, 1.0, 0.92, 0.38][(calendar.component(.weekday, from: day) - 1) % 7]
+                let weekday = [0.6, 1.14, 1.08, 1.04, 1.0, 0.95, 0.56][(calendar.component(.weekday, from: day) - 1) % 7]
                 let growth = 1 / (1 + age * 0.0028)
                 let partial = day == today ? 0.42 : 1
-                let noise = 0.78 + 0.44 * DemoReports.unit(key + (team ?? ""))
-                let value = scale * teamShare * weekday * growth * noise * partial
+                // Day to day spread grows like the square root of the count, as real small queues do.
+                let expected = scale * teamShare * weekday * growth * partial
+                let spread = 0.62 * expected.squareRoot()
+                let value = max(0, expected + spread * (2 * DemoReports.unit(key + (team ?? "")) - 1))
                 created = Int(value.rounded())
-                let rate = 0.84 + 0.22 * DemoReports.unit("solved" + key + (team ?? ""))
-                solved = Int((value * rate).rounded())
+                let rate = 0.86 + 0.18 * DemoReports.unit("rate" + key + (team ?? ""))
+                let lag = spread * 0.8 * (2 * DemoReports.unit("solved" + key + (team ?? "")) - 1)
+                solved = max(0, Int((value * rate + lag).rounded()))
             }
             days.append(ReportDay(date: key, created: created, solved: solved))
             guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
