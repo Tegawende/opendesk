@@ -300,6 +300,16 @@ type MailThreadDetail struct {
 	Comments []MailComment `json:"comments"`
 	Shares   Audience      `json:"shares"`
 	CanAct   bool          `json:"can_act"`
+	// Ticket is the ticket the conversation answered or was answered from, when the caller
+	// sees it ("Answering tickets").
+	Ticket *ThreadTicket `json:"ticket"`
+}
+
+// ThreadTicket names a conversation's ticket.
+type ThreadTicket struct {
+	ID      uuid.UUID `json:"id"`
+	Number  int64     `json:"number"`
+	Subject string    `json:"subject"`
 }
 
 type CollabProviders struct {

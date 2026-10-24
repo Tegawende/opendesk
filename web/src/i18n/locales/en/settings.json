@@ -340,7 +340,13 @@
     "messageDeleteHint": "Own notes: agents delete their own internal notes. Any agent’s: also every agent’s notes and replies. A deleted message stays as a marker. Admins can delete any message, read deleted ones and restore them, and give an agent another rule in Members.",
     "messageDeleteOff": "Off",
     "messageDeleteOwn": "Own notes",
-    "messageDeleteAll": "Any agent’s"
+    "messageDeleteAll": "Any agent’s",
+    "collabReplies": "Reply from your own mail",
+    "collabRepliesHint": "Members can answer an email ticket from one of their connected mail accounts instead of the ticket's address, one reply at a time. The customer's answers still come back to the ticket. Each mailbox can set its own rules.",
+    "collabReplyTo": "Where answers go",
+    "collabReplyToHint": "The Reply-To of such a reply, unless the member picks another. Their address: answers go to the address it was sent from and come back to the ticket from there. The ticket's address: answers go to the team's address like any email.",
+    "collabReplyToAddress": "Their address",
+    "collabReplyToMailbox": "The ticket's address"
   },
   "display": {
     "title": "Statuses and priorities",

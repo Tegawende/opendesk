@@ -51,6 +51,9 @@ type service struct {
 
 	// newProvider builds the provider client of an account; tests replace it.
 	newProvider func(ctx context.Context, a *accountRow) (Provider, error)
+
+	// tickets is ticket email, for replies on tickets sent from an account ("Answering tickets").
+	tickets *email.TicketMail
 }
 
 func newService(d *deps.Deps) *service {
@@ -64,6 +67,7 @@ func newService(d *deps.Deps) *service {
 	}
 	s.oauth = oauthClients(d.Cfg)
 	s.newProvider = s.defaultProvider
+	s.tickets = email.NewTicketMail(d)
 	return s
 }
 
@@ -93,6 +97,8 @@ func RegisterWorkers(d *deps.Deps, w *river.Workers) {
 	river.AddWorker(w, &syncAccountWorker{s: s})
 	river.AddWorker(w, &applyWorker{s: s})
 	river.AddWorker(w, &cleanupWorker{s: s})
+	river.AddWorker(w, &sendTicketReplyWorker{s: s})
+	river.AddWorker(w, &ticketAnswerWorker{s: s})
 }
 
 // Periodic returns this area's scheduled jobs: every minute, queue a sync for each due

@@ -1,4 +1,26 @@
 {
+  "personal": {
+    "title": "Réponses depuis les adresses des membres",
+    "description": "Avec Collab, les membres peuvent répondre aux tickets de cette adresse depuis l’un de leurs comptes de messagerie, réponse par réponse. Les réponses du client reviennent quand même sur le ticket.",
+    "workspaceLink": "Réglages de l’espace de travail",
+    "allowed": "Autorisé",
+    "allowedOn": "Les membres peuvent choisir l’une de leurs adresses dans la zone de réponse des tickets de cette adresse.",
+    "allowedOff": "Les réponses aux tickets de cette adresse partent toujours de cette adresse.",
+    "workspaceDefault": "Par défaut ({{value}})",
+    "on": "Oui",
+    "off": "Non",
+    "replyTo": "Les réponses vont à",
+    "replyToHint": "Où vont les réponses du client, sauf si le membre en choisit une autre. Dans tous les cas, elles reviennent sur le ticket.",
+    "replyToAddress": "Son adresse",
+    "replyToMailbox": "Cette adresse",
+    "accounts": "Quelles adresses",
+    "accountsAny": "Toute adresse d’un compte depuis lequel le membre peut envoyer, privé ou partagé.",
+    "accountsShared": "Uniquement les comptes partagés avec l’équipe, jamais la messagerie privée de quelqu’un.",
+    "accountsDomain": "Uniquement les adresses chez {{domains}}.",
+    "any": "Toutes",
+    "shared": "Comptes partagés",
+    "domain": "Chez {{domain}}"
+  },
   "ollie": {
     "description": "Laissez {{name}} répondre aux e-mails de cette boîte mail à partir de vos connaissances.",
     "toggle": "{{name}} répond aux e-mails de cette boîte mail",

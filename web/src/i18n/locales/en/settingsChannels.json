@@ -1,4 +1,26 @@
 {
+  "personal": {
+    "title": "Replies from members' own addresses",
+    "description": "With Collab, members can answer this address's tickets from one of their own mail accounts, one reply at a time. The customer's answers still come back to the ticket.",
+    "workspaceLink": "Workspace defaults",
+    "allowed": "Allowed",
+    "allowedOn": "Members can pick one of their own addresses in the reply box on this address's tickets.",
+    "allowedOff": "Replies on this address's tickets always go from this address.",
+    "workspaceDefault": "Default ({{value}})",
+    "on": "On",
+    "off": "Off",
+    "replyTo": "Answers go to",
+    "replyToHint": "Where the customer's answers go unless the member picks another. Either way they come back to the ticket.",
+    "replyToAddress": "Their address",
+    "replyToMailbox": "This address",
+    "accounts": "Which addresses",
+    "accountsAny": "Any address of an account the member can send from, private or shared.",
+    "accountsShared": "Only accounts shared with the team, never someone's private mail.",
+    "accountsDomain": "Only addresses at {{domains}}.",
+    "any": "Any",
+    "shared": "Shared accounts",
+    "domain": "At {{domain}}"
+  },
   "ollie": {
     "description": "Let {{name}} answer emails to this mailbox from your knowledge.",
     "toggle": "{{name}} answers emails to this mailbox",

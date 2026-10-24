@@ -234,6 +234,9 @@ The reply address is `ticket.mailbox_id`:
   as for a chat or API ticket (above); an email never goes out from another private team's address.
   After sending, the message records the mailbox, From address and From name it actually used; a
   ticket with no reply address takes the one its first email went out from.
+- With Collab, a member may send one reply from their own mail address instead (contracts/collab.md
+  "Answering tickets"). It does not change the reply address, and the rest of the ticket's mail
+  (automations, auto-replies, CSAT, Ollie) keeps going out from it.
 
 What the customer sees on every email (replies, auto-replies, CSAT):
 - **From**: `from_name_format` filled in, at the reply address. `{agent}` is the author's full name,

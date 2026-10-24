@@ -10,6 +10,7 @@ import { i18n } from "@/i18n";
 import { toast } from "@/components/ui/toast";
 import { statusLabel } from "../bits";
 import { applyPatch } from "../useTicketActions";
+import type { PersonalFrom } from "./personalFrom";
 
 // A reply waits out the workspace's undo window here, in the app and not on the server:
 // nothing of it reaches the customer, an automation or a channel until it is sent. It lives
@@ -38,6 +39,8 @@ export type Unsent = {
   cc: string[];
   bcc: string[];
   mailboxId?: string;
+  /** Sent from one of my own Collab addresses (Draft.fromAccount). */
+  fromAccount?: PersonalFrom | null;
   uploads: Upload[];
   /** The note this reply was made from (body.from_note_id): it stays as a marker pointing at the reply. */
   fromNote?: string;

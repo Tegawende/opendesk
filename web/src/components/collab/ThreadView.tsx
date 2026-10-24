@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   Star,
   Tag,
+  Ticket,
   Trash2,
   UserPlus,
   Users,
@@ -36,7 +37,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { api } from "@/lib/api/endpoints";
 import type { MailFolder, MailMessage, MailThreadAction, MailThreadDetail } from "@/lib/api/types";
 import { isApiError } from "@/lib/api/client";
@@ -634,6 +635,18 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
                     <AtSign className="size-3" />
                     {t("thread.toAlias", { email: th.to_address })}
                   </button>
+                </Tooltip>
+              )}
+              {detail.ticket && (
+                <Tooltip content={t("thread.ticketHint", { subject: detail.ticket.subject })}>
+                  <Link
+                    to="/inbox/$folder/{-$ticketId}"
+                    params={{ folder: "open", ticketId: detail.ticket.id }}
+                    className="inline-flex h-[18px] items-center gap-1 rounded-sm bg-hover px-1.5 text-[11px] font-medium text-fg-2 outline-none hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]"
+                  >
+                    <Ticket className="size-3 text-fg-4" />
+                    {t("thread.onTicket", { number: detail.ticket.number })}
+                  </Link>
                 </Tooltip>
               )}
               {pills.map((p) => (

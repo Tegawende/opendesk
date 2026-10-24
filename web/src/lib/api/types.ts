@@ -46,6 +46,10 @@ export type WorkspaceSettings = {
   undo_send_seconds?: number;
   /** The same for chat replies. Default 0: a chat reply goes at once. */
   undo_send_chat_seconds?: number;
+  /** With Collab, members may answer email tickets from their own mail accounts. Default true. */
+  collab_ticket_replies?: boolean;
+  /** Where answers to such a reply go when it names no Reply-To: the address's own reply-to (else the address), or the ticket's reply address. Default "address". */
+  collab_ticket_reply_to?: "address" | "mailbox";
   /** Which messages agents may delete: none, their own internal notes, or any agent's notes and replies. Admins may delete any. Default "own". */
   message_delete?: "off" | "own" | "all";
   /** Display-only names and colours for the fixed statuses and priorities. */
@@ -458,6 +462,8 @@ export type Message = {
   received_at?: string;
   /** The third-party thread a note belongs to (contracts/api.md "Threads"), else null. */
   thread_id?: string | null;
+  /** An email reply sent from a member's own Collab address (contracts/collab.md "Answering tickets"), else null. */
+  from_account?: FromAccount | null;
   created_at: string;
   edited_at: string | null;
   /** A deleted message stays as a marker: who deleted it and when. Only admins get what it said. */
@@ -468,6 +474,8 @@ export type Message = {
   /** A note sent as a reply: a marker pointing at the reply (deleted_at says when). Only admins get what it said. */
   sent_as_reply_id?: string | null;
 };
+/** The Collab address a reply goes or went out from, and the Reply-To it asks for: "address" (the address's own), "mailbox" (the ticket's reply address) or an address. */
+export type FromAccount = { account_id: string; email: string; reply_to: string };
 /** A third-party thread: an email conversation on a ticket with someone outside the team (contracts/api.md "Threads"). */
 export type Thread = {
   id: string;
@@ -791,6 +799,8 @@ export type ProviderSendAs = {
   addresses: { email: string; display_name: string; verified: boolean }[];
 };
 export type AliasSettingsInput = { display_name?: string; signature_html?: string; brand_id?: string | null; send_as?: AliasSendAs };
+/** accounts: any of the member's addresses, shared accounts only, or addresses at the mailbox's own domains. */
+export type MailboxPersonalReplies = { enabled: boolean | null; reply_to: "address" | "mailbox" | null; accounts: "any" | "shared" | "domain" };
 export type Mailbox = {
   id: string;
   name: string;
@@ -826,6 +836,8 @@ export type Mailbox = {
   from_name_format: string;
   /** Its team is private: only that team's members send from it. */
   private: boolean;
+  /** Replies on its tickets from members' own Collab addresses (contracts/collab.md "Answering tickets"); null follows the workspace. */
+  personal_replies?: MailboxPersonalReplies;
   /** Website contact forms (exact addresses or "@domain"); their authenticated mail is from the visitor in Reply-To. Admins only. */
   trusted_form_senders?: string[];
   signature_html: string;
@@ -2353,6 +2365,8 @@ export type MailThreadDetail = {
   /** The conversation's own shares. */
   shares: MailAudience;
   can_act: boolean;
+  /** The ticket it answered or was answered from, when you see it (contracts/collab.md "Answering tickets"). */
+  ticket?: { id: string; number: number; subject: string } | null;
 };
 
 /** One address across the conversations you see (contracts/collab.md "People"). */

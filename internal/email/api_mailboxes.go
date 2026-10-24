@@ -109,11 +109,20 @@ type updateMailboxInput struct {
 		FromNameFormat *string                        `json:"from_name_format,omitempty" maxLength:"200" doc:"\"\" resets to \"{agent} at {mailbox}\""`
 		// Website contact forms whose authenticated mail is from the visitor in Reply-To.
 		TrustedFormSenders *[]string `json:"trusted_form_senders,omitempty" maxItems:"50" doc:"Replaces the list: email addresses or @domain entries"`
-		Verify             bool      `json:"verify,omitempty" doc:"When the IMAP or SMTP settings, a password or the way replies are sent change, sign in to the changed servers first; a refusal is 422 mailbox_connection_failed and nothing is saved"`
+		// Replies from members' own Collab addresses on its tickets (contracts/collab.md "Answering tickets").
+		PersonalReplies *personalRepliesInput `json:"personal_replies,omitempty" doc:"Replaces them: enabled and reply_to left out or null follow the workspace; accounts any (default), shared or domain"`
+		Verify          bool                  `json:"verify,omitempty" doc:"When the IMAP or SMTP settings, a password or the way replies are sent change, sign in to the changed servers first; a refusal is 422 mailbox_connection_failed and nothing is saved"`
 
 		// The bot the AI agent answers as here (contracts/bots.md).
 		BotID bots.Assignment `json:"bot_id,omitempty" doc:"A bot of the workspace, or null for the default bot"`
 	}
+}
+
+// personalRepliesInput replaces a mailbox's PersonalReplies; what is left out follows the workspace.
+type personalRepliesInput struct {
+	Enabled  *bool   `json:"enabled,omitempty"`
+	ReplyTo  *string `json:"reply_to,omitempty" enum:"address,mailbox"`
+	Accounts string  `json:"accounts,omitempty" enum:"any,shared,domain"`
 }
 
 type idInput struct {
@@ -296,6 +305,14 @@ func (s *service) registerMailboxRoutes(api huma.API) {
 			if err != nil {
 				return nil, err
 			}
+			if pr := in.Body.PersonalReplies; pr != nil {
+				if pr.Accounts != "" && pr.Accounts != PersonalAny && pr.Accounts != PersonalShared && pr.Accounts != PersonalDomain {
+					return nil, httpx.Validation("personal_replies.accounts must be any, shared or domain")
+				}
+				if pr.ReplyTo != nil && *pr.ReplyTo != "address" && *pr.ReplyTo != "mailbox" {
+					return nil, httpx.Validation("personal_replies.reply_to must be address, mailbox or null")
+				}
+			}
 			// The sign-in check runs before the transaction: it can take as long as a
 			// slow server, and no row stays locked meanwhile.
 			var verified verifiedPatch
@@ -390,13 +407,13 @@ func (s *service) registerMailboxRoutes(api huma.API) {
 					api_sync_state = CASE WHEN $16 THEN '{}'::jsonb ELSE api_sync_state END,
 					ai_answers = $17, ai_answers_mode = $18, ai_answers_outside_hours = $19,
 					brand_id = $20, aliases = $21, from_name_format = $22, trusted_form_senders = $23, bot_id = $24,
-					alias_teams = $26, alias_settings = $27,
+					alias_teams = $26, alias_settings = $27, personal_replies = $28,
 					updated_at = now() WHERE workspace_id = $1 AND id = $2`,
 					p.WorkspaceID, id, m.Name, m.Email, m.DisplayName, m.OutboundKind, m.Config, sealed, m.TeamID,
 					m.SignatureHTML, m.AutoReplyEnabled, m.AutoReplySubject, m.AutoReplyHTML, m.Status,
 					reactivate || resetSync || contains(changes, "credentials"), resetSync,
 					m.AIAnswers, m.AIAnswersMode, m.AIAnswersOutsideHours, m.BrandID, m.Aliases, m.FromNameFormat, m.TrustedFormSenders, m.BotID,
-					m.InboundKind, m.AliasTeams, m.AliasSettings)
+					m.InboundKind, m.AliasTeams, m.AliasSettings, m.PersonalReplies)
 				if err != nil {
 					return err
 				}
@@ -421,6 +438,9 @@ func (s *service) registerMailboxRoutes(api huma.API) {
 				}
 				if contains(changes, "bot_id") {
 					data["bot_id"] = m.BotID
+				}
+				if contains(changes, "personal_replies") {
+					data["personal_replies"] = m.PersonalReplies
 				}
 				if contains(changes, "provider_options") {
 					data["provider_options"] = map[string]any{"mark_read": m.Config.ProviderMarkRead,
@@ -840,6 +860,13 @@ func applyPatch(m *mailboxRow, creds *credentials, in *updateMailboxInput) (chan
 	if b.Aliases != nil {
 		// A removed alias takes its settings with it.
 		keepAliasSettings(m)
+	}
+	if b.PersonalReplies != nil {
+		in := b.PersonalReplies
+		if next := (PersonalReplies{Enabled: in.Enabled, ReplyTo: in.ReplyTo, Accounts: in.Accounts}).Normalized(); !samePersonalReplies(next, m.PersonalReplies) {
+			m.PersonalReplies = next
+			changes = append(changes, "personal_replies")
+		}
 	}
 	if b.TrustedFormSenders != nil && !sameAliases(*b.TrustedFormSenders, m.TrustedFormSenders) {
 		m.TrustedFormSenders = *b.TrustedFormSenders

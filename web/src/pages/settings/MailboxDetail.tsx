@@ -42,6 +42,7 @@ import {
 } from "@/components/mailboxes/connect";
 import { SmtpPresets } from "@/components/mailboxes/smtpPresets";
 import { MailboxOllieSection } from "@/components/mailboxes/MailboxOllie";
+import { MailboxPersonalSection, mailboxDomains, PERSONAL_DEFAULTS } from "@/components/mailboxes/MailboxPersonalReplies";
 import { quietFor } from "@/components/mailboxes/quiet";
 import { AliasIdentities, aliasDraftsFor, aliasSettingsPatch, GmailSuggestions, type AliasDraft } from "@/components/mailboxes/AliasIdentities";
 import {
@@ -57,7 +58,7 @@ import { useBrands, useTeams } from "@/components/settings2/teams";
 import { ContactFormsField } from "@/components/settings/ContactFormsField";
 import { api, type MailboxReceive } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
-import type { Mailbox, MailboxConfig, MailboxTest, TemplatePreviewBody, TemplateProblem, TlsMode } from "@/lib/api/types";
+import type { Mailbox, MailboxConfig, MailboxPersonalReplies, MailboxTest, TemplatePreviewBody, TemplateProblem, TlsMode } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { relLong } from "@/lib/format";
 import { tone } from "@/lib/tones";
@@ -83,6 +84,7 @@ type Draft = {
   ai_answers_mode: Mailbox["ai_answers_mode"];
   ai_answers_outside_hours: boolean;
   bot_id: string | null;
+  personal_replies: MailboxPersonalReplies;
   outbound_kind: Mailbox["outbound_kind"];
   config: MailboxConfig;
   password: string;
@@ -125,6 +127,7 @@ function toDraft(m: Mailbox): Draft {
     ai_answers_mode: m.ai_answers_mode ?? "draft",
     ai_answers_outside_hours: m.ai_answers_outside_hours ?? false,
     bot_id: m.bot_id ?? null,
+    personal_replies: { ...(m.personal_replies ?? PERSONAL_DEFAULTS) },
     outbound_kind: m.outbound_kind,
     config: { ...m.config },
     password: "",
@@ -298,6 +301,7 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
         ...(draft.ai_answers_mode !== base.ai_answers_mode ? { ai_answers_mode: draft.ai_answers_mode } : {}),
         ...(draft.ai_answers_outside_hours !== base.ai_answers_outside_hours ? { ai_answers_outside_hours: draft.ai_answers_outside_hours } : {}),
         ...(draft.bot_id !== base.bot_id ? { bot_id: draft.bot_id } : {}),
+        ...(JSON.stringify(draft.personal_replies) !== JSON.stringify(base.personal_replies) ? { personal_replies: draft.personal_replies } : {}),
         ...(draft.outbound_kind !== base.outbound_kind ? { outbound_kind: draft.outbound_kind } : {}),
         // Only the server settings and the Gmail or Outlook options: the rest of config is the API's.
         ...(imap || smtp || tidyChanged
@@ -811,6 +815,12 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
       </Section>
 
       <MailboxOllieSection value={draft} onChange={(p) => setDraft((d) => ({ ...d, ...p }))} />
+
+      <MailboxPersonalSection
+        value={draft.personal_replies}
+        domains={mailboxDomains(mailbox.email, draft.aliases)}
+        onChange={(personal_replies) => setDraft((d) => ({ ...d, personal_replies }))}
+      />
 
       <Section title={t("detail.danger")} danger>
         <Row
