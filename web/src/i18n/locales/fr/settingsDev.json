@@ -435,6 +435,8 @@
       "lookup": "Recherche des informations",
       "asks": "Demande d’abord",
       "toggle": "Autoriser Ollie à utiliser {{name}}",
+      "askFirst": "Demander d’abord",
+      "askFirstFor": "Demander votre accord avant qu’Ollie utilise {{name}}",
       "more_one": "Afficher {{count}} de plus",
       "more_other": "Afficher {{count}} de plus",
       "more_many": "Afficher {{count}} de plus",

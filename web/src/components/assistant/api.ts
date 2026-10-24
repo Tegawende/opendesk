@@ -44,6 +44,12 @@ export type Preview = {
   external?: boolean;
   /** The connected product the change runs in ("Linear"). */
   system?: string;
+  /** Everything the change runs with, as indented JSON; changes and body may summarize it. */
+  arguments?: string;
+  /** Fields changes and body leave out. */
+  omitted?: number;
+  /** A value shown in changes or body is cut short. */
+  clipped?: boolean;
 };
 export type Approval = { action_id: string; call_id: string; tool: string; preview: Preview; token: string; expires_at: string };
 

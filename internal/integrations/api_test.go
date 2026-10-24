@@ -90,12 +90,44 @@ func TestConnectListUpdateDisconnect(t *testing.T) {
 	if err != nil || len(got) != 1 || got[0].Remote != "search_issues" || !got[0].ReadOnly {
 		t.Fatalf("offered = %+v %v", got, err)
 	}
-	if _, err := For(e.D).Call(e.Ctx, ws.ID, x.ID, "create_issue", json.RawMessage(`{}`)); err == nil {
+	if _, err := For(e.D).Call(e.Ctx, ws.ID, x.ID, "create_issue", json.RawMessage(`{}`), false); err == nil {
 		t.Fatal("a turned off tool ran")
 	}
-	res, err := For(e.D).Call(e.Ctx, ws.ID, x.ID, "search_issues", json.RawMessage(`{"title":"x"}`))
+	res, err := For(e.D).Call(e.Ctx, ws.ID, x.ID, "search_issues", json.RawMessage(`{"title":"x"}`), true)
 	if err != nil || !strings.Contains(res.Text(), "linear.app") {
 		t.Fatalf("call = %v %v", res, err)
+	}
+
+	// Ask first: a tool its server marks read-only waits for approval, and its own hint stays visible.
+	e.Do("PATCH", path, agent, map[string]any{"ask_tools": []string{"search_issues"}}).Want(t, 403)
+	e.Do("PATCH", path, admin, map[string]any{"ask_tools": []string{"search_issues", "unknown", "search_issues"}}).Want(t, 200).JSON(t, &upd)
+	for _, tl := range upd.Tools {
+		if tl.Name == "search_issues" && (tl.ReadOnly || !tl.ReadOnlyHint || !tl.AskFirst || !tl.Enabled) {
+			t.Fatalf("ask first tool = %+v", tl)
+		}
+	}
+	var asks []string
+	e.Scalar(`SELECT ask_tools FROM integrations WHERE id = $1`, &asks, x.ID)
+	if !slices.Equal(asks, []string{"search_issues"}) {
+		t.Fatalf("ask_tools = %v", asks)
+	}
+	if got, err = For(e.D).Tools(e.Ctx, ws.ID); err != nil || len(got) != 1 || got[0].ReadOnly {
+		t.Fatalf("offered with ask first = %+v %v", got, err)
+	}
+	if _, err := For(e.D).Call(e.Ctx, ws.ID, x.ID, "search_issues", json.RawMessage(`{}`), true); err == nil {
+		t.Fatal("an ask first tool ran without approval")
+	}
+	if _, err := For(e.D).Call(e.Ctx, ws.ID, x.ID, "search_issues", json.RawMessage(`{}`), false); err != nil {
+		t.Fatalf("approved call: %v", err)
+	}
+	// Other updates leave the list alone; an empty list clears it.
+	e.Do("PATCH", path, admin, map[string]any{"name": "Tracker"}).Want(t, 200).JSON(t, &upd)
+	if !slices.ContainsFunc(upd.Tools, func(tl ToolInfo) bool { return tl.AskFirst }) {
+		t.Fatalf("rename cleared ask first: %+v", upd.Tools)
+	}
+	e.Do("PATCH", path, admin, map[string]any{"ask_tools": []string{}}).Want(t, 200).JSON(t, &upd)
+	if slices.ContainsFunc(upd.Tools, func(tl ToolInfo) bool { return tl.AskFirst }) {
+		t.Fatalf("ask first not cleared: %+v", upd.Tools)
 	}
 
 	// A wrong new token is refused and leaves the working connection alone.

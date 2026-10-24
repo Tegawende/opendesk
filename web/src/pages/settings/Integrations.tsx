@@ -46,10 +46,15 @@ function ConnectedRow({ x, admin }: { x: Integration; admin: boolean }) {
   const on = x.tools.filter((tl) => tl.enabled).length;
 
   const update = useMutation({
-    mutationFn: (b: { enabled?: boolean; disabled_tools?: string[] }) => api.integrations.update(x.id, b),
+    mutationFn: (b: { enabled?: boolean; disabled_tools?: string[]; ask_tools?: string[] }) => api.integrations.update(x.id, b),
     onMutate: (b) => {
       const prev = qc.getQueryData<Integration[]>(qk.integrations);
-      const tools = b.disabled_tools ? x.tools.map((tl) => ({ ...tl, enabled: !b.disabled_tools!.includes(tl.name) })) : x.tools;
+      const tools = x.tools.map((tl) => {
+        const next = b.disabled_tools ? { ...tl, enabled: !b.disabled_tools.includes(tl.name) } : tl;
+        if (!b.ask_tools) return next;
+        const ask = b.ask_tools.includes(tl.name);
+        return { ...next, ask_first: ask, read_only: tl.read_only_hint && !ask };
+      });
       upsertInList(qc, qk.integrations, { ...x, enabled: b.enabled ?? x.enabled, tools });
       return { prev };
     },
@@ -84,6 +89,10 @@ function ConnectedRow({ x, admin }: { x: Integration; admin: boolean }) {
   const toggleTool = (name: string, enabled: boolean) => {
     const off = x.tools.filter((tl) => (tl.name === name ? !enabled : !tl.enabled)).map((tl) => tl.name);
     update.mutate({ disabled_tools: off });
+  };
+  const toggleAsk = (name: string, ask: boolean) => {
+    const list = x.tools.filter((tl) => (tl.name === name ? ask : tl.ask_first)).map((tl) => tl.name);
+    update.mutate({ ask_tools: list });
   };
 
   return (
@@ -169,7 +178,7 @@ function ConnectedRow({ x, admin }: { x: Integration; admin: boolean }) {
             transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
             className="overflow-hidden border-t border-line-soft bg-canvas"
           >
-            <ToolList x={x} disabled={!admin || update.isPending} onToggle={toggleTool} />
+            <ToolList x={x} disabled={!admin || update.isPending} onToggle={toggleTool} onAsk={toggleAsk} />
           </motion.div>
         )}
       </AnimatePresence>

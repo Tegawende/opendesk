@@ -915,7 +915,18 @@ export type IntegrationProvider = {
   token_url?: string;
   starters: IntegrationStarter[];
 };
-export type IntegrationTool = { name: string; title: string; description: string; read_only: boolean; enabled: boolean };
+export type IntegrationTool = {
+  name: string;
+  title: string;
+  description: string;
+  /** Runs without approval: the server marks it read-only and no admin set it to ask first. */
+  read_only: boolean;
+  /** The server marks it read-only (its own hint). */
+  read_only_hint: boolean;
+  /** An admin set it to wait for approval anyway. */
+  ask_first: boolean;
+  enabled: boolean;
+};
 export type Integration = {
   id: string;
   /** A catalog key, or "custom". */

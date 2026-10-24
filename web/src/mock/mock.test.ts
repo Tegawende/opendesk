@@ -128,6 +128,11 @@ describe("mock backend", () => {
     expect(created.status).toBe(201);
     expect(created.body.integration.status).toBe("connected");
     expect(created.body.integration.tools.some((x: { read_only: boolean }) => !x.read_only)).toBe(true);
+    // Ask first: a lookup waits for approval and keeps its server's hint.
+    const asked = await call("PATCH", `/v1/integrations/${created.body.integration.id}`, { ask_tools: ["search_issues"] });
+    const search = asked.body.tools.find((x: { name: string }) => x.name === "search_issues");
+    expect(search).toMatchObject({ read_only: false, read_only_hint: true, ask_first: true, enabled: true });
+    expect(asked.body.tools.filter((x: { ask_first: boolean }) => x.ask_first)).toHaveLength(1);
     const oauth = await call("POST", "/v1/integrations", { provider: "sentry" });
     expect(oauth.body.authorize_url).toContain("/settings/integrations?connected=");
     expect((await call("POST", "/v1/integrations", { provider: "custom", url: "https://10.0.0.4/mcp" })).status).toBe(422);

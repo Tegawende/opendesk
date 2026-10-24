@@ -573,7 +573,8 @@ func (s *Service) decide(ctx context.Context, id uuid.UUID, in DecisionInput, em
 		emit("tool", st)
 		var out output
 		err = errNotPending
-		if t != nil && t.Write && p.Role.AtLeast(t.MinRole) {
+		// Every write has Apply, and so does a connected tool turned read-only since it was proposed.
+		if t != nil && t.Apply != nil && p.Role.AtLeast(t.MinRole) {
 			out, err = t.Apply(ctx, rc, newCaller(s.api, p, true), a.Args, "assistant-"+a.ID.String())
 		} else if t != nil {
 			err = &apiError{Status: http.StatusForbidden}

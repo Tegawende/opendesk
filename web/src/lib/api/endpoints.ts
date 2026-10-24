@@ -351,7 +351,7 @@ export const api = {
       http.create<{ integration: T.Integration; authorize_url?: string }>("/v1/integrations", b),
     authorize: (id: string) => http.post<{ integration: T.Integration; authorize_url: string }>(`/v1/integrations/${id}/authorize`),
     sync: (id: string) => http.post<T.Integration>(`/v1/integrations/${id}/sync`),
-    update: (id: string, b: { name?: string; enabled?: boolean; disabled_tools?: string[]; token?: string }) =>
+    update: (id: string, b: { name?: string; enabled?: boolean; disabled_tools?: string[]; ask_tools?: string[]; token?: string }) =>
       http.patch<T.Integration>(`/v1/integrations/${id}`, b),
     remove: (id: string) => http.del(`/v1/integrations/${id}`),
   },

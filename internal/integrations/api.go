@@ -62,8 +62,11 @@ type ToolInfo struct {
 	Name        string `json:"name"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
-	ReadOnly    bool   `json:"read_only" doc:"Runs without approval"`
-	Enabled     bool   `json:"enabled"`
+	ReadOnly    bool   `json:"read_only" doc:"Runs without approval: the server marks it read-only and it is not on ask_tools"`
+	// ReadOnlyHint is what the server itself says, whatever the workspace decided.
+	ReadOnlyHint bool `json:"read_only_hint" doc:"The server marks the tool read-only (its readOnlyHint)"`
+	AskFirst     bool `json:"ask_first" doc:"An admin set it to wait for approval (ask_tools)"`
+	Enabled      bool `json:"enabled"`
 }
 
 func (x *row) api() Integration {
@@ -75,7 +78,8 @@ func (x *row) api() Integration {
 	}
 	for _, t := range x.Tools {
 		out.Tools = append(out.Tools, ToolInfo{Name: t.Name, Title: firstNonEmpty(t.Title, humanize(t.Name)), Description: t.Description,
-			ReadOnly: t.ReadOnly, Enabled: !slices.Contains(x.DisabledTools, t.Name)})
+			ReadOnly: x.readOnly(t), ReadOnlyHint: t.ReadOnly, AskFirst: slices.Contains(x.AskTools, t.Name),
+			Enabled: !slices.Contains(x.DisabledTools, t.Name)})
 	}
 	return out
 }
@@ -420,6 +424,7 @@ func (s *Service) registerRoutes(api huma.API, r chi.Router) {
 				Name          *string  `json:"name,omitempty" maxLength:"64"`
 				Enabled       *bool    `json:"enabled,omitempty"`
 				DisabledTools []string `json:"disabled_tools,omitempty" maxItems:"200" doc:"Tools Ollie may not use; replaces the list"`
+				AskTools      []string `json:"ask_tools,omitempty" maxItems:"200" doc:"Tools that wait for approval even when their server marks them read-only; replaces the list"`
 				Token         *string  `json:"token,omitempty" maxLength:"4096" doc:"Token sign-in only"`
 			}
 		}) (*struct{ Body Integration }, error) {
@@ -448,13 +453,12 @@ func (s *Service) registerRoutes(api huma.API, r chi.Router) {
 				changed = append(changed, "enabled")
 			}
 			if b.DisabledTools != nil {
-				x.DisabledTools = []string{}
-				for _, n := range b.DisabledTools {
-					if slices.ContainsFunc(x.Tools, func(t StoredTool) bool { return t.Name == n }) && !slices.Contains(x.DisabledTools, n) {
-						x.DisabledTools = append(x.DisabledTools, n)
-					}
-				}
+				x.DisabledTools = x.knownTools(b.DisabledTools)
 				changed = append(changed, "tools")
+			}
+			if b.AskTools != nil {
+				x.AskTools = x.knownTools(b.AskTools)
+				changed = append(changed, "ask_tools")
 			}
 			if b.Token != nil {
 				if x.AuthType != "token" {
@@ -483,8 +487,8 @@ func (s *Service) registerRoutes(api huma.API, r chi.Router) {
 			err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				raw, _ := json.Marshal(x.Tools)
 				if _, err := tx.Exec(ctx, `UPDATE integrations SET name = $3, enabled = $4, disabled_tools = $5, credentials_enc = $6,
-					tools = $7, status = $8, last_error = $9, synced_at = $10, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
-					p.WorkspaceID, x.ID, x.Name, x.Enabled, x.DisabledTools, x.CredentialsEnc, raw, x.Status, x.LastError, x.SyncedAt); err != nil {
+					tools = $7, status = $8, last_error = $9, synced_at = $10, ask_tools = $11, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
+					p.WorkspaceID, x.ID, x.Name, x.Enabled, x.DisabledTools, x.CredentialsEnc, raw, x.Status, x.LastError, x.SyncedAt, x.AskTools); err != nil {
 					return err
 				}
 				if err := s.publish(ctx, tx, "integration.updated", p.WorkspaceID, map[string]any{"integration": x.api()}); err != nil {

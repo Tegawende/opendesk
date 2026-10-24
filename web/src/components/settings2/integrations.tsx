@@ -226,12 +226,27 @@ export function ConnectDialog({ provider, onClose, onConnected }: { provider: In
   );
 }
 
-/** Each tool with its switch. Lookups run on their own; everything else asks first. */
-export function ToolList({ x, disabled, onToggle }: { x: Integration; disabled?: boolean; onToggle: (name: string, on: boolean) => void }) {
+/**
+ * Each tool with its switch. Lookups run on their own unless an admin sets them to ask
+ * first; everything else asks first.
+ */
+export function ToolList({
+  x,
+  disabled,
+  onToggle,
+  onAsk,
+}: {
+  x: Integration;
+  disabled?: boolean;
+  onToggle: (name: string, on: boolean) => void;
+  /** Sets a tool its server marks read-only to wait for approval. */
+  onAsk: (name: string, ask: boolean) => void;
+}) {
   const { t } = useTranslation("settingsDev");
   const reduce = useReducedMotion();
   const [all, setAll] = useState(false);
-  const tools = [...x.tools].sort((a, b) => Number(b.read_only) - Number(a.read_only) || a.title.localeCompare(b.title));
+  // Sorted by the server's own hint, so a row stays put when it is set to ask first.
+  const tools = [...x.tools].sort((a, b) => Number(b.read_only_hint) - Number(a.read_only_hint) || a.title.localeCompare(b.title));
   const shown = all ? tools : tools.slice(0, 8);
   if (!tools.length) return <p className="px-4 py-3 text-[12.5px] text-fg-3">{t("integrations.tools.none")}</p>;
   return (
@@ -256,6 +271,17 @@ export function ToolList({ x, disabled, onToggle }: { x: Integration; disabled?:
               </div>
               {tl.description && <p className="mt-0.5 line-clamp-1 text-[11.5px] text-fg-3">{tl.description}</p>}
             </div>
+            {tl.read_only_hint && (
+              <label className={cn("flex shrink-0 items-center gap-1.5 text-[11.5px] text-fg-3", !disabled && tl.enabled && "cursor-pointer hover:text-fg-2", !tl.enabled && "opacity-55")}>
+                {t("integrations.tools.askFirst")}
+                <Switch
+                  checked={tl.ask_first}
+                  disabled={disabled || !tl.enabled}
+                  onCheckedChange={(ask) => onAsk(tl.name, ask)}
+                  aria-label={t("integrations.tools.askFirstFor", { name: tl.title })}
+                />
+              </label>
+            )}
             <Switch checked={tl.enabled} disabled={disabled} onCheckedChange={(on) => onToggle(tl.name, on)} aria-label={t("integrations.tools.toggle", { name: tl.title })} />
           </motion.div>
         ))}

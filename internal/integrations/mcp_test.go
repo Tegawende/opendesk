@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -377,6 +378,36 @@ func TestStoredToolsSanitizes(t *testing.T) {
 	// Duplicates, nameless tools and oversized schemas are dropped, long text is clipped.
 	if len(out) != 1 || out[0].Name != "a" || len([]rune(out[0].Description)) > 1100 {
 		t.Fatalf("out = %d tools", len(out))
+	}
+}
+
+func TestAskFirstMakesAReadAWrite(t *testing.T) {
+	x := &row{Tools: []StoredTool{{Name: "search", ReadOnly: true}, {Name: "fetch", ReadOnly: true}, {Name: "create"}},
+		AskTools: []string{"search"}}
+	for name, want := range map[string]bool{"search": false, "fetch": true, "create": false} {
+		i := slices.IndexFunc(x.Tools, func(t StoredTool) bool { return t.Name == name })
+		if got := x.readOnly(x.Tools[i]); got != want {
+			t.Errorf("readOnly(%s) = %v, want %v", name, got, want)
+		}
+	}
+	for _, tl := range x.api().Tools {
+		switch tl.Name {
+		case "search":
+			if tl.ReadOnly || !tl.ReadOnlyHint || !tl.AskFirst {
+				t.Errorf("search = %+v", tl)
+			}
+		case "fetch":
+			if !tl.ReadOnly || !tl.ReadOnlyHint || tl.AskFirst {
+				t.Errorf("fetch = %+v", tl)
+			}
+		case "create":
+			if tl.ReadOnly || tl.ReadOnlyHint || tl.AskFirst {
+				t.Errorf("create = %+v", tl)
+			}
+		}
+	}
+	if got := x.knownTools([]string{"fetch", "nope", "fetch", "create"}); !slices.Equal(got, []string{"fetch", "create"}) {
+		t.Fatalf("knownTools = %v", got)
 	}
 }
 

@@ -349,7 +349,9 @@ interface Step { id: string; tool: string; label: string;
 interface Ref { kind: "ticket"|"contact"|"article"|"view"|"automation"|"member"|"external" /* id is the https link */; id: string; label: string; number?: number }
 interface Preview { title: string; summary?: string; changes?: {field: string; from: string; to: string}[];
   body?: string /* markdown, a reply or note */; targets?: Ref[]; total?: number; external?: boolean /* reaches a customer */;
-  system?: string /* the connected product the change runs in, e.g. "Linear" */ }
+  system?: string /* the connected product the change runs in, e.g. "Linear" */;
+  arguments?: string /* everything the change runs with, indented JSON: a connected tool's arguments as sent, api_change's {method, path, query?, body?} */;
+  omitted?: number /* fields changes and body leave out */; clipped?: boolean /* a value shown is cut short */ }
 interface Approval { action_id: string; call_id: string; tool: string; preview: Preview; token: string; expires_at: string }
 interface Item { role: "user"|"assistant"; text: string; steps: Step[]; context?: PageContext }
 interface Tip { key: string; text: string; prompt: string; severity: "high"|"medium"|"low"; count: number }
@@ -394,13 +396,20 @@ and activities:
   billing, the AI provider, imports, owner-only operations (deleting the workspace or the account, transfer, widget
   secrets) and ticket messages (`draft_reply` and `add_note` instead). A body with a credential-named field
   (secret, token, password, API key) is refused, and such values are `[hidden]` in every answer the model reads.
+  So are the parts of a URL that can carry one, in every string of those answers that is an absolute http(s)
+  URL: userinfo is dropped, each query and fragment value is `[hidden]` (names kept), and so is each path
+  segment that looks like a token (a run of 20 or more letters, digits, `-` and `_` mixing letters and
+  digits, with an unbroken stretch of 16 or more, or 32 or more long in mixed case; UUIDs and ordinary slugs
+  are kept). `preview.arguments` is the request the change sends; `changes` show values up to 2,000
+  characters (`clipped` past that) and `omitted` counts body fields already set to the same value.
   Writes that reach someone outside (invitations, Collab mail, test sends) set `preview.external`.
 - teammates (agent+): `ask_teammate {teammate, question, keywords?}` asks a teammate's Ollie about
   their own mail (below, "Asking a teammate"). A read: it needs no approval, since it reads only
   what the teammate consented to share. Offered only while the workspace allows it.
 - connected (agent+): the workspace's integrations' MCP tools, named `<slug>__<tool>`
-  (`contracts/integrations.md`). Server-marked read-only tools are reads; every other one
-  is a write with `preview.system` set.
+  (`contracts/integrations.md`). Server-marked read-only tools are reads unless an admin set
+  them to ask first; every other one is a write with `preview.system` set and the complete
+  arguments in `preview.arguments`.
 
 Approvals:
 - A write is stored as an `assistant_actions` row (`pending`, 15 minutes) and the client

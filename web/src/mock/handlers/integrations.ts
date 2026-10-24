@@ -53,7 +53,7 @@ const catalog: (IntegrationProvider & { hosts: string[] })[] = [
   { key: "zapier", name: "Zapier", category: "automation", description: "Reach thousands of apps through the actions you enable in Zapier.", url: "https://mcp.zapier.com/api/mcp/mcp", auth: "oauth", hosts: [], starters: [] },
 ];
 
-const tool = (name: string, title: string, description: string, read_only: boolean): IntegrationTool => ({ name, title, description, read_only, enabled: true });
+const tool = (name: string, title: string, description: string, read_only: boolean): IntegrationTool => ({ name, title, description, read_only, read_only_hint: read_only, ask_first: false, enabled: true });
 
 const toolsFor: Record<string, IntegrationTool[]> = {
   linear: [
@@ -266,6 +266,14 @@ export function registerIntegrations() {
     if (Array.isArray(ctx.body.disabled_tools)) {
       const off = new Set(ctx.body.disabled_tools as string[]);
       x.tools = x.tools.map((tl) => ({ ...tl, enabled: !off.has(tl.name) }));
+    }
+    if (Array.isArray(ctx.body.ask_tools)) {
+      // A tool its server marks read-only waits for approval while it is on the list.
+      const ask = new Set(ctx.body.ask_tools as string[]);
+      x.tools = x.tools.map((tl) => {
+        const hint = tl.read_only_hint ?? tl.read_only;
+        return { ...tl, read_only_hint: hint, ask_first: ask.has(tl.name), read_only: hint && !ask.has(tl.name) };
+      });
     }
     save();
     publish(ctx.ws, "integration.updated", { integration: x });

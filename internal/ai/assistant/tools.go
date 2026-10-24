@@ -42,6 +42,14 @@ type Preview struct {
 	External bool `json:"external,omitempty"`
 	// System names the connected tool the change runs in ("Linear").
 	System string `json:"system,omitempty"`
+	// Arguments is everything the change runs with, as indented JSON: a connected
+	// tool's arguments as they are sent, or api_change's request. Changes and Body may
+	// summarize; this is complete.
+	Arguments string `json:"arguments,omitempty"`
+	// Omitted counts the fields Changes and Body leave out; Clipped marks a value
+	// they show cut short.
+	Omitted int  `json:"omitted,omitempty"`
+	Clipped bool `json:"clipped,omitempty"`
 }
 
 // Change is one field of a diff.

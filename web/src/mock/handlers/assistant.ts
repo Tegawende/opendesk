@@ -251,7 +251,12 @@ async function signature(ctx: Ctx, s: Sess, text: string, emit: Emit, item: Tran
   const st: AssistantStep = { id: id(), tool: "api_change", label: "Update a mailbox", status: "awaiting_approval", action_id: pid };
   await emit("tool", st);
   item.steps.push(st);
-  const preview: Preview = { title: "Update a mailbox", summary: box.name || box.email, changes: [{ field: "signature_html", from: box.signature_html || "", to: value }] };
+  const preview: Preview = {
+    title: "Update a mailbox",
+    summary: box.name || box.email,
+    changes: [{ field: "signature_html", from: box.signature_html || "", to: value }],
+    arguments: JSON.stringify({ method: "PATCH", path: `/v1/mailboxes/${box.id}`, body: { signature_html: value } }, null, 2),
+  };
   s.pending = {
     id: pid,
     callId: st.id,
@@ -323,11 +328,14 @@ async function connectedTools(ctx: Ctx, s: Sess, lower: string, current: Ticket 
   const st: AssistantStep = { id: id(), tool: `${slug}__${create.name}`, label: `Preparing ${create.title.toLowerCase()} in ${x.name}`, status: "awaiting_approval", action_id: pid };
   await emit("tool", st);
   item.steps.push(st);
+  const priority = current.priority === "urgent" ? "Urgent" : current.priority === "high" ? "High" : "Medium";
+  const args: Record<string, string> = x.provider === "linear" ? { title, team: "Support", priority, description: body } : { title, description: body };
   const preview: Preview = {
     title: `${x.name}: ${create.title}`,
     system: x.name,
-    changes: [{ field: "Title", from: "", to: title }, ...(x.provider === "linear" ? [{ field: "Team", from: "", to: "Support" }, { field: "Priority", from: "", to: current.priority === "urgent" ? "Urgent" : current.priority === "high" ? "High" : "Medium" }] : [])],
+    changes: [{ field: "Title", from: "", to: title }, ...(x.provider === "linear" ? [{ field: "Team", from: "", to: "Support" }, { field: "Priority", from: "", to: priority }] : [])],
     body,
+    arguments: JSON.stringify(args, null, 2),
   };
   const n = 180 + current.number;
   const url = x.provider === "github" ? `https://github.com/margin/app/issues/${n}` : x.provider === "atlassian" ? `https://margin.atlassian.net/browse/SUP-${n}` : `https://${host}/margin/issue/FN-${n}`;

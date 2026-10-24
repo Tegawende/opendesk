@@ -60,7 +60,13 @@
     "field": "Field",
     "before": "Now",
     "after": "After",
-    "of": "{{shown}} of {{total}} matching"
+    "of": "{{shown}} of {{total}} matching",
+    "moreFields_one": "1 more field",
+    "moreFields_other": "{{count}} more fields",
+    "clipped": "Some values are cut short",
+    "showArguments": "Show all arguments",
+    "hideArguments": "Hide arguments",
+    "arguments": "Everything this change sends"
   },
   "status": {
     "running": "Working",

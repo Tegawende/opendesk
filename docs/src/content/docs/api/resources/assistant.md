@@ -62,7 +62,7 @@ Ollie never changes anything on its own. A change arrives as an `approval` event
 }
 ```
 
-`body` holds the markdown of a reply or note, `total` the number of matching tickets for a bulk change, and `external: true` marks a reply that reaches the customer.
+`body` holds the markdown of a reply or note, `total` the number of matching tickets for a bulk change, and `external: true` marks a reply that reaches the customer. A change in a connected product names it in `system`. For a connected tool or a change through the API, `arguments` is everything the change runs with, as indented JSON (a connected tool's arguments exactly as they are sent; for the API, `{method, path, query, body}`), `omitted` counts the fields `changes` and `body` leave out, and `clipped: true` marks a value they cut short.
 
 ```http
 POST /v1/assistant/actions/{action_id}/decision

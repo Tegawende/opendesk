@@ -107,7 +107,9 @@ type StoredTool struct {
 	Title       string          `json:"title,omitempty"`
 	Description string          `json:"description,omitempty"`
 	InputSchema json.RawMessage `json:"input_schema"`
-	ReadOnly    bool            `json:"read_only"`
+	// ReadOnly is the server's own readOnlyHint; whether Ollie runs the tool without
+	// approval is row.readOnly, which also honours the admin's ask_tools.
+	ReadOnly bool `json:"read_only"`
 }
 
 type row struct {
@@ -123,6 +125,7 @@ type row struct {
 	OAuthEnc       []byte
 	Tools          []StoredTool
 	DisabledTools  []string
+	AskTools       []string
 	Enabled        bool
 	LastError      string
 	Icon           domain.Avatar
@@ -132,17 +135,34 @@ type row struct {
 }
 
 const rowSelect = `SELECT id, workspace_id, provider, slug, name, url, auth_type, status, credentials_enc, oauth_enc, tools,
-	disabled_tools, enabled, last_error, icon, synced_at, created_at, updated_at FROM integrations`
+	disabled_tools, ask_tools, enabled, last_error, icon, synced_at, created_at, updated_at FROM integrations`
 
 func scanRow(r pgx.Row) (*row, error) {
 	var x row
 	var tools []byte
 	if err := r.Scan(&x.ID, &x.WorkspaceID, &x.Provider, &x.Slug, &x.Name, &x.URL, &x.AuthType, &x.Status, &x.CredentialsEnc,
-		&x.OAuthEnc, &tools, &x.DisabledTools, &x.Enabled, &x.LastError, &x.Icon, &x.SyncedAt, &x.CreatedAt, &x.UpdatedAt); err != nil {
+		&x.OAuthEnc, &tools, &x.DisabledTools, &x.AskTools, &x.Enabled, &x.LastError, &x.Icon, &x.SyncedAt, &x.CreatedAt, &x.UpdatedAt); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal(tools, &x.Tools)
 	return &x, nil
+}
+
+// readOnly says whether a tool runs without approval: its server marks it read-only
+// and no admin asked for it to wait for approval.
+func (x *row) readOnly(t StoredTool) bool {
+	return t.ReadOnly && !slices.Contains(x.AskTools, t.Name)
+}
+
+// knownTools keeps the names in list that are tools of the connection, once each.
+func (x *row) knownTools(list []string) []string {
+	out := []string{}
+	for _, n := range list {
+		if slices.ContainsFunc(x.Tools, func(t StoredTool) bool { return t.Name == n }) && !slices.Contains(out, n) {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 func loadRow(ctx context.Context, q db.Querier, wid, id uuid.UUID) (*row, error) {
@@ -373,8 +393,10 @@ type Tool struct {
 	Title         string
 	Description   string
 	Schema        map[string]any
-	ReadOnly      bool
-	Hosts         []string
+	// ReadOnly: the tool runs without approval (its server marks it read-only and no
+	// admin asked for approval first).
+	ReadOnly bool
+	Hosts    []string
 }
 
 // maxOffered bounds the connected tools offered to the model in one run.
@@ -411,14 +433,16 @@ func (s *Service) Tools(ctx context.Context, wid uuid.UUID) ([]Tool, error) {
 			}
 			out = append(out, Tool{Name: toolName(x.Slug, t.Name), Remote: t.Name, IntegrationID: x.ID, Integration: x.Name,
 				Provider: x.Provider, Title: firstNonEmpty(t.Title, humanize(t.Name)),
-				Description: clip("["+x.Name+"] "+desc, 1100), Schema: schema, ReadOnly: t.ReadOnly, Hosts: prov.Hosts})
+				Description: clip("["+x.Name+"] "+desc, 1100), Schema: schema, ReadOnly: x.readOnly(t), Hosts: prov.Hosts})
 		}
 	}
 	return out, nil
 }
 
-// Call runs one tool on its server.
-func (s *Service) Call(ctx context.Context, wid, integrationID uuid.UUID, remote string, args json.RawMessage) (*CallResult, error) {
+// Call runs one tool on its server. read is a call made without the user's approval:
+// it runs only while the tool is read-only as the workspace has it now, so a tool an
+// admin set to ask first never runs as a read.
+func (s *Service) Call(ctx context.Context, wid, integrationID uuid.UUID, remote string, args json.RawMessage, read bool) (*CallResult, error) {
 	x, err := loadRow(ctx, s.d.DB.Pool, wid, integrationID)
 	if err != nil {
 		if db.IsNotFound(err) {
@@ -429,8 +453,12 @@ func (s *Service) Call(ctx context.Context, wid, integrationID uuid.UUID, remote
 	if !x.Enabled || x.Status != "connected" {
 		return nil, errors.New(x.Name + " is not connected. An admin can reconnect it in Settings, Integrations")
 	}
-	if slices.Contains(x.DisabledTools, remote) || !slices.ContainsFunc(x.Tools, func(t StoredTool) bool { return t.Name == remote }) {
+	i := slices.IndexFunc(x.Tools, func(t StoredTool) bool { return t.Name == remote })
+	if i < 0 || slices.Contains(x.DisabledTools, remote) {
 		return nil, errors.New("this tool is turned off for the workspace")
+	}
+	if read && !x.readOnly(x.Tools[i]) {
+		return nil, errors.New("this tool needs the user's approval now. Propose it again")
 	}
 	var res *CallResult
 	err = s.withSession(ctx, x, func(sess *session) error {
