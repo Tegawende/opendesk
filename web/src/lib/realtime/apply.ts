@@ -101,12 +101,16 @@ function refreshImported(qc: QueryClient) {
   });
 }
 
-/** Coalesce bursts (bulk edits) into one counts refetch, the sidebar's numbers of every workspace with it. */
+/**
+ * Coalesce bursts (bulk edits, imports, auto-close) into one counts refetch every two seconds at
+ * most, the sidebar's numbers of every workspace with it. A refetch still running is left to
+ * finish and the next one starts after it, so the numbers settle on a read after the last event.
+ */
 function refreshCounts(qc: QueryClient) {
-  later("counts", 250, () => {
-    void qc.invalidateQueries({ queryKey: qk.counts });
-    void qc.invalidateQueries({ queryKey: qk.of("tickets", "everywhere") });
-    void qc.invalidateQueries({ queryKey: qk.overview });
+  later("counts", 2000, function refetch() {
+    const keys = [qk.counts, qk.of("tickets", "everywhere"), qk.overview];
+    if (keys.some((queryKey) => qc.isFetching({ queryKey }) > 0)) return later("counts", 2000, refetch);
+    for (const queryKey of keys) void qc.invalidateQueries({ queryKey }, { cancelRefetch: false });
   });
 }
 
