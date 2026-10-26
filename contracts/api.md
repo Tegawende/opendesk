@@ -53,7 +53,7 @@ type WorkspaceSettings = { brand_color?: string; timezone?: string; help_center_
   undo_send_seconds?: 0 | 5 | 10 | 20 | 30 /* default 5: the app holds an agent's reply on an email (or any other non-chat) ticket this long before it POSTs it, with Undo (back into the composer) and Turn into internal note; nothing reaches the server until then, so the API itself never delays; 0 sends at once */;
   undo_send_chat_seconds?: 0 | 5 | 10 | 20 | 30 /* default 0: the same for replies on chat tickets, which go at once unless set */;
   status_labels?: Partial<Record<TicketStatus, DisplayOverride>>; priority_labels?: Partial<Record<Priority, DisplayOverride>> /* display only; the API values never change */ };
-type DisplayOverride = { label?: string /* 1..40, no < > */; color?: LabelColor };
+type DisplayOverride = { label?: string /* 1..40, no < > */; color?: LabelColor; hidden?: boolean /* status_labels only: left out of the menus agents pick a status from (a ticket in it keeps it; the API, automations and snooze still set it); never open, nor solved and closed both; solving sets closed when solved is hidden */ };
 type Membership = { workspace: Workspace; role: Role; suspended: boolean /* an instance admin suspended it: its routes answer 403 workspace_suspended (contracts/admin.md) */ };
 type Role = "owner" | "admin" | "agent" | "viewer";
 type Member = { user: UserRef & { avatar_source: AvatarSource | null }; role: Role;

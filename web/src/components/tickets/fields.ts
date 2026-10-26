@@ -9,7 +9,7 @@ import { isApiError } from "@/lib/api/client";
 import type { CustomField, FieldValue, Priority, Tag, TagGroup, Ticket, TicketPatch, TicketStatus } from "@/lib/api/types";
 import { q } from "@/lib/queries";
 import { isTone, type Tone } from "@/lib/tones";
-import { priorityLabel, statusLabel } from "./bits";
+import { priorityLabel, statusLabel, statusOrder } from "./bits";
 
 export type { CustomField, FieldOption, FieldType, FieldValue, FieldValues } from "@/lib/api/types";
 export type LabelRef = Tag;
@@ -31,7 +31,7 @@ export function useTicketFields() {
 /** An agent named a label that doesn't exist while only admins may create labels. */
 export const isUnknownLabel = (e: unknown) => isApiError(e, "unknown_label");
 
-type Override = { label?: string; color?: string };
+type Override = { label?: string; color?: string; hidden?: boolean };
 type DisplaySettings = { label_creation?: "anyone" | "admins"; status_labels?: Record<string, Override>; priority_labels?: Record<string, Override> };
 
 /** The workspace's display overrides for status and priority names and colours, and who may create labels. */
@@ -45,7 +45,23 @@ export function useDisplay() {
     status: (v: TicketStatus) => s.status_labels?.[v]?.label || statusLabel(v),
     priority: (v: Priority) => s.priority_labels?.[v]?.label || priorityLabel(v),
     statusTone: (v: TicketStatus): Tone | undefined => (isTone(s.status_labels?.[v]?.color) ? (s.status_labels![v]!.color as Tone) : undefined),
+    /** Whether the workspace hides the status from the agents' menus. */
+    hidden: (v: TicketStatus) => !!s.status_labels?.[v]?.hidden,
+    /** The statuses an agent may pick, keeping the ticket's current one. */
+    statuses: (current?: TicketStatus) => offeredStatuses(s.status_labels, current),
+    /** What solving a ticket sets: solved, or closed where solved is hidden. */
+    finish: finishStatus(s.status_labels),
   };
+}
+
+/** The statuses in menu order without the ones the workspace hides; the ticket's current status stays. */
+export function offeredStatuses(labels: Record<string, Override> | undefined, current?: TicketStatus): TicketStatus[] {
+  return statusOrder.filter((s) => s === current || !labels?.[s]?.hidden);
+}
+
+/** solved, or closed when the workspace hides solved (it never hides both). */
+export function finishStatus(labels: Record<string, Override> | undefined): TicketStatus {
+  return labels?.solved?.hidden ? "closed" : "solved";
 }
 
 export function hasValue(f: CustomField, v: FieldValue | undefined | null): boolean {

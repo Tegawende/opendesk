@@ -43,3 +43,28 @@ func TestMessageDeleteSetting(t *testing.T) {
 		t.Fatal("accepted everyone")
 	}
 }
+
+// TestHiddenStatuses checks a workspace can hide statuses from the agents' menus, but never
+// open, nor both ways to finish a ticket, and never a priority.
+func TestHiddenStatuses(t *testing.T) {
+	out, err := validateSettings(&CoreWorkspaceSettings{StatusLabels: map[string]DisplayOverride{
+		"pending": {Hidden: true}, "on_hold": {Hidden: true}, "solved": {Hidden: true}, "closed": {Label: "Done"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out["status_labels"].(map[string]any)
+	if got["pending"].(map[string]any)["hidden"] != true || got["solved"].(map[string]any)["hidden"] != true || got["closed"].(map[string]any)["hidden"] != nil {
+		t.Fatalf("stored %v", got)
+	}
+	for name, in := range map[string]map[string]DisplayOverride{
+		"open":              {"open": {Hidden: true}},
+		"solved and closed": {"solved": {Hidden: true}, "closed": {Hidden: true}},
+	} {
+		if _, err := validateSettings(&CoreWorkspaceSettings{StatusLabels: in}); err == nil {
+			t.Fatalf("%s: accepted", name)
+		}
+	}
+	if _, err := validateSettings(&CoreWorkspaceSettings{PriorityLabels: map[string]DisplayOverride{"low": {Hidden: true}}}); err == nil {
+		t.Fatal("hidden priority accepted")
+	}
+}

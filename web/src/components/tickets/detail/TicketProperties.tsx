@@ -16,7 +16,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { ContactCard } from "@/components/contacts/ContactCard";
 import { api } from "@/lib/api/endpoints";
 import { OlliePanel } from "@/components/ai/ticket/OlliePanel";
-import { ChannelIcon, channelLabel, PriorityIcon, priorityOrder, SeverityChip, severityHint, severityLabel, severityOrder, slaState, StatusIcon, statusOrder } from "../bits";
+import { ChannelIcon, channelLabel, PriorityIcon, priorityOrder, SeverityChip, severityHint, severityLabel, severityOrder, slaState, StatusIcon } from "../bits";
 import { aiDecisions } from "@/lib/decisions";
 import { LabelPicker } from "./LabelPicker";
 import { SetByOllie, useAISet, useOllieNote } from "../ollie";
@@ -208,7 +208,7 @@ export function TicketProperties({
             {...openFor("status")}
             value={t.status}
             placeholder={tr("props.setStatus")}
-            items={statusOrder.map((s) => ({ value: s, label: display.status(s), icon: <StatusIcon status={s} /> }))}
+            items={display.statuses(t.status).map((s) => ({ value: s, label: display.status(s), icon: <StatusIcon status={s} /> }))}
             onSelect={(v) => patch({ status: v as TicketStatus })}
             trigger={
               <PropButton disabled={!canEdit}>

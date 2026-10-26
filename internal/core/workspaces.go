@@ -51,7 +51,8 @@ type CoreWorkspaceSettings struct {
 	CollabReplyTo     *string `json:"collab_ticket_reply_to,omitempty" enum:"address,mailbox" doc:"Where answers to a reply sent from a member's own address go when it names no Reply-To: the address's own reply-to (else the address), or the ticket's reply address. Default address"`
 	UndoSendSeconds   *int    `json:"undo_send_seconds,omitempty" enum:"0,5,10,20,30" doc:"Seconds the app holds an agent's reply on an email (or any other non-chat) ticket, with a way to take it back or make it a note, before sending it. Default 5; 0 sends at once"`
 	UndoSendChatSecs  *int    `json:"undo_send_chat_seconds,omitempty" enum:"0,5,10,20,30" doc:"The same for replies on chat tickets. Default 0: a chat reply goes at once"`
-	// StatusLabels and PriorityLabels rename and recolour the fixed values for display only.
+	// StatusLabels and PriorityLabels rename and recolour the fixed values for display only;
+	// a status can also be hidden from the menus agents pick from.
 	StatusLabels   map[string]DisplayOverride `json:"status_labels,omitempty"`
 	PriorityLabels map[string]DisplayOverride `json:"priority_labels,omitempty"`
 }
@@ -60,6 +61,9 @@ type CoreWorkspaceSettings struct {
 type DisplayOverride struct {
 	Label string `json:"label,omitempty" maxLength:"40"`
 	Color string `json:"color,omitempty" enum:"gray,red,orange,amber,yellow,lime,green,teal,cyan,blue,indigo,violet,purple,pink,rose"`
+	// Hidden is for status_labels only: the status leaves the menus agents pick from (a ticket
+	// already in it still shows it, and the API, automations and snoozing still set it).
+	Hidden bool `json:"hidden,omitempty" doc:"status_labels only: hide the status from the menus agents pick from. open cannot be hidden, nor solved and closed both"`
 }
 
 func validOverrides(field string, in map[string]DisplayOverride, allowed []string) (map[string]any, error) {
@@ -68,6 +72,12 @@ func validOverrides(field string, in map[string]DisplayOverride, allowed []strin
 		if !slices.Contains(allowed, k) {
 			return nil, httpx.Validation(field + " keys must be one of " + strings.Join(allowed, ", ") + ".")
 		}
+		if v.Hidden && field != "status_labels" {
+			return nil, httpx.Validation("only statuses can be hidden.")
+		}
+		if v.Hidden && k == domain.StatusOpen {
+			return nil, httpx.Validation("the open status cannot be hidden.")
+		}
 		label := displayname.Normalize(v.Label)
 		if utf8.RuneCountInString(label) > 40 || strings.ContainsAny(label, "<>`") || strings.IndexFunc(label, unicode.IsControl) >= 0 {
 			return nil, httpx.Validation(field + " labels must be 40 characters or less, without markup.")
@@ -75,7 +85,7 @@ func validOverrides(field string, in map[string]DisplayOverride, allowed []strin
 		if v.Color != "" && !slices.Contains(domain.LabelColors, v.Color) {
 			return nil, httpx.Validation(field + " colours must be one of " + strings.Join(domain.LabelColors, ", ") + ".")
 		}
-		if label == "" && v.Color == "" {
+		if label == "" && v.Color == "" && !v.Hidden {
 			continue
 		}
 		o := map[string]any{}
@@ -85,7 +95,14 @@ func validOverrides(field string, in map[string]DisplayOverride, allowed []strin
 		if v.Color != "" {
 			o["color"] = v.Color
 		}
+		if v.Hidden {
+			o["hidden"] = true
+		}
 		out[k] = o
+	}
+	// Agents must keep a way to finish a ticket.
+	if in[domain.StatusSolved].Hidden && in[domain.StatusClosed].Hidden {
+		return nil, httpx.Validation("solved and closed cannot both be hidden.")
 	}
 	return out, nil
 }

@@ -15,7 +15,7 @@ import { toast } from "@/components/ui/toast";
 import type { Priority, Severity, Ticket, TicketStatus } from "@/lib/api/types";
 import { cachedTicket } from "@/lib/ticketCache";
 import { q } from "@/lib/queries";
-import { PriorityIcon, priorityLabel, priorityOrder, SeverityChip, severityHint, severityLabel, severityOrder, StatusIcon, statusLabel, statusOrder } from "./bits";
+import { PriorityIcon, priorityLabel, priorityOrder, SeverityChip, severityHint, severityLabel, severityOrder, StatusIcon, statusLabel } from "./bits";
 import { useLabelChoices } from "./detail/LabelPicker";
 import { useDisplay } from "./fields";
 import { useBulkUpdate } from "./useTicketActions";
@@ -136,7 +136,7 @@ export function BulkBar({
             side="top"
             placeholder={t("bulk.setStatus")}
             value={null}
-            items={statusOrder.map((s) => ({ value: s, label: display.status(s), icon: <StatusIcon status={s} /> }))}
+            items={display.statuses().map((s) => ({ value: s, label: display.status(s), icon: <StatusIcon status={s} /> }))}
             onSelect={(v) => run({ patch: { status: v as TicketStatus } }, (count) => t("bulk.marked", { count, status: statusLabel(v as TicketStatus).toLowerCase() }))}
             trigger={
               <Act compact={compact} icon={<CircleDot className="size-3.5" />} label={t("bulk.status")} />

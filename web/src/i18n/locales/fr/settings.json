@@ -339,13 +339,15 @@
   },
   "display": {
     "title": "Statuts et priorités",
-    "description": "Renommez-les ou changez leurs couleurs pour votre équipe. Seul l’affichage change ; les filtres, les automatisations et l’API continuent de fonctionner comme avant.",
+    "description": "Renommez-les ou changez leurs couleurs pour votre équipe, et masquez des menus les statuts que vous n’utilisez pas. Un ticket déjà dans un statut masqué le garde ; les filtres, les automatisations et l’API continuent de fonctionner comme avant.",
     "statuses": "Statuts",
     "priorities": "Priorités",
     "labelFor": "Nom affiché pour {{name}}",
     "colourFor": "Couleur de {{name}}",
     "reset": "Réinitialiser",
-    "resetFor": "Réinitialiser {{name}}"
+    "resetFor": "Réinitialiser {{name}}",
+    "hideFor": "Masquer {{name}} des menus",
+    "showFor": "Afficher {{name}} dans les menus"
   },
   "danger": {
     "title": "Zone de danger",

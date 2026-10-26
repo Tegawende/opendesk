@@ -59,7 +59,8 @@ export type WorkspaceSettings = {
   status_labels?: Partial<Record<TicketStatus, DisplayOverride>>;
   priority_labels?: Partial<Record<Priority, DisplayOverride>>;
 };
-export type DisplayOverride = { label?: string; color?: LabelColor };
+/** `hidden` (statuses only): left out of the menus agents pick a status from. */
+export type DisplayOverride = { label?: string; color?: LabelColor; hidden?: boolean };
 export type Workspace = {
   id: string;
   name: string;

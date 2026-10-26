@@ -216,7 +216,7 @@ export default function TicketDetail({
       toast.error(tr("fields.fill", { name: missing.map((f) => f.name).join(", ") }));
       return;
     }
-    update.mutate({ id: t.id, patch: { status: solved ? "open" : "solved" } });
+    update.mutate({ id: t.id, patch: { status: solved ? "open" : display.finish } });
     toast.success(
       solved ? tr("toast.reopened", { number: t.number }) : tr("toast.solved", { number: t.number }),
       solved ? undefined : { action: { label: tr("toast.undo"), onClick: () => update.mutate({ id: t.id, patch: { status: t.status } }) } },
