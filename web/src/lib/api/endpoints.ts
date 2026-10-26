@@ -550,6 +550,7 @@ export const api = {
   search: (q: string) => http.get<T.SearchResults>("/v1/search", { query: { q } }),
   reports: {
     overview: (r: T.ReportsQuery) => http.get<T.ReportsOverview>("/v1/reports/overview", { query: r }),
+    agents: (r: T.ReportsQuery) => http.get<T.ReportsAgents>("/v1/reports/agents", { query: r }),
   },
   attachments: {
     upload: (file: File) => {

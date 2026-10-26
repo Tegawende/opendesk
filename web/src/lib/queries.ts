@@ -194,6 +194,7 @@ export const qk = {
   kbArticle: (id: string) => w(["kb", "article", id] as const),
   search: (q: string) => w(["search", q] as const),
   reports: (r: ReportsQuery) => w(["reports", r] as const),
+  reportAgents: (r: ReportsQuery) => w(["reports", "agents", r] as const),
   get widgetSettings() {
     return w(["widget-settings"] as const);
   },
@@ -418,6 +419,7 @@ export const q = {
   search: (term: string) =>
     queryOptions({ queryKey: qk.search(term), queryFn: () => api.search(term), enabled: term.trim().length > 1, staleTime: 10_000 }),
   reports: (r: ReportsQuery) => queryOptions({ queryKey: qk.reports(r), queryFn: () => api.reports.overview(r) }),
+  reportAgents: (r: ReportsQuery) => queryOptions({ queryKey: qk.reportAgents(r), queryFn: () => api.reports.agents(r) }),
   billing: () => queryOptions({ queryKey: qk.billing, queryFn: api.billing.get, staleTime: 60_000 }),
   billingUsage: (r: { from: string; to: string }) => queryOptions({ queryKey: qk.billingUsage(r), queryFn: () => api.billing.usage(r) }),
   billingInvoices: () => queryOptions({ queryKey: qk.billingInvoices, queryFn: async () => (await api.billing.invoices()).data, staleTime: 30_000 }),

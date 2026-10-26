@@ -1240,6 +1240,29 @@ export type ReportsOverview = {
 /** One team's or brand's row of the overview. */
 export type ReportsGroup = { created: number; solved: number; open_now: number; first_response_p50_minutes: number | null };
 
+/** One member's row of GET /v1/reports/agents (contracts/api.md "Agents report"). */
+export type ReportsAgentRow = {
+  user: UserRef;
+  /** Tickets assigned to them in the range, or created in it assigned to them. */
+  assigned: number;
+  /** Tickets solved in the range that are assigned to them. */
+  solved: number;
+  /** Public replies they sent in the range. */
+  replies: number;
+  /** Internal notes they wrote in the range. */
+  notes: number;
+  /** Their public replies on the tickets they solved, per ticket. */
+  replies_per_solved: number | null;
+  first_response_p50_minutes: number | null;
+  /** Median time from the last assignment to them until solved. */
+  handle_p50_minutes: number | null;
+  /** Time in the app with availability online; null when `online_time` does not cover them. */
+  online_minutes: number | null;
+};
+/** Whose online time the caller sees: everyone's (admins), their own, or none (API keys). */
+export type ReportsOnlineTime = "all" | "self" | "none";
+export type ReportsAgents = { data: ReportsAgentRow[]; online_time: ReportsOnlineTime };
+
 export type MailboxTestLeg = { ok: boolean; error: string; /** The server's reply, scrubbed. */ detail?: string };
 /** GET /v1/mailboxes/{id}/usage: the tickets that reply from a mailbox, before removing it. */
 export type MailboxUsage = { tickets: number; open: number };
