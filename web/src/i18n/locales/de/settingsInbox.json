@@ -275,6 +275,7 @@
     "chooseTeammate": "Teammitglied wählen",
     "chooseTeam": "Team wählen",
     "markSpamHint": "Verschiebt das Ticket in Spam. Es wird keine Antwort gesendet.",
+    "deleteTicketHint": "Löscht das Ticket: Es verschwindet aus allen Ansichten, und nichts weiter läuft darauf.",
     "replyPlaceholder": "Danke für deine Nachricht. Wir haben sie erhalten…",
     "notePlaceholder": "Interne Notiz für das Team",
     "replyText": "Antworttext",
@@ -340,6 +341,7 @@
     "send_reply": "Antwort senden",
     "add_note": "Interne Notiz hinzufügen",
     "mark_spam": "Als Spam markieren",
+    "delete_ticket": "Ticket löschen",
     "set_field": "Feld setzen",
     "set_reply_address": "Antwortadresse setzen"
   },

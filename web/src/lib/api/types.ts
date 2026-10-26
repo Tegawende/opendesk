@@ -688,6 +688,8 @@ export type ActionType =
   | "send_reply"
   | "add_note"
   | "mark_spam"
+  /** Soft-deletes the ticket; later steps and automations skip it. */
+  | "delete_ticket"
   | "ai_triage"
   /** value: a mailbox id of the ticket's brand (contracts/api.md). */
   | "set_reply_address"
