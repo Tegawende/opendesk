@@ -111,6 +111,22 @@ describe("mock backend", () => {
     expect((await call("POST", "/v1/public/csat/survey", { token: "demo" })).status).toBe(200);
   });
 
+  it("keeps an automation's phrase list one trimmed phrase per line", async () => {
+    const action = [{ type: "set_status", value: "closed" }];
+    const made = await call("POST", "/v1/automations", {
+      name: "Carrier mail",
+      trigger: "ticket_created",
+      conditions: [{ field: "subject", op: "any", value: " Your parcel \r\n\nhas shipped \n" }],
+      actions: action,
+    });
+    expect(made.status).toBe(201);
+    expect(made.body.conditions[0]).toEqual({ field: "subject", op: "any", value: "Your parcel\nhas shipped" });
+    const empty = await call("POST", "/v1/automations", { name: "x", trigger: "ticket_created", conditions: [{ field: "body", op: "none", value: " \n " }], actions: action });
+    expect(empty.status).toBe(422);
+    const status = await call("POST", "/v1/automations", { name: "x", trigger: "ticket_created", conditions: [{ field: "status", op: "any", value: "open" }], actions: action });
+    expect(status.status).toBe(422);
+  });
+
   it("publishes contiguous events for mutations", async () => {
     const before = db.workspaces[0].seq;
     const t = (await call("GET", "/v1/tickets/%231072")).body;

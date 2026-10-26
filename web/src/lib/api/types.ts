@@ -657,8 +657,9 @@ export type ConditionField =
   | "assignee_id" | "team_id" | "brand_id" | "widget_id" | "received_at"
   /** A ticket custom field, or the ticket contact's. */
   | `field.${string}` | `contact.field.${string}`;
-/** `eq` is the AI sentiment condition's operator (contracts/ai.md). */
-export type ConditionOp = "contains" | "not_contains" | "equals" | "not_equals" | "eq" | "gt" | "lt";
+/** `eq` is the AI sentiment condition's operator (contracts/ai.md). `any` and `none` on subject, body, from_email,
+ *  received_at and tag hold phrases, one per line: the text contains any, or none, of them. */
+export type ConditionOp = "contains" | "not_contains" | "equals" | "not_equals" | "eq" | "gt" | "lt" | "any" | "none";
 /** Custom field conditions (`field.<key>`, `contact.field.<key>`) take the FieldOp set of their type; `ne` aliases `not_equals`. */
 /** ai_decide: op gt/lt, value a probability 0.01..0.99, question a yes/no question (3..300 chars). */
 export type Condition = { field: ConditionField; op: ConditionOp; value: string; question?: string };

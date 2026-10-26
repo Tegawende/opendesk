@@ -161,6 +161,41 @@ func TestAutomationAssignsFirstReplyWhenUnassigned(t *testing.T) {
 	}
 }
 
+func TestAutomationPhraseLists(t *testing.T) {
+	e, ws := newEnv(t)
+	// One automation for a list of notification phrases, as a rule brought from another helpdesk.
+	closer := addAutomation(t, e, ws, jobs.TriggerTicketCreated, 0,
+		[]map[string]string{{"field": "subject", "op": "any", "value": "Your parcel has shipped\n\nnewsletter\ninvoice #"}},
+		[]map[string]string{{"type": "set_status", "value": "closed"}, {"type": "add_tag", "value": "auto-closed"}})
+	calm := addAutomation(t, e, ws, jobs.TriggerTicketCreated, 1,
+		[]map[string]string{{"field": "body", "op": "none", "value": "refund\ncomplaint"}},
+		[]map[string]string{{"type": "add_tag", "value": "calm"}})
+
+	notice := createTicket(t, e, ws, map[string]any{"subject": "Our monthly NEWSLETTER", "body_html": "<p>News</p>"})
+	refund := createTicket(t, e, ws, map[string]any{"subject": "Where is my parcel?", "body_html": "<p>I want a Refund</p>"})
+	runTriggers(t, e, ws.ID)
+
+	tags := func(tk domain.Ticket) []string {
+		var out []string
+		for _, g := range tk.Tags {
+			out = append(out, g.Name)
+		}
+		slices.Sort(out)
+		return out
+	}
+	if got := getTicket(t, e, ws, notice.ID); got.Status != "closed" || !slices.Equal(tags(got), []string{"auto-closed", "calm"}) {
+		t.Fatalf("matching ticket %s %v", got.Status, tags(got))
+	}
+	if got := getTicket(t, e, ws, refund.ID); got.Status == "closed" || len(got.Tags) != 0 {
+		t.Fatalf("other ticket %s %v", got.Status, tags(got))
+	}
+	var runs []int64
+	e.Scalar(`SELECT array_agg(run_count ORDER BY position) FROM automations WHERE id = ANY($1)`, &runs, []uuid.UUID{closer, calm})
+	if !slices.Equal(runs, []int64{1, 1}) {
+		t.Fatalf("run counts %v", runs)
+	}
+}
+
 func TestAutomationLoopGuard(t *testing.T) {
 	e, ws := newEnv(t)
 	// Two ticket_updated automations that flip each other forever without a guard.
