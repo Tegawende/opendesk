@@ -104,6 +104,29 @@ describe("mock backend", () => {
     expect((await call("GET", `/v1/tickets/${open[0]!.id}`)).body.priority).toBe("high");
   });
 
+  it("leaves out tickets of chosen contacts and companies, in lists and views", async () => {
+    type Row = { id: string; contact: { id: string } | null };
+    const all = (await call("GET", "/v1/tickets?limit=100")).body.data as Row[];
+    const contacts = (await call("GET", "/v1/contacts?limit=100")).body.data as { id: string; company: { id: string } | null }[];
+    const companyOf = (t: Row) => contacts.find((c) => c.id === t.contact?.id)?.company?.id;
+    const from = all.find((t) => companyOf(t));
+    expect(from).toBeDefined();
+    const contactId = from!.contact!.id;
+    const companyId = companyOf(from!)!;
+
+    const notContact = (await call("GET", `/v1/tickets?contact_not=${contactId}&limit=100`)).body.data as Row[];
+    expect(notContact.length).toBeGreaterThan(0);
+    for (const t of notContact) expect(t.contact?.id).not.toBe(contactId);
+    const notCompany = (await call("GET", `/v1/tickets?company_not=${companyId}&limit=100`)).body.data as Row[];
+    expect(notCompany.length).toBeGreaterThan(0);
+    expect(notCompany.map((t) => t.id)).not.toContain(from!.id);
+    for (const t of notCompany) if (companyOf(t)) expect(companyOf(t)).not.toBe(companyId);
+
+    const v = (await call("POST", "/v1/views", { name: "Not them", shared: true, filters: { company_not: companyId } })).body;
+    const inView = (await call("GET", `/v1/tickets?view_id=${v.id}&limit=100`)).body.data as Row[];
+    expect(inView.map((t) => t.id)).toEqual(notCompany.map((t) => t.id));
+  });
+
   it("serves every list endpoint the app reads", async () => {
     for (const path of [
       "/v1/me", "/v1/tickets", "/v1/tickets/counts", "/v1/contacts", "/v1/companies", "/v1/tags", "/v1/views",
