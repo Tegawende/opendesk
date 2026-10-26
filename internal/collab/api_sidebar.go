@@ -151,7 +151,8 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 	collabOp(api, huma.Operation{OperationID: "get-collab-sidebar", Method: http.MethodGet, Path: "/v1/collab/sidebar",
 		Summary: "Get my sidebar"},
 		func(ctx context.Context, _ *struct{}) (*sidebarBody, error) {
-			p, err := s.require(ctx, auth.RoleViewer)
+			// Every member arranges their sidebar, with or without Collab.
+			p, err := s.member(ctx, auth.RoleViewer)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -165,7 +166,8 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 	collabOp(api, huma.Operation{OperationID: "put-collab-sidebar", Method: http.MethodPut, Path: "/v1/collab/sidebar",
 		Summary: "Save my sidebar"},
 		func(ctx context.Context, in *sidebarBody) (*sidebarBody, error) {
-			p, err := s.require(ctx, auth.RoleViewer)
+			// Every member arranges their sidebar, with or without Collab.
+			p, err := s.member(ctx, auth.RoleViewer)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}

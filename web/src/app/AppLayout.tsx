@@ -40,8 +40,10 @@ import { useSpaceUi } from "@/lib/spaces/store";
 import { compose } from "@/lib/collab/compose";
 
 const NewTicketDialog = lazy(() => import("@/components/tickets/NewTicketDialog"));
-// Collab's dialogs (customize sidebar, new mail) load only for workspaces with Collab.
+// Collab's new mail composer loads only for workspaces with Collab.
 const CollabRoot = lazy(() => import("@/components/collab/CollabRoot"));
+// Customize sidebar is every member's, with or without Collab.
+const CustomizeSidebar = lazy(() => import("@/components/collab/CustomizeSidebar").then((m) => ({ default: m.CustomizeSidebar })));
 const SpaceEditorRoot = lazy(() => import("@/components/spaces/SpaceEditor"));
 const UpgradeDialog = lazy(() => import("@/components/billing/UpgradeDialog"));
 
@@ -327,6 +329,9 @@ export function AppLayout() {
           <CollabRoot />
         </Suspense>
       )}
+      <Suspense fallback={null}>
+        <CustomizeSidebar />
+      </Suspense>
       {spaceEditor && (
         <Suspense fallback={null}>
           <SpaceEditorRoot />

@@ -322,7 +322,7 @@ func TestAPICollabRequired(t *testing.T) {
 		t.Fatalf("status: %d %+v", st, status)
 	}
 	var e apiError
-	for _, path := range []string{"/v1/collab/accounts", "/v1/collab/threads", "/v1/collab/counts", "/v1/collab/sidebar"} {
+	for _, path := range []string{"/v1/collab/accounts", "/v1/collab/threads", "/v1/collab/counts"} {
 		if st := doJSON(t, "GET", srv.URL+path, nil, &e); st != 402 || e.Code != "collab_required" {
 			t.Fatalf("GET %s: %d %+v", path, st, e)
 		}
@@ -338,6 +338,40 @@ func TestAPICollabRequired(t *testing.T) {
 	key.Kind, key.UserID, key.APIKeyID = auth.KindAPIKey, uuid.Nil, uuid.New()
 	if st := doJSON(t, "GET", w.api(&key).URL+"/v1/collab/accounts", nil, nil); st != 403 {
 		t.Fatalf("API key: %d, want 403", st)
+	}
+}
+
+func TestAPISidebarWithoutCollab(t *testing.T) {
+	w := newWorld(t)
+	off := *w.d
+	off.Plan = &plan.Service{CollabOff: true}
+	w.s = newService(&off)
+	srv := w.api(w.agent)
+	var prefs SidebarPrefs
+	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || len(prefs.Order) != 6 {
+		t.Fatalf("defaults without Collab: %d %+v", st, prefs)
+	}
+	in := SidebarPrefs{Order: []string{"views", "inbox", "teams", "workspace"}, Hidden: []string{"section:teams"},
+		Pinned: []SidebarPin{{Kind: "view", ID: uuid.NewString()}}, MarkReadOnOpen: true, UnifiedInbox: true}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", in, &prefs); st != 200 {
+		t.Fatalf("put without Collab: %d", st)
+	}
+	prefs = SidebarPrefs{}
+	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || prefs.Order[0] != "views" ||
+		len(prefs.Hidden) != 1 || len(prefs.Pinned) != 1 {
+		t.Fatalf("roundtrip without Collab: %d %+v", st, prefs)
+	}
+	// Still a member's own: an API key never reaches it.
+	key := *w.agent
+	key.Kind, key.UserID, key.APIKeyID = auth.KindAPIKey, uuid.Nil, uuid.New()
+	if st := doJSON(t, "GET", w.api(&key).URL+"/v1/collab/sidebar", nil, nil); st != 403 {
+		t.Fatalf("API key: %d, want 403", st)
+	}
+	// The same prefs once Collab is on.
+	w.s = newService(w.d)
+	prefs = SidebarPrefs{}
+	if st := doJSON(t, "GET", w.api(w.agent).URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || prefs.Order[0] != "views" {
+		t.Fatalf("with Collab: %d %+v", st, prefs)
 	}
 }
 

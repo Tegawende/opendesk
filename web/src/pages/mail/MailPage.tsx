@@ -89,7 +89,7 @@ export default function MailPage() {
   const list = useInfiniteQuery(q.mailThreads(query));
   const { data: accounts } = useMailAccounts();
   const { data: counts } = useQuery(q.mailCounts());
-  const prefs = useSidebarPrefs(true);
+  const prefs = useSidebarPrefs();
   const folderMap = useAllFolders(accounts);
   const action = useThreadAction();
 

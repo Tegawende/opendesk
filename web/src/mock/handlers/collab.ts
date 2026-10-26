@@ -1881,13 +1881,12 @@ export function registerCollab() {
     return m;
   });
 
+  // Every member's, with or without Collab (contracts/collab.md SidebarPrefs).
   get("/v1/collab/sidebar", (ctx) => {
-    requireCollab(ctx.ws);
     return state(ctx.ws).prefs[db.meId] ?? defaultSidebarPrefs();
   });
 
   put("/v1/collab/sidebar", (ctx) => {
-    requireCollab(ctx.ws);
     if (JSON.stringify(ctx.body).length > 16 * 1024) throw invalid("Sidebar preferences are limited to 16 KB");
     const body = ctx.body as Partial<SidebarPrefs>;
     const saved = state(ctx.ws).prefs[db.meId] ?? defaultSidebarPrefs();

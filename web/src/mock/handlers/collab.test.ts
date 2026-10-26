@@ -66,6 +66,20 @@ describe("mock Collab", () => {
     expect(kept.mail_tabs).toEqual(["inbox", "spam"]);
   });
 
+  it("keeps the sidebar prefs without Collab too", async () => {
+    const ws = db.workspaces[0]!;
+    const before = ws.collabOff;
+    ws.collabOff = "disabled";
+    try {
+      expect((await call("GET", "/v1/collab/accounts")).status).toBe(402);
+      const saved = await call("PUT", "/v1/collab/sidebar", { order: ["views", "inbox"], hidden: ["section:teams"], pinned: [{ kind: "view", id: "v1" }], expanded_accounts: [], mark_read_on_open: true, unified_inbox: true });
+      expect(saved.status).toBe(200);
+      expect((await call("GET", "/v1/collab/sidebar")).body.order).toEqual(["views", "inbox"]);
+    } finally {
+      ws.collabOff = before;
+    }
+  });
+
   it("lists a Gmail account's send-as addresses and sends from the one a message was written to", async () => {
     const accounts = (await call("GET", "/v1/collab/accounts")).body as { id: string; provider: string; email: string; identities: { id: string | null; email: string; can_send: boolean; primary: boolean }[] }[];
     const gmail = accounts.find((a) => a.provider === "google")!;
