@@ -136,6 +136,17 @@ describe("mock backend", () => {
     expect(status.status).toBe(422);
   });
 
+  it("keeps a merge action's window and subject option, on ticket_created only", async () => {
+    const made = await call("POST", "/v1/automations", { name: "Follow-ups", trigger: "ticket_created", actions: [{ type: "merge_into_open_ticket", value: "" }] });
+    expect(made.status).toBe(201);
+    expect(made.body.actions).toEqual([{ type: "merge_into_open_ticket", value: "7", same_subject: true }]);
+    const edited = await call("PATCH", `/v1/automations/${made.body.id}`, { actions: [{ type: "merge_into_open_ticket", value: "14", same_subject: false }] });
+    expect(edited.body.actions).toEqual([{ type: "merge_into_open_ticket", value: "14", same_subject: false }]);
+    expect((await call("PATCH", `/v1/automations/${made.body.id}`, { trigger: "customer_replied" })).status).toBe(422);
+    expect((await call("GET", `/v1/automations/${made.body.id}`)).body.trigger).toBe("ticket_created");
+    expect((await call("PATCH", `/v1/automations/${made.body.id}`, { actions: [{ type: "merge_into_open_ticket", value: "31" }] })).status).toBe(422);
+  });
+
   it("publishes contiguous events for mutations", async () => {
     const before = db.workspaces[0].seq;
     const t = (await call("GET", "/v1/tickets/%231072")).body;

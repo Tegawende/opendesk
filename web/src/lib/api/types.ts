@@ -688,12 +688,17 @@ export type ActionType =
   | "send_reply"
   | "add_note"
   | "mark_spam"
+  /** ticket_created only. value: the window in days, "1".."30"; same_subject (default true). */
+  | "merge_into_open_ticket"
   | "ai_triage"
   /** value: a mailbox id of the ticket's brand (contracts/api.md). */
   | "set_reply_address"
   | "set_field";
-/** set_field: `field` is the ticket field key, `value` its string form ("12.5", "true", "2026-10-11", "a,b"; "" clears). */
-export type Action = { type: ActionType; value: string; field?: string };
+/**
+ * set_field: `field` is the ticket field key, `value` its string form ("12.5", "true", "2026-10-11", "a,b"; "" clears).
+ * merge_into_open_ticket: `same_subject` merges only into a ticket with the same subject (contracts/api.md).
+ */
+export type Action = { type: ActionType; value: string; field?: string; same_subject?: boolean };
 export type Automation = {
   id: string;
   name: string;
