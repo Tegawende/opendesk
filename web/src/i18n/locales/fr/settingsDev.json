@@ -490,5 +490,54 @@
       "oauth": "Connexion au compte",
       "token": "Jeton d’accès"
     }
+  },
+  "panels": {
+    "empty": "Aucun panneau pour l’instant. Une boutique Shopify affiche les commandes de chaque contact ; une URL à vous peut afficher tout le reste.",
+    "title": "Panneaux de ticket",
+    "hint": "Affichez à côté du ticket ce que Shopify, ou un système à vous, sait du contact. En lecture seule, consulté à l’ouverture du ticket.",
+    "adminsOnly": "Les administrateurs ajoutent et modifient les panneaux de ticket.",
+    "add": "Ajouter un panneau",
+    "kind": {
+      "shopify": "Shopify",
+      "http": "Depuis une URL"
+    },
+    "state": {
+      "connected": "Connecté",
+      "error": "À vérifier",
+      "off": "Désactivé"
+    },
+    "toggle": "Afficher {{name}} sur les tickets",
+    "actions": "Actions pour {{name}}",
+    "replaceToken": "Remplacer le jeton",
+    "changeUrl": "Changer l’URL",
+    "rotateSecret": "Nouveau secret de signature",
+    "remove": "Supprimer",
+    "removeTitle": "Supprimer {{name}} ?",
+    "removeBody": "Les tickets n’affichent plus ce panneau. Rien ne change dans l’autre produit.",
+    "removed": "{{name}} supprimé",
+    "updateError": "Impossible d’enregistrer le panneau",
+    "addTitle": "Ajouter un panneau de ticket",
+    "addDescription": "OpenDesk ne fait que lire : il consulte le contact du ticket quand quelqu’un ouvre le ticket.",
+    "shop": "Boutique",
+    "shopHint": "Son domaine myshopify.com, par exemple ma-boutique.myshopify.com.",
+    "token": "Jeton d’accès Admin API",
+    "tokenHint": "Dans l’admin Shopify, Paramètres → Applications → Développer des applications : créez une application avec les accès read_customers et read_orders (read_all_orders pour les commandes de plus de 60 jours), installez-la et copiez son jeton d’accès Admin API.",
+    "url": "URL",
+    "urlHint": "OpenDesk y envoie le ticket et son contact, signés, et affiche les sections qu’elle renvoie.",
+    "name": "Nom",
+    "namePlaceholder": "Odoo",
+    "connect": "Ajouter le panneau",
+    "save": "Enregistrer",
+    "shopRequired": "Indiquez le domaine myshopify.com de la boutique.",
+    "tokenRequired": "Collez le jeton d’accès.",
+    "urlRequired": "Indiquez une URL complète en https://.",
+    "added": "{{name}} ajouté",
+    "tokenTitle": "Remplacer le jeton de {{name}}",
+    "urlTitle": "Changer l’URL de {{name}}",
+    "secretTitle": "Secret de signature",
+    "secretDescription": "Copiez-le maintenant. Vous ne le reverrez plus.",
+    "secretVerify": "Chaque requête porte OD-Signature, comme les envois de webhooks. Vérifiez-la avant de répondre :",
+    "secretAnswer": "Répondez en JSON par sections de valeurs nommées, 64 Ko au plus :",
+    "secretSaved": "Je l’ai enregistré"
   }
 }

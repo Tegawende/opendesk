@@ -202,6 +202,17 @@ export function currency(minorUnits: number, code: string, opts: { exact?: boole
   return nf({ style: "currency", currency: cur, ...(whole ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}) }).format(value);
 }
 
+/** Money from a decimal string (another product's amounts): money("129.00", "EUR") -> "€129.00". */
+export function money(amount: string, code: string): string {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return amount;
+  try {
+    return nf({ style: "currency", currency: code.toUpperCase() }).format(n);
+  } catch {
+    return `${amount} ${code}`;
+  }
+}
+
 /** 0.874 -> "87%" (or "87 %" in fr/de). */
 export function percent(ratio: number, digits = 0): string {
   return nf({ style: "percent", maximumFractionDigits: digits }).format(ratio);

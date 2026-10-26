@@ -390,6 +390,16 @@ export const api = {
       http.patch<T.Integration>(`/v1/integrations/${id}`, b),
     remove: (id: string) => http.del(`/v1/integrations/${id}`),
   },
+  ticketPanels: {
+    list: () => http.get<{ data: T.TicketPanel[] }>("/v1/ticket-panels"),
+    /** An http panel answers its signing `secret`, shown once. */
+    create: (b: { kind: "shopify" | "http"; name?: string; shop?: string; token?: string; url?: string }) =>
+      http.create<{ panel: T.TicketPanel; secret?: string }>("/v1/ticket-panels", b),
+    update: (id: string, b: { name?: string; enabled?: boolean; position?: number; token?: string; url?: string }) =>
+      http.patch<T.TicketPanel>(`/v1/ticket-panels/${id}`, b),
+    rotateSecret: (id: string) => http.post<{ panel: T.TicketPanel; secret: string }>(`/v1/ticket-panels/${id}/rotate-secret`),
+    remove: (id: string) => http.del(`/v1/ticket-panels/${id}`),
+  },
   supportChannels: {
     providers: () => http.get<{ data: T.SupportChannelProvider[] }>("/v1/support-channels/providers"),
     accounts: (provider: string, credentials: Record<string, string>) =>
@@ -497,6 +507,9 @@ export const api = {
     render: (id: string, body_html: string, thread?: boolean) =>
       http.post<{ body_html: string }>(`/v1/tickets/${id}/render`, { body_html, thread: thread || undefined }),
     links: (id: string) => http.get<{ data: T.TicketLink[] }>(`/v1/tickets/${id}/links`),
+    /** What a ticket panel's product knows about the ticket's contact; `refresh` asks it again. */
+    panel: (id: string, panelId: string, refresh = false) =>
+      http.get<T.TicketPanelData>(`/v1/tickets/${id}/panels/${panelId}${refresh ? "?refresh=true" : ""}`),
     addLink: (id: string, b: { url: string; title?: string; integration_id?: string }) => http.create<T.TicketLink>(`/v1/tickets/${id}/links`, b),
     removeLink: (id: string, linkId: string) => http.del(`/v1/tickets/${id}/links/${linkId}`),
   },

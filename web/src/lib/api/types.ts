@@ -1032,6 +1032,47 @@ export type SupportChannelDelivery = {
   updated_at: string;
   delivered_at?: string;
 };
+/** A ticket panel (contracts/integrations.md "Ticket panels"): read-only data about a ticket's contact. */
+export type TicketPanel = {
+  id: string;
+  kind: "shopify" | "http";
+  name: string;
+  /** shopify: the shop's myshopify.com domain; http: the URL's host. */
+  host: string;
+  enabled: boolean;
+  position: number;
+  /** error: the last lookup found the credentials refused. */
+  status: "connected" | "error";
+  last_error: string;
+  created_at: string;
+  updated_at: string;
+};
+export type PanelCustomer = { name: string; url: string; orders_count: number; total_spent: string; currency: string; tags: string[] };
+export type PanelOrder = {
+  id: string;
+  number: string;
+  url: string;
+  created_at: string;
+  /** Decimal, after refunds. */
+  total: string;
+  currency: string;
+  financial_status: string;
+  fulfillment_status: string;
+  cancelled: boolean;
+  items: { title: string; variant?: string; quantity: number; price: string }[];
+  tracking: { company?: string; number?: string; url?: string }[];
+};
+export type PanelSection = { title: string; items: { label: string; value: string; url?: string }[] };
+export type TicketPanelData = {
+  panel_id: string;
+  kind: "shopify" | "http";
+  state: "ok" | "empty" | "no_contact" | "error";
+  message?: string;
+  customer?: PanelCustomer;
+  orders?: PanelOrder[];
+  sections?: PanelSection[];
+  fetched_at: string;
+};
 export type TicketLink = {
   id: string;
   ticket_id: string;

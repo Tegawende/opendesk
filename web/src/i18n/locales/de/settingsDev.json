@@ -481,5 +481,54 @@
       "oauth": "Kontoanmeldung",
       "token": "Zugriffstoken"
     }
+  },
+  "panels": {
+    "empty": "Noch keine Panels. Ein Shopify-Shop zeigt die Bestellungen jedes Kontakts; eine eigene URL kann alles andere zeigen.",
+    "title": "Ticket-Panels",
+    "hint": "Zeigen Sie neben dem Ticket, was Shopify oder ein eigenes System über den Kontakt weiß. Nur lesend, abgefragt, wenn ein Ticket geöffnet wird.",
+    "adminsOnly": "Administratoren fügen Ticket-Panels hinzu und ändern sie.",
+    "add": "Panel hinzufügen",
+    "kind": {
+      "shopify": "Shopify",
+      "http": "Von einer URL"
+    },
+    "state": {
+      "connected": "Verbunden",
+      "error": "Prüfen",
+      "off": "Aus"
+    },
+    "toggle": "{{name}} auf Tickets zeigen",
+    "actions": "Aktionen für {{name}}",
+    "replaceToken": "Token ersetzen",
+    "changeUrl": "URL ändern",
+    "rotateSecret": "Neues Signatur-Secret",
+    "remove": "Entfernen",
+    "removeTitle": "{{name}} entfernen?",
+    "removeBody": "Tickets zeigen dieses Panel nicht mehr. Im anderen Produkt ändert sich nichts.",
+    "removed": "{{name}} entfernt",
+    "updateError": "Das Panel konnte nicht gespeichert werden",
+    "addTitle": "Ticket-Panel hinzufügen",
+    "addDescription": "OpenDesk liest nur: Es fragt den Kontakt des Tickets ab, wenn jemand das Ticket öffnet.",
+    "shop": "Shop",
+    "shopHint": "Seine myshopify.com-Domain, etwa mein-shop.myshopify.com.",
+    "token": "Admin-API-Zugriffstoken",
+    "tokenHint": "Im Shopify-Admin unter Einstellungen → Apps → Apps entwickeln: Erstellen Sie eine App mit den Berechtigungen read_customers und read_orders (read_all_orders für Bestellungen, die älter als 60 Tage sind), installieren Sie sie und kopieren Sie ihr Admin-API-Zugriffstoken.",
+    "url": "URL",
+    "urlHint": "OpenDesk sendet das Ticket und seinen Kontakt signiert dorthin und zeigt die Abschnitte, die zurückkommen.",
+    "name": "Name",
+    "namePlaceholder": "Odoo",
+    "connect": "Panel hinzufügen",
+    "save": "Speichern",
+    "shopRequired": "Geben Sie die myshopify.com-Domain des Shops ein.",
+    "tokenRequired": "Fügen Sie das Zugriffstoken ein.",
+    "urlRequired": "Geben Sie eine vollständige https://-URL ein.",
+    "added": "{{name}} hinzugefügt",
+    "tokenTitle": "Token für {{name}} ersetzen",
+    "urlTitle": "URL für {{name}} ändern",
+    "secretTitle": "Signatur-Secret",
+    "secretDescription": "Kopieren Sie es jetzt. Sie sehen es nicht wieder.",
+    "secretVerify": "Jede Anfrage trägt OD-Signature, wie Webhook-Zustellungen. Prüfen Sie sie, bevor Sie antworten:",
+    "secretAnswer": "Antworten Sie mit JSON-Abschnitten benannter Werte, höchstens 64 KB:",
+    "secretSaved": "Gespeichert"
   }
 }

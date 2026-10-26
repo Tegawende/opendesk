@@ -150,6 +150,11 @@ export const qk = {
   get integrationCatalog() {
     return w(["integrations", "catalog"] as const);
   },
+  get ticketPanels() {
+    return w(["ticket-panels"] as const);
+  },
+  /** One panel's data for one ticket; every panel's under qk.of("tickets", "panels"). */
+  ticketPanel: (ticketId: string, panelId: string) => w(["tickets", "panels", ticketId, panelId] as const),
   get supportChannelProviders() {
     return w(["support-channels", "providers"] as const);
   },
@@ -394,6 +399,10 @@ export const q = {
     list(qk.supportChannelAvailableDestinations(id), () => api.supportChannels.availableDestinations(id), { staleTime: 30_000 }),
   imports: () => list(qk.imports, () => api.imports.list()),
   ticketLinks: (id: string) => list(qk.ticketLinks(id), () => api.tickets.links(id)),
+  ticketPanels: () => list(qk.ticketPanels, () => api.ticketPanels.list()),
+  // The server keeps an answer for a minute too; reopening a ticket shows it at once.
+  ticketPanel: (ticketId: string, panelId: string) =>
+    queryOptions({ queryKey: qk.ticketPanel(ticketId, panelId), queryFn: () => api.tickets.panel(ticketId, panelId), staleTime: 60_000 }),
   auditLogs: () =>
     infiniteQueryOptions({
       queryKey: qk.auditLogs,

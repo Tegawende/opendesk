@@ -90,6 +90,45 @@ Integrations are for your team's Ollie. To let the [AI agent](/guides/ai/#the-ai
 
 </Callout>
 
+## Ticket panels
+
+A ticket panel shows, beside the ticket and under the contact, what another product knows about the ticket's contact: their orders in your Shopify store, or anything a system of your own can answer, such as an ERP's delivery dates. Panels only read. They load when someone opens the ticket, each on its own, and a product that is slow or down shows a short note instead of holding the ticket up. Admins add them in **Settings, Integrations, Ticket panels**.
+
+<Steps>
+<Step title="Shopify: create an app in your store">
+
+In Shopify admin, go to **Settings, Apps, Develop apps** and create an app. Give its Admin API the **read_customers** and **read_orders** scopes, install it and copy its **Admin API access token**. Shopify shows orders from the last 60 days unless the app also has **read_all_orders**.
+
+</Step>
+<Step title="Add the panel">
+
+Click **Add a panel**, keep **Shopify**, enter the shop's `myshopify.com` domain and paste the token. opendesk checks the token with the shop before saving it. Each ticket whose contact has an email then shows the customer (with their order count, what they spent and their tags) and their last five orders: number, date, total, payment and fulfilment status, what they bought and the parcel's tracking link. Every order opens in Shopify admin.
+
+</Step>
+<Step title="A system of your own: add a panel from a URL">
+
+Choose **From a URL** and enter an https address of yours. opendesk shows its signing secret once: keep it. When a ticket is open, opendesk posts the ticket and its contact to that URL and shows the sections it answers.
+
+</Step>
+</Steps>
+
+The request your URL receives, signed like webhook deliveries (`OD-Signature: t=<unix>,v1=<hex>`, the HMAC-SHA256 of `"<t>.<body>"` with the secret):
+
+```json
+{ "panel_id": "…", "workspace_id": "…",
+  "ticket": { "id": "…", "number": 1042, "subject": "Where is my order?" },
+  "contact": { "id": "…", "email": "ada@example.com", "name": "Ada Buyer" } }
+```
+
+What it answers, at most 64 KB, shown as plain text and https links:
+
+```json
+{ "sections": [ { "title": "Sales order", "items": [
+  { "label": "Confirmed delivery", "value": "2026-11-04", "url": "https://erp.example.com/so/42" } ] } ] }
+```
+
+Answer `204` or `404` when you know nothing about the contact. Answers are kept for a minute, and the refresh button beside a panel asks again. A panel whose token or secret is refused is marked **Needs attention** in settings until you replace the token, change the URL or it works again.
+
 <Fold>
 
 ## Security
@@ -97,7 +136,8 @@ Integrations are for your team's Ollie. To let the [AI agent](/guides/ai/#the-ai
 - Sign-ins and tokens are stored encrypted and are never shown again, in the app, the API, events or logs.
 - opendesk only talks to public https servers, and checks every address a server names (its sign-in pages included) the same way.
 - Account sign-in uses OAuth with PKCE. The sign-in is bound to the browser that started it.
-- Connecting, changing and disconnecting an integration is recorded in the audit log.
+- Connecting, changing and disconnecting an integration or a ticket panel is recorded in the audit log.
+- A ticket panel never looks up the contact of a ticket the reader cannot see.
 - What a connected product returns is treated as data: it cannot approve changes or change Ollie's instructions.
 
 </Fold>
@@ -113,7 +153,7 @@ MCP_<KEY>_CLIENT_ID=...
 MCP_<KEY>_CLIENT_SECRET=...   # if the product issued one
 ```
 
-`<KEY>` is the integration's key in capitals, for example `MCP_SLACK_CLIENT_ID` (Slack and Box only accept apps registered in advance; GitHub signs in with a GitHub App when one is set and asks for a token otherwise; the compose file passes their variables). For another product, add its two variables to the `opendesk` service's `environment` in `docker-compose.yml`. The API for integrations and ticket links is in [the contract](https://github.com/useopendesk/opendesk/blob/main/contracts/integrations.md).
+`<KEY>` is the integration's key in capitals, for example `MCP_SLACK_CLIENT_ID` (Slack and Box only accept apps registered in advance; GitHub signs in with a GitHub App when one is set and asks for a token otherwise; the compose file passes their variables). For another product, add its two variables to the `opendesk` service's `environment` in `docker-compose.yml`. The API for integrations, ticket links and ticket panels is in [the contract](https://github.com/useopendesk/opendesk/blob/main/contracts/integrations.md).
 
 </Fold>
 

@@ -16,6 +16,7 @@ import { toast } from "@/components/ui/toast";
 import { ListSkeleton, StatePill } from "@/components/settings2/bits";
 import { MotionList, MotionRow } from "@/components/settings2/motion";
 import { ConnectDialog, ProviderMark, ToolList } from "@/components/settings2/integrations";
+import { TicketPanelsSection } from "@/components/settings2/ticketPanels";
 import { api } from "@/lib/api/endpoints";
 import type { Integration, IntegrationCategory, IntegrationProvider } from "@/lib/api/types";
 import { relShort } from "@/lib/format";
@@ -281,6 +282,8 @@ export default function Integrations() {
           )}
         </Section>
       )}
+
+      <TicketPanelsSection admin={admin} />
 
       <section className="animate-rise-in">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
