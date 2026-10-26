@@ -2,14 +2,17 @@ package panels
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/useopendesk/opendesk/internal/core"
 	"github.com/useopendesk/opendesk/internal/crypto"
@@ -55,14 +58,64 @@ func readPanel(t *testing.T, e *hdtest.Env, path string, a hdtest.Auth) Data {
 	return d
 }
 
-// fakeShopify answers the Admin GraphQL API for one token and one customer.
+// fakeShopify answers a shop's token endpoint (the client credentials grant, for the app
+// "app-id") and its Admin GraphQL API, which knows one customer.
 type fakeShopify struct {
-	token   atomic.Value // string
+	mu      sync.Mutex
+	valid   map[string]bool // the Admin API tokens the shop accepts
+	secret  string          // the app's client secret
+	scope   string          // what the app's version grants
+	issued  atomic.Int32
 	lookups atomic.Int32
 }
 
+func newFakeShopify(tokens ...string) *fakeShopify {
+	f := &fakeShopify{secret: "app-secret", scope: "read_customers,read_orders"}
+	f.only(tokens...)
+	return f
+}
+
+// only makes the shop accept these tokens alone, revoking the others.
+func (f *fakeShopify) only(tokens ...string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.valid = map[string]bool{}
+	for _, t := range tokens {
+		f.valid[t] = true
+	}
+}
+
+func (f *fakeShopify) set(secret, scope string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.secret, f.scope = secret, scope
+}
+
 func (f *fakeShopify) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("X-Shopify-Access-Token") != f.token.Load().(string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	if r.URL.Path == "/admin/oauth/access_token" {
+		_ = r.ParseForm()
+		switch {
+		case r.PostForm.Get("grant_type") != "client_credentials" || !strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded"):
+			http.Error(w, `{"error":"invalid_request"}`, http.StatusBadRequest)
+		case r.PostForm.Get("client_id") == "other-org":
+			http.Error(w, `{"error":"shop_not_permitted","error_description":"Client credentials cannot be performed on this shop."}`, http.StatusBadRequest)
+		case r.PostForm.Get("client_id") != "app-id" || r.PostForm.Get("client_secret") != f.secret:
+			http.Error(w, `{"error":"invalid_client"}`, http.StatusBadRequest)
+		default:
+			tok := fmt.Sprintf("shpat_app_%d", f.issued.Add(1))
+			f.valid[tok] = true
+			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": tok, "scope": f.scope, "expires_in": 86399})
+		}
+		return
+	}
+	if r.URL.Path != "/admin/api/"+shopifyVersion+"/graphql.json" {
+		http.NotFound(w, r)
+		return
+	}
+	if !f.valid[r.Header.Get("X-Shopify-Access-Token")] {
 		http.Error(w, `{"errors":"[API] Invalid API key or access token"}`, http.StatusUnauthorized)
 		return
 	}
@@ -71,7 +124,6 @@ func (f *fakeShopify) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Variables map[string]any `json:"variables"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
-	w.Header().Set("Content-Type", "application/json")
 	if strings.Contains(req.Query, "shop {") {
 		_, _ = io.WriteString(w, `{"data":{"shop":{"name":"Lumen Store"}}}`)
 		return
@@ -95,12 +147,11 @@ func (f *fakeShopify) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func TestShopifyPanel(t *testing.T) {
 	e, ws := apiEnv(t)
-	shop := &fakeShopify{}
-	shop.token.Store("shpat_good")
+	shop := newFakeShopify("shpat_good")
 	srv := httptest.NewServer(shop)
 	defer srv.Close()
 	s := For(e.D)
-	s.shopifyEndpoint = func(string) string { return srv.URL }
+	s.shopifyBase = func(string) string { return srv.URL }
 	admin, agent, viewer := ws.Admin.As(ws), ws.Agent.As(ws), ws.Viewer.As(ws)
 
 	body := map[string]any{"kind": "shopify", "shop": "https://Lumen-Store.myshopify.com/admin", "token": "shpat_good"}
@@ -114,7 +165,8 @@ func TestShopifyPanel(t *testing.T) {
 	}
 	e.Do("POST", "/v1/ticket-panels", admin, body).Want(t, 201).JSON(t, &created)
 	p := created.Panel
-	if p.Kind != "shopify" || p.Name != "Lumen Store" || p.Host != "lumen-store.myshopify.com" || p.Status != "connected" || created.Secret != "" {
+	if p.Kind != "shopify" || p.Name != "Lumen Store" || p.Host != "lumen-store.myshopify.com" || p.Status != "connected" || created.Secret != "" ||
+		p.Auth != "access_token" || p.ClientID != "" {
 		t.Fatalf("panel = %+v, secret %q", p, created.Secret)
 	}
 	if types, _ := e.Events(ws.ID, seq); !slices.Contains(types, "ticket_panel.created") {
@@ -178,7 +230,7 @@ func TestShopifyPanel(t *testing.T) {
 	}
 
 	// A revoked token: a quiet state on the ticket, and the panel needs attention in settings.
-	shop.token.Store("shpat_new")
+	shop.only("shpat_new")
 	d = readPanel(t, e, path+"?refresh=true", viewer)
 	if d.State != "error" || !strings.Contains(d.Message, "access token") {
 		t.Fatalf("revoked = %+v", d)
@@ -211,13 +263,122 @@ func TestShopifyPanel(t *testing.T) {
 	}
 }
 
-func TestPanelFollowsTicketVisibility(t *testing.T) {
+// TestShopifyAppPanel: an app made in Shopify's Dev Dashboard connects with its client ID
+// and secret; OpenDesk asks the shop for a token, keeps it until shortly before its end
+// and asks again when the shop revokes it.
+func TestShopifyAppPanel(t *testing.T) {
 	e, ws := apiEnv(t)
-	shop := &fakeShopify{}
-	shop.token.Store("shpat_good")
+	shop := newFakeShopify()
 	srv := httptest.NewServer(shop)
 	defer srv.Close()
-	For(e.D).shopifyEndpoint = func(string) string { return srv.URL }
+	s := For(e.D)
+	s.shopifyBase = func(string) string { return srv.URL }
+	admin, viewer := ws.Admin.As(ws), ws.Viewer.As(ws)
+	app := func(extra map[string]any) map[string]any {
+		b := map[string]any{"kind": "shopify", "shop": "lumen-store", "client_id": "app-id", "client_secret": "app-secret"}
+		for k, v := range extra {
+			b[k] = v
+		}
+		return b
+	}
+	refused := func(body map[string]any, want string) {
+		t.Helper()
+		if r := e.Do("POST", "/v1/ticket-panels", admin, body).Want(t, 422); !strings.Contains(string(r.Body), want) {
+			t.Fatalf("refusal %s: %s", want, r.Body)
+		}
+	}
+
+	// What the shop would refuse is caught before saving.
+	refused(app(map[string]any{"client_secret": "wrong"}), "client ID or secret")
+	refused(app(map[string]any{"client_id": "other-org"}), "organization")
+	refused(app(map[string]any{"client_secret": ""}), "client ID and client secret")
+	refused(app(map[string]any{"token": "shpat_x"}), "not both")
+	shop.set("app-secret", "read_customers")
+	refused(app(nil), "read_orders")
+	shop.set("app-secret", "read_customers,write_orders") // a write scope includes its read one
+	var created struct {
+		Panel Panel `json:"panel"`
+	}
+	e.Do("POST", "/v1/ticket-panels", admin, app(nil)).Want(t, 201).JSON(t, &created)
+	p := created.Panel
+	if p.Auth != "client_credentials" || p.ClientID != "app-id" || p.Status != "connected" || p.Name != "Lumen Store" {
+		t.Fatalf("panel = %+v", p)
+	}
+	var sealed string
+	e.Scalar(`SELECT encode(secret_enc, 'escape') FROM ticket_panels WHERE id = $1`, &sealed, p.ID)
+	if strings.Contains(sealed, "app-secret") {
+		t.Fatal("client secret stored in the clear")
+	}
+	if list := string(e.Do("GET", "/v1/ticket-panels", viewer, nil).Want(t, 200).Body); strings.Contains(list, "app-secret") || strings.Contains(list, "shpat_") {
+		t.Fatalf("list leaks: %s", list)
+	}
+
+	// One token serves the lookups until shortly before its end.
+	path := "/v1/tickets/" + newTicket(t, e, ws.Agent.As(ws), "ada@example.com", nil) + "/panels/" + p.ID.String()
+	issued := shop.issued.Load()
+	if d := readPanel(t, e, path, viewer); d.State != "ok" || d.Customer == nil || d.Customer.Name != "Ada Buyer" {
+		t.Fatalf("data = %+v", d)
+	}
+	readPanel(t, e, path+"?refresh=true", viewer)
+	if n := shop.issued.Load(); n != issued+1 {
+		t.Fatalf("tokens asked for: %d", n-issued)
+	}
+	s.tokens.now = func() time.Time { return time.Now().Add(24*time.Hour - time.Minute) }
+	if d := readPanel(t, e, path+"?refresh=true", viewer); d.State != "ok" || shop.issued.Load() != issued+2 {
+		t.Fatalf("near its end: %+v, %d tokens", d, shop.issued.Load()-issued)
+	}
+
+	// A token revoked before its end (the app reinstalled): once more with a new one.
+	shop.only()
+	if d := readPanel(t, e, path+"?refresh=true", viewer); d.State != "ok" || shop.issued.Load() != issued+3 {
+		t.Fatalf("revoked: %+v, %d tokens", d, shop.issued.Load()-issued)
+	}
+
+	// A rotated secret: the panel needs attention until it is given the new one, which keeps
+	// the client ID.
+	shop.set("app-secret-2", "read_customers,read_orders")
+	shop.only()
+	if d := readPanel(t, e, path+"?refresh=true", viewer); d.State != "error" || !strings.Contains(d.Message, "client ID or secret") {
+		t.Fatalf("rotated = %+v", d)
+	}
+	var status string
+	e.Scalar(`SELECT status FROM ticket_panels WHERE id = $1`, &status, p.ID)
+	if status != "error" {
+		t.Fatalf("status = %q", status)
+	}
+	id := "/v1/ticket-panels/" + p.ID.String()
+	e.Do("PATCH", id, admin, map[string]any{"client_secret": "app-secret"}).Want(t, 422)
+	upd := e.Do("PATCH", id, admin, map[string]any{"client_secret": "app-secret-2"}).Want(t, 200).Map(t)
+	if upd["status"] != "connected" || upd["client_id"] != "app-id" {
+		t.Fatalf("new secret = %v", upd)
+	}
+	if d := readPanel(t, e, path, viewer); d.State != "ok" {
+		t.Fatalf("after the new secret = %+v", d)
+	}
+
+	// A pasted token in place of the app, and back: a secret alone needs a client ID.
+	shop.only("shpat_old")
+	if upd = e.Do("PATCH", id, admin, map[string]any{"token": "shpat_old"}).Want(t, 200).Map(t); upd["auth"] != "access_token" || upd["client_id"] != nil {
+		t.Fatalf("token = %v", upd)
+	}
+	if d := readPanel(t, e, path, viewer); d.State != "ok" {
+		t.Fatalf("with the token = %+v", d)
+	}
+	e.Do("PATCH", id, admin, map[string]any{"client_secret": "app-secret-2"}).Want(t, 422)
+	e.Do("PATCH", id, admin, map[string]any{"client_id": "app-id", "client_secret": "app-secret-2"}).Want(t, 200)
+	var leaks int
+	e.Scalar(`SELECT count(*) FROM audit_logs WHERE workspace_id = $1 AND (data::text LIKE '%app-secret%' OR data::text LIKE '%shpat%')`, &leaks, ws.ID)
+	if leaks != 0 {
+		t.Fatalf("audit leaks credentials: %d", leaks)
+	}
+}
+
+func TestPanelFollowsTicketVisibility(t *testing.T) {
+	e, ws := apiEnv(t)
+	shop := newFakeShopify("shpat_good")
+	srv := httptest.NewServer(shop)
+	defer srv.Close()
+	For(e.D).shopifyBase = func(string) string { return srv.URL }
 	var created struct {
 		Panel Panel `json:"panel"`
 	}
@@ -368,5 +529,35 @@ func TestNormalizeShop(t *testing.T) {
 	}
 	if q := searchPhrase(`a"b\c@x.com`); q != `email:"a\"b\\c@x.com"` {
 		t.Errorf("searchPhrase = %s", q)
+	}
+}
+
+func TestShopifyCredentialsAndScopes(t *testing.T) {
+	if c, err := shopifyCredentials(" app-id ", "secret\n", ""); err != nil || c.clientID != "app-id" || c.secret != "secret" {
+		t.Errorf("app = %+v, %v", c, err)
+	}
+	if c, err := shopifyCredentials("", "", " shpat_x "); err != nil || c.clientID != "" || c.secret != "shpat_x" {
+		t.Errorf("token = %+v, %v", c, err)
+	}
+	for _, in := range [][3]string{{"", "", ""}, {"app-id", "", ""}, {"", "secret", ""}, {"app id", "secret", ""}, {"app-id", "s", "shpat_x"}, {"", "", "shpat x"}} {
+		if _, err := shopifyCredentials(in[0], in[1], in[2]); err == nil {
+			t.Errorf("shopifyCredentials(%q) accepted", in)
+		}
+	}
+	for scope, want := range map[string]string{
+		"read_customers,read_orders":                   "",
+		"write_customers, read_all_orders,read_orders": "",
+		"read_customers":                               "read_orders",
+		"":                                             "read_customers read_orders",
+	} {
+		if got := strings.Join(missingScopes(scope), " "); got != want {
+			t.Errorf("missingScopes(%q) = %q", scope, got)
+		}
+	}
+	if err := tokenRefusal(400, []byte(`<p>Oauth error shop_not_permitted: Client credentials cannot be performed on this shop.</p>`)); !strings.Contains(err.Error(), "organization") {
+		t.Errorf("shop_not_permitted = %v", err)
+	}
+	if err := tokenRefusal(503, nil); err.Error() != "Shopify answered 503." {
+		t.Errorf("503 = %v", err)
 	}
 }

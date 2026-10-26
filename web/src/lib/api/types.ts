@@ -1039,6 +1039,10 @@ export type TicketPanel = {
   name: string;
   /** shopify: the shop's myshopify.com domain; http: the URL's host. */
   host: string;
+  /** shopify: client_credentials when OpenDesk asks Shopify for its token with the app's client ID and secret; access_token when a token was pasted. */
+  auth?: "client_credentials" | "access_token";
+  /** shopify client_credentials: the app's client ID (not a secret). */
+  client_id?: string;
   enabled: boolean;
   position: number;
   /** error: the last lookup found the credentials refused. */

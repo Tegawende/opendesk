@@ -151,9 +151,11 @@ contact: read-only, fetched when the ticket is open, never blocking it. It is no
 connection and gives Ollie no tool. Two kinds:
 
 - `shopify`: the contact's customer and last orders in a Shopify store, found by the
-  contact's email (Admin GraphQL API `2026-10`). The admin creates a custom app in the store
-  with the `read_customers` and `read_orders` scopes (`read_all_orders` to see orders older than
-  60 days) and pastes its Admin API access token.
+  contact's email (Admin GraphQL API `2026-10`). The admin creates an app in Shopify's Dev
+  Dashboard with the `read_customers` and `read_orders` scopes (`read_all_orders` to see orders
+  older than 60 days), installs it on the shop and pastes its client ID and secret. An app made
+  in Shopify admin before 2026 (a "legacy custom app") can instead paste its Admin API access
+  token: Shopify no longer lets anyone create those.
 - `http`: a URL of the workspace's own (an ERP, billing, a CRM). OpenDesk posts the ticket and
   its contact to it and shows the sections it answers. The workspace's code decides what to
   show; OpenDesk learns no product.
@@ -161,6 +163,8 @@ connection and gives Ollie no tool. Two kinds:
 ```ts
 interface TicketPanel { id: string; kind: "shopify" | "http"; name: string;
   host: string /* shopify: the shop's myshopify.com domain; http: the URL's host only, since a path can carry a secret */;
+  auth?: "client_credentials" | "access_token" /* shopify: how OpenDesk gets its Admin API token */;
+  client_id?: string /* shopify client_credentials: the app's client ID, not a secret */;
   enabled: boolean; position: number; status: "connected" | "error" /* error: the last lookup found the credentials refused */;
   last_error: string; created_at: string; updated_at: string }
 interface TicketPanelData { panel_id: string; kind: "shopify" | "http";
@@ -184,14 +188,16 @@ into the same section.
 | method | path | role | body → response |
 | --- | --- | --- | --- |
 | GET | `/v1/ticket-panels` | viewer, `tickets:read` | → `{data: TicketPanel[]}` in `position` order |
-| POST | `/v1/ticket-panels` | admin user | `{kind, name?, shop? /* shopify: domain, handle or admin URL */, token? /* shopify */, url? /* http */}` → 201 `{panel, secret? /* http: the signing secret, shown once */}`, `Cache-Control: no-store` |
-| PATCH | `/v1/ticket-panels/{id}` | admin user | `{name?, enabled?, position?, token? /* shopify */, url? /* http */}` → `TicketPanel` |
+| POST | `/v1/ticket-panels` | admin user | `{kind, name?, shop? /* shopify: domain, handle or admin URL */, client_id?, client_secret? /* shopify: an app */, token? /* shopify: in place of the app */, url? /* http */}` → 201 `{panel, secret? /* http: the signing secret, shown once */}`, `Cache-Control: no-store` |
+| PATCH | `/v1/ticket-panels/{id}` | admin user | `{name?, enabled?, position?, client_secret?, client_id? /* shopify: a new secret keeps the client ID */, token? /* shopify */, url? /* http */}` → `TicketPanel` |
 | POST | `/v1/ticket-panels/{id}/rotate-secret` | admin user | → `{panel, secret}` (http; the old secret stops at once) |
 | DELETE | `/v1/ticket-panels/{id}` | admin user | → 204 |
 | GET | `/v1/tickets/{id}/panels/{panelId}` | viewer, `tickets:read` | `?refresh=true` asks the product again → `TicketPanelData`. A hidden or missing ticket, or a panel that is off or gone: `404` |
 
-- A Shopify token is checked when saved (`query { shop { name } }`); the shop's name becomes the
-  panel's name unless one is given: `422 panel_failed` otherwise. An http URL passes the outbound
+- Shopify credentials are a client ID and secret or a token, never both (`422`). They are checked
+  when saved: a token is asked for with the app's (below), its `scope` must hold `read_customers`
+  and `read_orders` (or their `write_` scopes), then `query { shop { name } }`; the shop's name
+  becomes the panel's name unless one is given: `422 panel_failed` otherwise. An http URL passes the outbound
   URL rules: `422 invalid_url`. At most 10 panels per workspace (`409`), 30 new panels an hour (`429`).
 - API keys never connect (`403`): pasting another product's credentials needs a person.
 - A lookup is one request within 3 s. Its answer is kept for a minute (a failure for 15 s) per
@@ -200,8 +206,15 @@ into the same section.
   not answer. A failure is `state: "error"` with a 200, never an error status: the ticket shows a
   quiet note. Refused credentials (Shopify `401`, `403` or `ACCESS_DENIED`; the URL's `401` or
   `403`) also mark the panel `error` with `last_error` and publish `ticket_panel.updated`; a
-  lookup that works again, a new token or a new URL marks it `connected`. A timeout or an outage
+  lookup that works again, new credentials or a new URL marks it `connected`. A timeout or an outage
   leaves the status as it is.
+- Shopify app tokens (the client credentials grant): `POST https://<shop>/admin/oauth/access_token`,
+  form-encoded `grant_type=client_credentials`, `client_id`, `client_secret`, answers
+  `{access_token, scope, expires_in}` (24 hours, no refresh token). Each API process keeps a
+  panel's token in memory, asks for a new one 5 minutes before its end, and one lookup asks while
+  the others wait for it. A token refused before its end (the app reinstalled) is asked for again
+  once. A refused client ID or secret (`400`, `401`, `403`) or `shop_not_permitted` (Shopify gives
+  these tokens only for a shop of the app's own organization) marks the panel `error`.
 - Shopify: the first customer whose default email is the contact's (an exact, case-insensitive
   match of the phrase search); none is `empty`. Up to 5 orders, newest first, with up to 10
   lines each and their fulfilments' tracking. Links go to `admin.shopify.com/store/<handle>`.
@@ -233,11 +246,14 @@ panel's secret: the scheme of outgoing webhooks (`contracts/events.md`), verifie
 
 ### Security
 
-- Tokens and secrets are sealed with `d.Box` (`ticket_panels.secret_enc`); they never appear in
+- Client secrets, tokens and signing secrets are sealed with `d.Box` (`ticket_panels.secret_enc`:
+  a shopify panel with a `client_id` seals the app's client secret, one without a token); Shopify's
+  24-hour tokens are only kept in memory. None of them appear in
   answers, events, logs or audit entries. Requests go through the outbound URL rules at connect
   time (https, public addresses only, no redirects, no proxy; loopback on development instances).
-- Audit: `ticket_panel.connected`, `ticket_panel.updated` (`changes` names the fields, `secret`
-  for a rotation), `ticket_panel.disconnected`, with the kind and host.
+- Audit: `ticket_panel.connected`, `ticket_panel.updated` (`changes` names the fields:
+  `credentials` for new Shopify credentials, `secret` for a rotation), `ticket_panel.disconnected`,
+  with the kind and host.
 - The ticket is read through domain visibility: a contact on a ticket of a private team the
   reader is not on is never looked up.
 

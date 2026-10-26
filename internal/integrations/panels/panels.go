@@ -3,7 +3,9 @@
 // when the ticket is open and shown beside it. A panel is a kind of source:
 //
 //   - shopify: the contact's customer and last orders in a Shopify store, by email
-//     (Admin GraphQL API, a custom app's token with read_customers and read_orders);
+//     (Admin GraphQL API, read_customers and read_orders). OpenDesk asks Shopify for a token
+//     with the client ID and secret of an app installed on the shop (the client credentials
+//     grant, renewed every 24 hours), or uses an Admin API token pasted once (an older app);
 //   - http: a URL of the workspace's own that OpenDesk posts the contact and ticket to,
 //     signed like webhooks, answering sections of labelled values (an ERP, billing, a CRM).
 //
@@ -63,6 +65,8 @@ type Panel struct {
 	Kind      string    `json:"kind" enum:"shopify,http"`
 	Name      string    `json:"name"`
 	Host      string    `json:"host" doc:"shopify: the shop's myshopify.com domain; http: the URL's host"`
+	Auth      string    `json:"auth,omitempty" enum:"client_credentials,access_token" doc:"shopify: client_credentials when OpenDesk asks Shopify for its token with the app's client ID and secret; access_token when a token was pasted"`
+	ClientID  string    `json:"client_id,omitempty" doc:"shopify client_credentials: the app's client ID (not a secret)"`
 	Enabled   bool      `json:"enabled"`
 	Position  int       `json:"position"`
 	Status    string    `json:"status" enum:"connected,error"`
@@ -71,13 +75,15 @@ type Panel struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// row is a stored panel; target is the shop domain or the URL.
+// row is a stored panel; target is the shop domain or the URL. A shopify panel with a
+// client ID seals its app's client secret, one without seals an access token.
 type row struct {
 	ID          uuid.UUID
 	WorkspaceID uuid.UUID
 	Kind        string
 	Name        string
 	Target      string
+	ClientID    string
 	SecretEnc   []byte
 	Enabled     bool
 	Position    int
@@ -88,20 +94,25 @@ type row struct {
 }
 
 func (x *row) api() Panel {
-	host := x.Target
-	if x.Kind == KindHTTP {
-		host = hostOf(x.Target)
-	}
-	return Panel{ID: x.ID, Kind: x.Kind, Name: x.Name, Host: host, Enabled: x.Enabled, Position: x.Position,
+	p := Panel{ID: x.ID, Kind: x.Kind, Name: x.Name, Host: x.Target, Enabled: x.Enabled, Position: x.Position,
 		Status: x.Status, LastError: x.LastError, CreatedAt: x.CreatedAt, UpdatedAt: x.UpdatedAt}
+	switch {
+	case x.Kind == KindHTTP:
+		p.Host = hostOf(x.Target)
+	case x.ClientID != "":
+		p.Auth, p.ClientID = "client_credentials", x.ClientID
+	default:
+		p.Auth = "access_token"
+	}
+	return p
 }
 
-const rowSelect = `SELECT id, workspace_id, kind, name, target, secret_enc, enabled, position, status, last_error,
+const rowSelect = `SELECT id, workspace_id, kind, name, target, client_id, secret_enc, enabled, position, status, last_error,
 	created_at, updated_at FROM ticket_panels`
 
 func scanRow(r pgx.Row) (*row, error) {
 	var x row
-	err := r.Scan(&x.ID, &x.WorkspaceID, &x.Kind, &x.Name, &x.Target, &x.SecretEnc, &x.Enabled, &x.Position, &x.Status,
+	err := r.Scan(&x.ID, &x.WorkspaceID, &x.Kind, &x.Name, &x.Target, &x.ClientID, &x.SecretEnc, &x.Enabled, &x.Position, &x.Status,
 		&x.LastError, &x.CreatedAt, &x.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -130,14 +141,16 @@ func listRows(ctx context.Context, q db.Querier, wid uuid.UUID) ([]*row, error) 
 	return out, rows.Err()
 }
 
-// Service holds the outbound client and the answers cache (one per process).
+// Service holds the outbound client, the answers cache and the Shopify app tokens (one
+// per process).
 type Service struct {
-	d     *deps.Deps
-	http  *http.Client
-	guard netsafe.Guard
-	cache *answerCache
-	// shopifyEndpoint is the Admin GraphQL URL of a shop; tests point it at a fake.
-	shopifyEndpoint func(shop string) string
+	d      *deps.Deps
+	http   *http.Client
+	guard  netsafe.Guard
+	cache  *answerCache
+	tokens *appTokens
+	// shopifyBase is a shop's origin (https://<shop>); tests point it at a fake.
+	shopifyBase func(shop string) string
 }
 
 var (
@@ -154,7 +167,7 @@ func For(d *deps.Deps) *Service {
 	}
 	dev := !d.Cfg.IsProduction()
 	s := &Service{d: d, http: netsafe.Client(dev, fetchTimeout), guard: netsafe.Guard{Dev: dev}, cache: newAnswerCache(1000),
-		shopifyEndpoint: shopifyGraphQL}
+		tokens: newAppTokens(), shopifyBase: shopifyOrigin}
 	services[d] = s
 	return s
 }
@@ -257,14 +270,16 @@ func (s *Service) registerRoutes(api huma.API) {
 
 	huma.Register(api, huma.Operation{OperationID: "create-ticket-panel", Method: http.MethodPost, Path: "/v1/ticket-panels",
 		Summary: "Add a ticket panel", Tags: tags, DefaultStatus: http.StatusCreated,
-		Description: "`shopify` needs `shop` and `token` (checked with the shop first); `http` needs `url` and answers its signing `secret` once."},
+		Description: "`shopify` needs `shop` and either `client_id` and `client_secret` (an app installed on the shop) or `token` (an Admin API access token), checked with the shop first; `http` needs `url` and answers its signing `secret` once."},
 		func(ctx context.Context, in *struct {
 			Body struct {
-				Kind  string `json:"kind" enum:"shopify,http"`
-				Name  string `json:"name,omitempty" maxLength:"64"`
-				Shop  string `json:"shop,omitempty" maxLength:"255" doc:"shopify: the shop's myshopify.com domain or handle"`
-				Token string `json:"token,omitempty" maxLength:"4096" doc:"shopify: a custom app's Admin API access token"`
-				URL   string `json:"url,omitempty" maxLength:"2000" doc:"http: the https URL OpenDesk posts to"`
+				Kind         string `json:"kind" enum:"shopify,http"`
+				Name         string `json:"name,omitempty" maxLength:"64"`
+				Shop         string `json:"shop,omitempty" maxLength:"255" doc:"shopify: the shop's myshopify.com domain or handle"`
+				ClientID     string `json:"client_id,omitempty" maxLength:"255" doc:"shopify: the client ID of an app installed on the shop"`
+				ClientSecret string `json:"client_secret,omitempty" maxLength:"4096" doc:"shopify: that app's client secret"`
+				Token        string `json:"token,omitempty" maxLength:"4096" doc:"shopify: an Admin API access token, in place of a client ID and secret (apps made before 2026)"`
+				URL          string `json:"url,omitempty" maxLength:"2000" doc:"http: the https URL OpenDesk posts to"`
 			}
 		}) (*createdBody, error) {
 			p, err := requireAdminUser(ctx)
@@ -282,16 +297,16 @@ func (s *Service) registerRoutes(api huma.API) {
 				if x.Target, err = normalizeShop(b.Shop); err != nil {
 					return nil, httpx.Validation(err.Error())
 				}
-				token := strings.TrimSpace(b.Token)
-				if token == "" || strings.ContainsAny(token, " \r\n\t") {
-					return nil, httpx.Validation("Paste the Admin API access token.")
+				c, err := shopifyCredentials(b.ClientID, b.ClientSecret, b.Token)
+				if err != nil {
+					return nil, httpx.Validation(err.Error())
 				}
-				shopName, err := s.checkShopify(ctx, x.Target, token)
+				shopName, err := s.checkShopify(ctx, x.Target, c)
 				if err != nil {
 					return nil, httpx.E(422, "panel_failed", "Couldn't connect to Shopify: "+clip(err.Error(), 300))
 				}
-				x.Name = shopName
-				if x.SecretEnc, err = s.d.Box.Seal([]byte(token)); err != nil {
+				x.Name, x.ClientID = shopName, c.clientID
+				if x.SecretEnc, err = s.d.Box.Seal([]byte(c.secret)); err != nil {
 					return nil, httpx.Wrap(err)
 				}
 			case KindHTTP:
@@ -323,9 +338,9 @@ func (s *Service) registerRoutes(api huma.API) {
 				if n >= maxPerWorkspace {
 					return httpx.Conflict("A workspace can have at most 10 ticket panels.")
 				}
-				if _, err := tx.Exec(ctx, `INSERT INTO ticket_panels (id, workspace_id, kind, name, target, secret_enc, position, created_by)
-					VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, x.ID, p.WorkspaceID, x.Kind, x.Name, x.Target, x.SecretEnc, x.Position,
-					p.ActorUserID()); err != nil {
+				if _, err := tx.Exec(ctx, `INSERT INTO ticket_panels (id, workspace_id, kind, name, target, client_id, secret_enc, position, created_by)
+					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, x.ID, p.WorkspaceID, x.Kind, x.Name, x.Target, x.ClientID, x.SecretEnc,
+					x.Position, p.ActorUserID()); err != nil {
 					return err
 				}
 				saved, err := loadRow(ctx, tx, p.WorkspaceID, x.ID)
@@ -351,11 +366,13 @@ func (s *Service) registerRoutes(api huma.API) {
 		func(ctx context.Context, in *struct {
 			ID   string `path:"id"`
 			Body struct {
-				Name     *string `json:"name,omitempty" maxLength:"64"`
-				Enabled  *bool   `json:"enabled,omitempty"`
-				Position *int    `json:"position,omitempty" minimum:"0" maximum:"100"`
-				Token    *string `json:"token,omitempty" maxLength:"4096" doc:"shopify: a new access token, checked with the shop first"`
-				URL      *string `json:"url,omitempty" maxLength:"2000" doc:"http: a new URL"`
+				Name         *string `json:"name,omitempty" maxLength:"64"`
+				Enabled      *bool   `json:"enabled,omitempty"`
+				Position     *int    `json:"position,omitempty" minimum:"0" maximum:"100"`
+				ClientID     *string `json:"client_id,omitempty" maxLength:"255" doc:"shopify: another app's client ID, with its client_secret"`
+				ClientSecret *string `json:"client_secret,omitempty" maxLength:"4096" doc:"shopify: the app's new client secret (the client ID stays unless given), checked with the shop first"`
+				Token        *string `json:"token,omitempty" maxLength:"4096" doc:"shopify: an access token in place of the app's credentials, checked with the shop first"`
+				URL          *string `json:"url,omitempty" maxLength:"2000" doc:"http: a new URL"`
 			}
 		}) (*panelBody, error) {
 			p, err := requireAdminUser(ctx)
@@ -386,22 +403,33 @@ func (s *Service) registerRoutes(api huma.API) {
 				x.Position = *b.Position
 				changes = append(changes, "position")
 			}
-			if b.Token != nil {
+			if b.ClientID != nil || b.ClientSecret != nil || b.Token != nil {
 				if x.Kind != KindShopify {
-					return nil, httpx.Validation("Only a Shopify panel has a token.")
+					return nil, httpx.Validation("Only a Shopify panel has credentials.")
 				}
-				token := strings.TrimSpace(*b.Token)
-				if token == "" || strings.ContainsAny(token, " \r\n\t") {
-					return nil, httpx.Validation("Paste the Admin API access token.")
+				var c shopifyCred
+				if b.Token != nil {
+					c, err = shopifyCredentials(deref(b.ClientID), deref(b.ClientSecret), *b.Token)
+				} else {
+					// A rotated secret keeps the app's client ID.
+					clientID := x.ClientID
+					if b.ClientID != nil {
+						clientID = *b.ClientID
+					}
+					c, err = shopifyCredentials(clientID, deref(b.ClientSecret), "")
 				}
-				if _, err := s.checkShopify(ctx, x.Target, token); err != nil {
+				if err != nil {
+					return nil, httpx.Validation(err.Error())
+				}
+				if _, err := s.checkShopify(ctx, x.Target, c); err != nil {
 					return nil, httpx.E(422, "panel_failed", "Couldn't connect to Shopify: "+clip(err.Error(), 300))
 				}
-				if x.SecretEnc, err = s.d.Box.Seal([]byte(token)); err != nil {
+				if x.SecretEnc, err = s.d.Box.Seal([]byte(c.secret)); err != nil {
 					return nil, httpx.Wrap(err)
 				}
+				x.ClientID = c.clientID
 				x.Status, x.LastError = "connected", ""
-				changes = append(changes, "token")
+				changes = append(changes, "credentials")
 			}
 			if b.URL != nil {
 				if x.Kind != KindHTTP {
@@ -415,8 +443,8 @@ func (s *Service) registerRoutes(api huma.API) {
 			}
 			err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				if _, err := tx.Exec(ctx, `UPDATE ticket_panels SET name = $3, enabled = $4, position = $5, target = $6,
-					secret_enc = $7, status = $8, last_error = $9, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
-					p.WorkspaceID, id, x.Name, x.Enabled, x.Position, x.Target, x.SecretEnc, x.Status, x.LastError); err != nil {
+					client_id = $7, secret_enc = $8, status = $9, last_error = $10, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
+					p.WorkspaceID, id, x.Name, x.Enabled, x.Position, x.Target, x.ClientID, x.SecretEnc, x.Status, x.LastError); err != nil {
 					return err
 				}
 				saved, err := loadRow(ctx, tx, p.WorkspaceID, id)
@@ -516,6 +544,7 @@ func (s *Service) registerRoutes(api huma.API) {
 				return nil, httpx.Wrap(err)
 			}
 			s.cache.forget(id)
+			s.tokens.forget(id)
 			return nil, nil
 		})
 
@@ -559,7 +588,7 @@ func (s *Service) registerRoutes(api huma.API) {
 }
 
 // errAuth marks a refusal of the panel's credentials: the panel shows as needing attention
-// in settings until a new token or URL is saved, or a lookup succeeds again.
+// in settings until new credentials or a new URL are saved, or a lookup succeeds again.
 var errAuth = errors.New("credentials refused")
 
 // authError is a refusal of the stored credentials with the product's words.

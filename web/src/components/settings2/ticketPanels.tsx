@@ -1,9 +1,10 @@
 // Settings → Integrations → Ticket panels (contracts/integrations.md "Ticket panels"): admins
 // add a Shopify store or a URL of their own; every ticket then shows what it knows about the
-// contact. Tokens and secrets never come back: a token is replaced, a secret renewed.
+// contact. A store connects with its app's client ID and secret, or an older app's access
+// token. Secrets and tokens never come back: they are replaced, a signing secret renewed.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Link2, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { ArrowUpRight, KeyRound, Link2, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Section } from "@/components/layout";
@@ -25,6 +26,18 @@ import { ListSkeleton, StatePill } from "./bits";
 import { MotionList, MotionRow } from "./motion";
 
 type Kind = TicketPanel["kind"];
+type ShopifyAuth = NonNullable<TicketPanel["auth"]>;
+type ShopifyCred = { auth: ShopifyAuth; clientId: string; clientSecret: string; token: string };
+
+const DEV_DASHBOARD = "https://dev.shopify.com/dashboard";
+
+/** What a Shopify panel is saved with: its app's client ID and secret, or a token; null when one is missing. */
+export function shopifyBody(c: ShopifyCred): { client_id: string; client_secret: string } | { token: string } | null {
+  if (c.auth === "access_token") return c.token.trim() ? { token: c.token.trim() } : null;
+  const id = c.clientId.trim();
+  const secret = c.clientSecret.trim();
+  return id && secret ? { client_id: id, client_secret: secret } : null;
+}
 
 /** https://, or http:// on this machine (a development instance allows it). */
 export function panelUrlOk(v: string): boolean {
@@ -162,7 +175,7 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
               <MenuContent>
                 {p.kind === "shopify" ? (
                   <MenuItem icon={<KeyRound />} onSelect={() => setEditing(true)}>
-                    {t("panels.replaceToken")}
+                    {t("panels.replaceCredentials")}
                   </MenuItem>
                 ) : (
                   <>
@@ -203,7 +216,7 @@ function AddPanelDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (p
   const qc = useQueryClient();
   const [kind, setKind] = useState<Kind>("shopify");
   const [shop, setShop] = useState("");
-  const [token, setToken] = useState("");
+  const [cred, setCred] = useState<ShopifyCred>({ auth: "client_credentials", clientId: "", clientSecret: "", token: "" });
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -212,7 +225,7 @@ function AddPanelDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (p
     mutationFn: () =>
       api.ticketPanels.create(
         kind === "shopify"
-          ? { kind, shop: shop.trim(), token: token.trim(), name: name.trim() || undefined }
+          ? { kind, shop: shop.trim(), ...shopifyBody(cred), name: name.trim() || undefined }
           : { kind, url: url.trim(), name: name.trim() || undefined },
       ),
     onSuccess: (r) => {
@@ -226,7 +239,7 @@ function AddPanelDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (p
     setError(null);
     if (kind === "shopify") {
       if (!shopDomain(shop)) return setError(t("panels.shopRequired"));
-      if (!token.trim()) return setError(t("panels.tokenRequired"));
+      if (!shopifyBody(cred)) return setError(t(cred.auth === "access_token" ? "panels.tokenRequired" : "panels.appRequired"));
     } else if (!panelUrlOk(url)) return setError(t("panels.urlRequired"));
     create.mutate();
   };
@@ -273,9 +286,7 @@ function AddPanelDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (p
             <Field label={t("panels.shop")} hint={t("panels.shopHint")}>
               {(f) => <TextInput {...f} autoFocus className="mono" value={shop} placeholder="my-store.myshopify.com" onChange={(e) => setShop(e.target.value)} />}
             </Field>
-            <Field label={t("panels.token")} hint={t("panels.tokenHint")}>
-              {(f) => <TextInput {...f} type="password" autoComplete="off" className="mono" value={token} placeholder="shpat_…" onChange={(e) => setToken(e.target.value)} />}
-            </Field>
+            <ShopifyCredentialFields value={cred} onChange={setCred} />
           </>
         ) : (
           <Field label={t("panels.url")} hint={t("panels.urlHint")}>
@@ -293,14 +304,79 @@ function AddPanelDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (p
   );
 }
 
+/** How a Shopify panel connects: its app's client ID and secret, or an older app's access token. */
+function ShopifyCredentialFields({ value, onChange, autoFocus }: { value: ShopifyCred; onChange: (c: ShopifyCred) => void; autoFocus?: boolean }) {
+  const { t } = useTranslation("settingsDev");
+  const set = (c: Partial<ShopifyCred>) => onChange({ ...value, ...c });
+  return (
+    <>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[12.5px] font-medium text-fg-2">{t("panels.auth.label")}</span>
+        <Segmented<ShopifyAuth>
+          value={value.auth}
+          onChange={(auth) => set({ auth })}
+          className="self-start"
+          options={[
+            { value: "client_credentials", label: t("panels.auth.client_credentials") },
+            { value: "access_token", label: t("panels.auth.access_token") },
+          ]}
+        />
+      </div>
+      {value.auth === "client_credentials" ? (
+        <>
+          <Field label={t("panels.clientId")}>
+            {(f) => (
+              <TextInput {...f} autoFocus={autoFocus && !value.clientId} autoComplete="off" spellCheck={false} className="mono" value={value.clientId} onChange={(e) => set({ clientId: e.target.value })} />
+            )}
+          </Field>
+          <Field
+            label={t("panels.clientSecret")}
+            hint={
+              <>
+                {t("panels.appHint")}{" "}
+                <a href={DEV_DASHBOARD} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-fg-2 underline decoration-line-strong underline-offset-2 hover:text-fg">
+                  {t("panels.openDevDashboard")}
+                  <ArrowUpRight className="size-3" aria-hidden />
+                </a>
+              </>
+            }
+          >
+            {(f) => (
+              <TextInput {...f} autoFocus={autoFocus && !!value.clientId} type="password" autoComplete="off" spellCheck={false} className="mono" value={value.clientSecret} onChange={(e) => set({ clientSecret: e.target.value })} />
+            )}
+          </Field>
+        </>
+      ) : (
+        <Field label={t("panels.token")} hint={t("panels.tokenHint")}>
+          {(f) => (
+            <TextInput
+              {...f}
+              autoFocus={autoFocus}
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              className="mono"
+              value={value.token}
+              placeholder="shpat_…"
+              onChange={(e) => set({ token: e.target.value })}
+            />
+          )}
+        </Field>
+      )}
+    </>
+  );
+}
+
 function EditPanelDialog({ p, onClose }: { p: TicketPanel; onClose: () => void }) {
   const { t } = useTranslation("settingsDev");
   const qc = useQueryClient();
-  const [value, setValue] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const shopify = p.kind === "shopify";
+  // A rotated secret keeps the app's client ID, so it starts filled in.
+  const [cred, setCred] = useState<ShopifyCred>({ auth: p.auth ?? "client_credentials", clientId: p.client_id ?? "", clientSecret: "", token: "" });
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const save = useMutation({
-    mutationFn: () => api.ticketPanels.update(p.id, shopify ? { token: value.trim() } : { url: value.trim() }),
+    mutationFn: () => api.ticketPanels.update(p.id, shopify ? { ...shopifyBody(cred) } : { url: url.trim() }),
     onSuccess: (row) => {
       upsertInList(qc, qk.ticketPanels, row);
       onClose();
@@ -309,8 +385,8 @@ function EditPanelDialog({ p, onClose }: { p: TicketPanel; onClose: () => void }
   });
   const submit = () => {
     setError(null);
-    if (shopify && !value.trim()) return setError(t("panels.tokenRequired"));
-    if (!shopify && !panelUrlOk(value)) return setError(t("panels.urlRequired"));
+    if (shopify && !shopifyBody(cred)) return setError(t(cred.auth === "access_token" ? "panels.tokenRequired" : "panels.appRequired"));
+    if (!shopify && !panelUrlOk(url)) return setError(t("panels.urlRequired"));
     save.mutate();
   };
   return (
@@ -318,7 +394,7 @@ function EditPanelDialog({ p, onClose }: { p: TicketPanel; onClose: () => void }
       open
       size="md"
       onOpenChange={(o) => !o && onClose()}
-      title={shopify ? t("panels.tokenTitle", { name: p.name }) : t("panels.urlTitle", { name: p.name })}
+      title={shopify ? t("panels.credentialsTitle", { name: p.name }) : t("panels.urlTitle", { name: p.name })}
       footer={
         <>
           <span className="mr-auto text-xs text-danger-fg">{error}</span>
@@ -338,20 +414,15 @@ function EditPanelDialog({ p, onClose }: { p: TicketPanel; onClose: () => void }
           submit();
         }}
       >
-        <Field label={shopify ? t("panels.token") : t("panels.url")} hint={shopify ? t("panels.tokenHint") : t("panels.urlHint")}>
-          {(f) => (
-            <TextInput
-              {...f}
-              autoFocus
-              className="mono"
-              type={shopify ? "password" : "text"}
-              autoComplete="off"
-              value={value}
-              placeholder={shopify ? "shpat_…" : "https://erp.example.com/opendesk/panel"}
-              onChange={(e) => setValue(e.target.value)}
-            />
-          )}
-        </Field>
+        {shopify ? (
+          <ShopifyCredentialFields value={cred} onChange={setCred} autoFocus />
+        ) : (
+          <Field label={t("panels.url")} hint={t("panels.urlHint")}>
+            {(f) => (
+              <TextInput {...f} autoFocus className="mono" autoComplete="off" value={url} placeholder="https://erp.example.com/opendesk/panel" onChange={(e) => setUrl(e.target.value)} />
+            )}
+          </Field>
+        )}
         <button type="submit" className="hidden" />
       </form>
     </Dialog>

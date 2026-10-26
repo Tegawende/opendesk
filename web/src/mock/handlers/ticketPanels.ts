@@ -1,6 +1,6 @@
 // Mock ticket panels (contracts/integrations.md "Ticket panels"): a seeded Shopify store
 // whose orders are made up from the contact's email, and http panels that answer a few
-// sections. Nothing is fetched; tokens are kept only to be checked as non-empty.
+// sections. Nothing is fetched; credentials are only checked as given, never kept.
 
 import type { PanelOrder, TicketPanel, TicketPanelData } from "@/lib/api/types";
 import { db, userRef, type WsData } from "../db";
@@ -13,7 +13,22 @@ const panelsOf = new Map<string, TicketPanel[]>();
 
 function seed(): TicketPanel[] {
   const at = nowIso();
-  return [{ id: uuid(), kind: "shopify", name: "Margin Store", host: "margin-store.myshopify.com", enabled: true, position: 0, status: "connected", last_error: "", created_at: at, updated_at: at }];
+  return [
+    {
+      id: uuid(),
+      kind: "shopify",
+      name: "Margin Store",
+      host: "margin-store.myshopify.com",
+      auth: "client_credentials",
+      client_id: "3f9c0d1e7a2b4c5d8e6f",
+      enabled: true,
+      position: 0,
+      status: "connected",
+      last_error: "",
+      created_at: at,
+      updated_at: at,
+    },
+  ];
 }
 
 export function panelsState(ws: WsData): TicketPanel[] {
@@ -23,6 +38,17 @@ export function panelsState(ws: WsData): TicketPanel[] {
     panelsOf.set(ws.workspace.id, list);
   }
   return list;
+}
+
+/** A Shopify panel's credentials, as the server reads them: an app's client ID and secret, or a token. */
+function shopifyAuth(b: Record<string, unknown>): Pick<TicketPanel, "auth" | "client_id"> {
+  const id = String(b.client_id ?? "").trim();
+  const secret = String(b.client_secret ?? "").trim();
+  const token = String(b.token ?? "").trim();
+  if (token && (id || secret)) throw invalid("Give the app's client ID and secret, or an access token, not both.");
+  if (token) return { auth: "access_token", client_id: undefined };
+  if (!id || !secret) throw invalid("Paste the app's client ID and client secret.");
+  return { auth: "client_credentials", client_id: id };
 }
 
 function admin(ws: WsData) {
@@ -160,8 +186,8 @@ export function registerTicketPanels() {
     let s: string | undefined;
     if (kind === "shopify") {
       const host = shopOf(ctx.body.shop);
-      if (!String(ctx.body.token ?? "").trim()) throw invalid("Paste the Admin API access token.");
-      p = { id: uuid(), kind, name: String(ctx.body.name ?? "").trim() || "Margin Store", host, enabled: true, position: list.length, status: "connected", last_error: "", created_at: at, updated_at: at };
+      const auth = shopifyAuth(ctx.body);
+      p = { id: uuid(), kind, name: String(ctx.body.name ?? "").trim() || "Margin Store", host, ...auth, enabled: true, position: list.length, status: "connected", last_error: "", created_at: at, updated_at: at };
     } else if (kind === "http") {
       const url = urlOf(ctx.body.url);
       p = { id: uuid(), kind, name: String(ctx.body.name ?? "").trim() || new URL(url).host, host: new URL(url).host, enabled: true, position: list.length, status: "connected", last_error: "", created_at: at, updated_at: at };
@@ -180,9 +206,10 @@ export function registerTicketPanels() {
     if (typeof b.name === "string") p.name = b.name.trim().slice(0, 64) || p.name;
     if (typeof b.enabled === "boolean") p.enabled = b.enabled;
     if (typeof b.position === "number") p.position = b.position;
-    if (b.token !== undefined) {
-      if (p.kind !== "shopify") throw invalid("Only a Shopify panel has a token.");
-      if (!String(b.token).trim()) throw invalid("Paste the Admin API access token.");
+    if (b.token !== undefined || b.client_id !== undefined || b.client_secret !== undefined) {
+      if (p.kind !== "shopify") throw invalid("Only a Shopify panel has credentials.");
+      // A rotated secret keeps the app's client ID.
+      Object.assign(p, shopifyAuth(b.token !== undefined ? b : { client_id: p.client_id, ...b }));
       p.status = "connected";
       p.last_error = "";
     }

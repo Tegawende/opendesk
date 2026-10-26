@@ -38,4 +38,20 @@ describe("mock ticket panels", () => {
     expect((await call("GET", `/v1/tickets/${tickets[0]!.id}/panels/${made.body.panel.id}`)).status).toBe(404);
     expect((await call("DELETE", `/v1/ticket-panels/${made.body.panel.id}`)).status).toBe(204);
   });
+
+  it("connects a store with an app's client ID and secret, or a token, and keeps the client ID on a new secret", async () => {
+    const base = { kind: "shopify", shop: "lumen-store" };
+    expect((await call("POST", "/v1/ticket-panels", { ...base, client_id: "app-id" })).status).toBe(422);
+    expect((await call("POST", "/v1/ticket-panels", { ...base, client_id: "app-id", client_secret: "s", token: "shpat_x" })).status).toBe(422);
+    const made = await call("POST", "/v1/ticket-panels", { ...base, client_id: "app-id", client_secret: "s" });
+    expect(made.body.panel).toMatchObject({ auth: "client_credentials", client_id: "app-id" });
+    expect(JSON.stringify(made.body)).not.toContain('"s"');
+    const id = made.body.panel.id;
+    expect((await call("PATCH", `/v1/ticket-panels/${id}`, { client_secret: "s2" })).body).toMatchObject({ auth: "client_credentials", client_id: "app-id" });
+    const token = (await call("PATCH", `/v1/ticket-panels/${id}`, { token: "shpat_old" })).body;
+    expect(token.auth).toBe("access_token");
+    expect(token.client_id).toBeUndefined();
+    expect((await call("PATCH", `/v1/ticket-panels/${id}`, { client_secret: "s3" })).status).toBe(422);
+    await call("DELETE", `/v1/ticket-panels/${id}`);
+  });
 });

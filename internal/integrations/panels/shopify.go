@@ -47,9 +47,7 @@ func normalizeShop(raw string) (string, error) {
 	return s, nil
 }
 
-func shopifyGraphQL(shop string) string {
-	return "https://" + shop + "/admin/api/" + shopifyVersion + "/graphql.json"
-}
+func shopifyOrigin(shop string) string { return "https://" + shop }
 
 // shopHandle is the shop's name in admin.shopify.com links.
 func shopHandle(shop string) string { return strings.TrimSuffix(shop, ".myshopify.com") }
@@ -68,7 +66,8 @@ func (s *Service) graphql(ctx context.Context, shop, token, query string, vars m
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.shopifyEndpoint(shop), bytes.NewReader(body))
+	endpoint := s.shopifyBase(shop) + "/admin/api/" + shopifyVersion + "/graphql.json"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -129,11 +128,23 @@ func (s *Service) graphql(ctx context.Context, shop, token, query string, vars m
 	return json.Unmarshal(env.Data, out)
 }
 
-// checkShopify reads the shop's name with the token, so a wrong shop or token is caught
-// when it is saved.
-func (s *Service) checkShopify(ctx context.Context, shop, token string) (string, error) {
+// checkShopify reads the shop's name with the credentials, so a wrong shop, app or token
+// (or an app without the scopes) is caught when it is saved.
+func (s *Service) checkShopify(ctx context.Context, shop string, c shopifyCred) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+	token := c.secret
+	if c.clientID != "" {
+		tok, err := s.requestAppToken(ctx, shop, c)
+		if err != nil {
+			return "", err
+		}
+		if missing := missingScopes(tok.scope); len(missing) > 0 {
+			return "", fmt.Errorf("The app lacks %s: add it to the app's version in the Dev Dashboard, release it and approve it on the shop.",
+				strings.Join(missing, " and "))
+		}
+		token = tok.token
+	}
 	var out struct {
 		Shop struct {
 			Name string `json:"name"`
@@ -235,7 +246,7 @@ func deref(s *string) string {
 
 // readShopify fills d with the contact's customer and last orders.
 func (s *Service) readShopify(ctx context.Context, x *row, sub subject, d *Data) error {
-	token, err := s.d.Box.Open(x.SecretEnc)
+	token, fresh, err := s.shopifyToken(ctx, x, false)
 	if err != nil {
 		return err
 	}
@@ -245,7 +256,14 @@ func (s *Service) readShopify(ctx context.Context, x *row, sub subject, d *Data)
 		} `json:"customers"`
 	}
 	vars := map[string]any{"q": searchPhrase(sub.Email), "orders": shopifyOrders, "items": shopifyItems}
-	if err := s.graphql(ctx, x.Target, string(token), customerQuery, vars, &out); err != nil {
+	err = s.graphql(ctx, x.Target, token, customerQuery, vars, &out)
+	if errors.Is(err, errAuth) && !fresh {
+		// The app's token was revoked before its end: once more with a new one.
+		if token, _, err = s.shopifyToken(ctx, x, true); err == nil {
+			err = s.graphql(ctx, x.Target, token, customerQuery, vars, &out)
+		}
+	}
+	if err != nil {
 		return err
 	}
 	// The search is a phrase match; only the customer whose address is the contact's counts.
