@@ -2527,6 +2527,8 @@ export type MailMessage = {
   sent_by: UserRef | null;
   /** Drafts: the id the /v1/collab/drafts routes take. */
   draft_id?: string | null;
+  /** Drafts an AI key saved and no person has saved since: the key's name, shown "AI draft by" (contracts/collab.md "AI drafts"). */
+  drafted_by_ai?: string | null;
   /** The message of the conversation it answers (its In-Reply-To), when stored. */
   in_reply_to_id?: string | null;
   /** The account's address (its own or an alias) it was sent from or written to; null when none. */

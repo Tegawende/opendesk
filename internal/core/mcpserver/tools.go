@@ -58,7 +58,7 @@ func (t *tool) mcpTool() *mcp.Tool {
 
 // catalog is every tool, in the order clients list them (contracts/agent.md).
 func catalog() []*tool {
-	return slices.Concat(ticketTools(), contactTools(), knowledgeTools(), wikiTools(), reportTools())
+	return slices.Concat(ticketTools(), contactTools(), knowledgeTools(), wikiTools(), reportTools(), collabTools())
 }
 
 // --- results -------------------------------------------------------------------------
