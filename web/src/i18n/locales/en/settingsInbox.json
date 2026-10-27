@@ -305,6 +305,7 @@
     "chooseTeammate": "Choose a teammate",
     "chooseTeam": "Choose a team",
     "markSpamHint": "Moves the ticket to Spam. No reply is sent.",
+    "deleteTicketHint": "Deletes the ticket: it leaves every view, and nothing else runs on it.",
     "replyPlaceholder": "Thanks for writing in. We've received your message…",
     "notePlaceholder": "Internal note for the team",
     "replyText": "Reply text",
@@ -370,6 +371,7 @@
     "send_reply": "Send a reply",
     "add_note": "Add an internal note",
     "mark_spam": "Mark as spam",
+    "delete_ticket": "Delete ticket",
     "set_field": "Set field",
     "set_reply_address": "Set reply address"
   },
