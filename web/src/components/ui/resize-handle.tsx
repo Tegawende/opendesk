@@ -1,8 +1,10 @@
 // The edge between two panes, dragged to resize the one beside it (lib/panes.ts). It takes no
-// room of its own: an 8px strip centred on the pane's border, a hairline on hover, a stronger one
-// while dragging or focused. Dragging writes the width straight to the page once a frame
-// (`onLive`) and saves it on release (`onWidth`); arrows step it, Home and End go to the ends,
-// and a double click goes back to the default.
+// room of its own: an 8px strip that starts at the border and lies over the next pane's edge, so
+// the scrollbar at the end of the pane before it stays clear; a hairline on the border on hover,
+// a stronger one while dragging or focused. Dragging writes a live width over the saved one once
+// a frame (`onLive`), saves it on release (`onWidth`) and lifts the live one again, so what shows
+// is always what the page renders; arrows step it, Home and End go to the ends, and a double
+// click goes back to the default.
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -19,7 +21,7 @@ type Props = {
   side: "before" | "after";
   /** The width saved for the pane, null for the default. */
   width: number | null;
-  /** Shows a width while dragging, without a render; null puts back the saved one. */
+  /** Shows a width over the saved one while dragging, without a render; null lifts it. */
   onLive: (px: number | null) => void;
   /** Saves a width, or goes back to the default with null. */
   onWidth: (px: number | null) => void;
@@ -32,7 +34,10 @@ export function ResizeHandle({ pane, target, room, side, width, onLive, onWidth,
   const { t } = useTranslation("ui");
   const label = { nav: t("resizeSidebar"), list: t("resizeTicketList"), details: t("resizeTicketDetails") }[pane];
   const self = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ id: number; x: number; w: number; room: number | undefined; grow: 1 | -1; px: number; raf: number } | null>(null);
+  const drag = useRef<{ id: number; x: number; w: number; room: number | undefined; grow: 1 | -1; px: number; raf: number; moved: boolean } | null>(null);
+  // The latest writer, for a drag cut short by the handle going away (b, ], Escape).
+  const live = useRef(onLive);
+  live.current = onLive;
   const [dragging, setDragging] = useState(false);
   const [value, setValue] = useState<{ now: number; max: number }>({ now: 0, max: paneLimits[pane].max });
 
@@ -74,20 +79,31 @@ export function ResizeHandle({ pane, target, room, side, width, onLive, onWidth,
     };
   }, [target]);
 
-  const end = (save: boolean) => {
+  const stop = () => {
     const d = drag.current;
-    if (!d) return;
+    if (!d) return null;
     drag.current = null;
     cancelAnimationFrame(d.raf);
     delete document.documentElement.dataset[RESIZING];
+    return d;
+  };
+  // Saves where the drag got to (not when cancelled), then lifts the live width so the saved one
+  // shows. A press that never moved wrote nothing and leaves the page alone.
+  const end = (save: boolean) => {
+    const d = stop();
+    if (!d) return;
     setDragging(false);
-    if (save && d.px !== d.w) {
-      onLive(d.px);
-      onWidth(d.px);
-    } else onLive(width);
+    if (!d.moved) return;
+    if (save && d.px !== d.w) onWidth(d.px);
+    onLive(null);
     measureRef.current();
   };
-  useEffect(() => () => end(false), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(
+    () => () => {
+      if (stop()?.moved) live.current(null);
+    },
+    [],
+  );
 
   const down = (e: PointerEvent<HTMLDivElement>) => {
     const el = target.current;
@@ -97,7 +113,7 @@ export function ResizeHandle({ pane, target, room, side, width, onLive, onWidth,
     e.currentTarget.setPointerCapture(e.pointerId);
     const space = room();
     const w = current(el, space);
-    drag.current = { id: e.pointerId, x: e.clientX, w, room: space, grow: grow(), px: w, raf: 0 };
+    drag.current = { id: e.pointerId, x: e.clientX, w, room: space, grow: grow(), px: w, raf: 0, moved: false };
     document.documentElement.dataset[RESIZING] = "";
     setDragging(true);
   };
@@ -105,6 +121,8 @@ export function ResizeHandle({ pane, target, room, side, width, onLive, onWidth,
     const d = drag.current;
     if (!d || e.pointerId !== d.id) return;
     d.px = clampWidth(pane, d.w + (e.clientX - d.x) * d.grow, d.room);
+    if (d.px === d.w && !d.moved) return;
+    d.moved = true;
     if (!d.raf)
       d.raf = requestAnimationFrame(() => {
         d.raf = 0;
@@ -119,7 +137,6 @@ export function ResizeHandle({ pane, target, room, side, width, onLive, onWidth,
     const next = keyWidth(e.key, e.shiftKey, current(el, space), pane, space, grow());
     if (next === null) return;
     e.preventDefault();
-    onLive(next);
     onWidth(next);
     setValue({ now: next, max: maxWidth(pane, space) });
   };
@@ -144,8 +161,8 @@ export function ResizeHandle({ pane, target, room, side, width, onLive, onWidth,
       onKeyDown={key}
       onFocus={measure}
       className={cn(
-        "relative z-20 -mx-1 w-2 shrink-0 cursor-col-resize touch-none select-none outline-none",
-        "before:absolute before:inset-y-0 before:inset-x-[3px] before:transition-colors before:duration-150 hover:before:bg-line-strong hover:before:delay-100",
+        "relative z-20 -me-2 w-2 shrink-0 cursor-col-resize touch-none select-none outline-none",
+        "before:absolute before:inset-y-0 before:start-0 before:w-0.5 before:transition-colors before:duration-150 hover:before:bg-line-strong hover:before:delay-100",
         "focus-visible:before:bg-focus-line data-dragging:before:bg-focus-line data-dragging:before:delay-0",
         className,
       )}

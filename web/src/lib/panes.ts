@@ -45,6 +45,12 @@ export function paneCss(pane: Pane, px: number, room: "vw" | "%"): string {
   return `clamp(${min}px, ${px}px, ${share * 100}${room})`;
 }
 
+/** Writes the width a drag shows (`--pane-<pane>-live`, over the saved one), or lifts it with null. */
+export function setLiveWidth(el: HTMLElement | null | undefined, pane: Pane, css: string | null) {
+  if (css === null) el?.style.removeProperty(`--pane-${pane}-live`);
+  else el?.style.setProperty(`--pane-${pane}-live`, css);
+}
+
 /**
  * The width a key press gives, or null for a key the handle leaves alone. `grow` is 1 when
  * the pane sits left of its handle on screen (ArrowRight widens it), -1 when it sits right.

@@ -2,7 +2,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CircleCheck, CircleDashed, Clock, Inbox, Layers, ShieldAlert, User, Users } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { Ticket } from "@/lib/api/types";
 import { folderById, listQuery, teamQuery, type FolderId, type InboxSearch } from "@/lib/folders";
@@ -28,7 +28,7 @@ import { useUpdateTicket } from "@/components/tickets/useTicketActions";
 import { intent } from "@/components/tickets/motion";
 import { focusField, missingForSolve, useTicketFields } from "@/components/tickets/fields";
 import { atLeast, useRole, useSession } from "@/lib/session";
-import { paneCss, usePaneWidth } from "@/lib/panes";
+import { paneCss, setLiveWidth, usePaneWidth } from "@/lib/panes";
 import { useDocumentTitle } from "@/app/RootLayout";
 import { TeamDot, useTeamsCtx } from "@/components/tickets/teams";
 import { TeamTabs } from "./TeamTabs";
@@ -194,7 +194,6 @@ export default function InboxPage() {
   const [listWidth, setListWidth] = usePaneWidth("list");
   const pageRef = useRef<HTMLDivElement>(null);
   const listPaneRef = useRef<HTMLElement>(null);
-  const listCss = (px: number | null) => (px === null ? "" : paneCss("list", px, "%"));
 
   // ── Selection and keyboard focus ────────────────────────────────────────
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -447,10 +446,12 @@ export default function InboxPage() {
       <section
         ref={listPaneRef}
         aria-label={title}
-        style={split && listWidth !== null ? { width: listCss(listWidth) } : undefined}
+        style={listWidth === null ? undefined : ({ "--pane-list": paneCss("list", listWidth, "%") } as CSSProperties)}
         className={cn(
           "relative flex min-h-0 flex-col",
-          split ? "hidden w-[340px] shrink-0 border-r border-line lg:flex xl:w-[380px] 2xl:w-[420px]" : "min-w-0 flex-1",
+          split
+            ? "hidden w-[var(--pane-list-live,var(--pane-list,340px))] shrink-0 border-r border-line lg:flex xl:w-[var(--pane-list-live,var(--pane-list,380px))] 2xl:w-[var(--pane-list-live,var(--pane-list,420px))]"
+            : "min-w-0 flex-1",
         )}
       >
         <ListToolbar
@@ -538,7 +539,7 @@ export default function InboxPage() {
           target={listPaneRef}
           room={() => pageRef.current?.clientWidth}
           width={listWidth}
-          onLive={(px) => listPaneRef.current?.style.setProperty("width", listCss(px))}
+          onLive={(px) => setLiveWidth(listPaneRef.current, "list", px === null ? null : paneCss("list", px, "%"))}
           onWidth={setListWidth}
           className="hidden lg:block"
         />

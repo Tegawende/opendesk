@@ -27,7 +27,7 @@ import { Sidebar } from "./Sidebar";
 import { SuspendedWorkspace } from "./SuspendedWorkspace";
 import { AppHeader } from "./AppHeader";
 import { cn } from "@/lib/cn";
-import { paneCss, usePaneWidth } from "@/lib/panes";
+import { paneCss, setLiveWidth, usePaneWidth } from "@/lib/panes";
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsSheet } from "./ShortcutsSheet";
@@ -240,11 +240,10 @@ export function AppLayout() {
   const sidebarOpen = useShell((s) => s.sidebarOpen);
   const upgradeReason = useUpgrade((s) => s.reason);
   const collapsed = useNav((s) => s.collapsed);
-  // The expanded sidebar's width (`--pane-nav`), shared with the header's logo above it.
+  // The expanded sidebar's width (`--pane-nav`, `--pane-nav-live` while dragged), shared with the header's logo above it.
   const [navWidth, setNavWidth] = usePaneWidth("nav");
   const shellRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
-  const navCss = (px: number | null) => (px === null ? "" : paneCss("nav", px, "vw"));
   // Logging out, or deleting or leaving the last workspace, clears the session
   // before the router leaves the app; render nothing in between rather than
   // pages that read the signed-in user and the current workspace.
@@ -279,11 +278,11 @@ export function AppLayout() {
   if (suspended) return <SuspendedWorkspace />;
 
   return (
-    <div ref={shellRef} className="fixed inset-0 flex flex-col bg-frame text-fg" style={navWidth === null ? undefined : ({ "--pane-nav": navCss(navWidth) } as CSSProperties)}>
+    <div ref={shellRef} className="fixed inset-0 flex flex-col bg-frame text-fg" style={navWidth === null ? undefined : ({ "--pane-nav": paneCss("nav", navWidth, "vw") } as CSSProperties)}>
       <AppHeader />
       {/* In the desktop app the work panel floats inset in the window frame. */}
       <div className="flex min-h-0 flex-1 desktop:pb-2 desktop:pr-2">
-        <aside ref={navRef} className={cn("hidden shrink-0 transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex", collapsed ? "w-14" : "w-[var(--pane-nav,15rem)]")}>
+        <aside ref={navRef} className={cn("hidden shrink-0 transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex", collapsed ? "w-14" : "w-[var(--pane-nav-live,var(--pane-nav,15rem))]")}>
           <Sidebar />
         </aside>
         {!collapsed && (
@@ -293,7 +292,7 @@ export function AppLayout() {
             target={navRef}
             room={() => window.innerWidth}
             width={navWidth}
-            onLive={(px) => shellRef.current?.style.setProperty("--pane-nav", navCss(px))}
+            onLive={(px) => setLiveWidth(shellRef.current, "nav", px === null ? null : paneCss("nav", px, "vw"))}
             onWidth={setNavWidth}
             className="hidden md:block"
           />

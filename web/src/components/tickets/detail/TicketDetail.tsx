@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, CircleCheck, CircleDot, Signal, Copy, GitMerge, MoreHorizontal, PanelRight, RotateCcw, ShieldAlert, ShieldCheck, Trash2, UserRound, Users, X, MessageSquare, MessagesSquare, StickyNote } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { tone } from "@/lib/tones";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,7 @@ import { useDocumentTitle } from "@/app/RootLayout";
 import { usePageCommands } from "@/app/shellStore";
 import { Button } from "@/components/ui/button";
 import { ResizeHandle } from "@/components/ui/resize-handle";
-import { clampWidth, usePaneWidth } from "@/lib/panes";
+import { clampWidth, setLiveWidth, usePaneWidth } from "@/lib/panes";
 import { Tooltip } from "@/components/ui/tooltip";
 import { AvatarStack } from "@/components/ui/avatar";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
@@ -473,7 +473,7 @@ export default function TicketDetail({
             target={panelBodyRef}
             room={() => rowRef.current?.clientWidth}
             width={panelWidth}
-            onLive={(px) => panelBodyRef.current?.style.setProperty("width", px === null ? "" : `${px}px`)}
+            onLive={(px) => setLiveWidth(panelBodyRef.current, "details", px === null ? null : `${px}px`)}
             onWidth={setPanelWidth}
             className="hidden lg:block"
           />
@@ -487,7 +487,7 @@ export default function TicketDetail({
               animate={reduced ? { opacity: 1 } : { width: "auto", opacity: 1 }}
               exit={reduced ? { opacity: 0 } : { width: 0, opacity: 0 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="hidden shrink-0 overflow-hidden border-l border-line lg:block"
+              className="hidden shrink-0 overflow-hidden lg:block"
             >
               <PanelBody ref={panelBodyRef} row={rowRef} width={panelWidth}>
                 {t ? (
@@ -513,9 +513,9 @@ export default function TicketDetail({
 }
 
 /**
- * The details column's content at the width its edge was dragged to, at most half the open
- * ticket so the conversation keeps the rest; the column itself sizes to it. Only this follows
- * the window, so a resize never redraws the ticket.
+ * The details column's content, border included, at the width its edge was dragged to, at most
+ * half the open ticket so the conversation keeps the rest; the column itself sizes to it. Only
+ * this follows the window, so a resize never redraws the ticket.
  */
 function PanelBody({ ref, row, width, children }: { ref: RefObject<HTMLDivElement | null>; row: RefObject<HTMLDivElement | null>; width: number | null; children: ReactNode }) {
   const [room, setRoom] = useState<number>();
@@ -534,7 +534,11 @@ function PanelBody({ ref, row, width, children }: { ref: RefObject<HTMLDivElemen
     };
   }, [row, width]);
   return (
-    <div ref={ref} className="h-full w-[300px] overflow-y-auto" style={width === null ? undefined : { width: clampWidth("details", width, room) }}>
+    <div
+      ref={ref}
+      className="h-full w-[var(--pane-details-live,var(--pane-details,300px))] overflow-y-auto border-l border-line"
+      style={width === null ? undefined : ({ "--pane-details": `${clampWidth("details", width, room)}px` } as CSSProperties)}
+    >
       {children}
     </div>
   );
