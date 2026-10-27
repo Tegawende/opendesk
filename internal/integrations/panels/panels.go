@@ -7,7 +7,8 @@
 //     with the client ID and secret of an app installed on the shop (the client credentials
 //     grant, renewed every 24 hours), or uses an Admin API token pasted once (an older app);
 //   - http: a URL of the workspace's own that OpenDesk posts the contact and ticket to,
-//     signed like webhooks, answering sections of labelled values (an ERP, billing, a CRM).
+//     signed like webhooks, answering blocks (cards, labelled values, lists, notes) or, as
+//     version 1 did, sections of labelled values (an ERP, billing, a CRM).
 //
 // Credentials and signing secrets are sealed with d.Box and never leave the server.
 // Panels never write anywhere and never block the ticket: a failure is a quiet state.
@@ -69,12 +70,14 @@ type Panel struct {
 	ClientID    string    `json:"client_id,omitempty" doc:"shopify client_credentials: the app's client ID (not a secret)"`
 	Fields      []string  `json:"fields" doc:"shopify: the fields of Shopify's answer tickets show, in catalogue order (the defaults until an admin chooses); http: empty"`
 	OrdersShown int       `json:"orders_shown,omitempty" minimum:"1" maximum:"5" doc:"shopify: how many of the last orders show, 1 to 5"`
-	Enabled     bool      `json:"enabled"`
-	Position    int       `json:"position"`
-	Status      string    `json:"status" enum:"connected,error"`
-	LastError   string    `json:"last_error"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	// ReferencePattern is set for http panels only.
+	ReferencePattern *string   `json:"reference_pattern,omitempty" doc:"http: the regular expression (RE2) that finds order and invoice numbers in the ticket for the request's ticket.references; empty finds none"`
+	Enabled          bool      `json:"enabled"`
+	Position         int       `json:"position"`
+	Status           string    `json:"status" enum:"connected,error"`
+	LastError        string    `json:"last_error"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // row is a stored panel; target is the shop domain or the URL. A shopify panel with a
@@ -89,6 +92,7 @@ type row struct {
 	SecretEnc   []byte
 	Fields      *[]string // nil: the defaults
 	OrdersShown int
+	RefPattern  *string // http: nil is DefaultReferencePattern, "" finds no reference
 	Enabled     bool
 	Position    int
 	Status      string
@@ -102,6 +106,9 @@ func (x *row) api() Panel {
 		Status: x.Status, LastError: x.LastError, CreatedAt: x.CreatedAt, UpdatedAt: x.UpdatedAt}
 	if x.Kind == KindShopify {
 		p.OrdersShown = x.OrdersShown
+	} else {
+		pattern := x.referencePattern()
+		p.ReferencePattern = &pattern
 	}
 	switch {
 	case x.Kind == KindHTTP:
@@ -114,12 +121,12 @@ func (x *row) api() Panel {
 	return p
 }
 
-const rowSelect = `SELECT id, workspace_id, kind, name, target, client_id, secret_enc, fields, orders_shown, enabled, position, status, last_error,
-	created_at, updated_at FROM ticket_panels`
+const rowSelect = `SELECT id, workspace_id, kind, name, target, client_id, secret_enc, fields, orders_shown, reference_pattern, enabled, position, status,
+	last_error, created_at, updated_at FROM ticket_panels`
 
 func scanRow(r pgx.Row) (*row, error) {
 	var x row
-	err := r.Scan(&x.ID, &x.WorkspaceID, &x.Kind, &x.Name, &x.Target, &x.ClientID, &x.SecretEnc, &x.Fields, &x.OrdersShown, &x.Enabled, &x.Position, &x.Status,
+	err := r.Scan(&x.ID, &x.WorkspaceID, &x.Kind, &x.Name, &x.Target, &x.ClientID, &x.SecretEnc, &x.Fields, &x.OrdersShown, &x.RefPattern, &x.Enabled, &x.Position, &x.Status,
 		&x.LastError, &x.CreatedAt, &x.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -280,15 +287,16 @@ func (s *Service) registerRoutes(api huma.API) {
 		Description: "`shopify` needs `shop` and either `client_id` and `client_secret` (an app installed on the shop) or `token` (an Admin API access token), checked with the shop first; `http` needs `url` and answers its signing `secret` once."},
 		func(ctx context.Context, in *struct {
 			Body struct {
-				Kind         string   `json:"kind" enum:"shopify,http"`
-				Name         string   `json:"name,omitempty" maxLength:"64"`
-				Shop         string   `json:"shop,omitempty" maxLength:"255" doc:"shopify: the shop's myshopify.com domain or handle"`
-				ClientID     string   `json:"client_id,omitempty" maxLength:"255" doc:"shopify: the client ID of an app installed on the shop"`
-				ClientSecret string   `json:"client_secret,omitempty" maxLength:"4096" doc:"shopify: that app's client secret"`
-				Token        string   `json:"token,omitempty" maxLength:"4096" doc:"shopify: an Admin API access token, in place of a client ID and secret (apps made before 2026)"`
-				URL          string   `json:"url,omitempty" maxLength:"2000" doc:"http: the https URL OpenDesk posts to"`
-				Fields       []string `json:"fields,omitempty" maxItems:"12" enum:"tags,email,orders_count,total_spent,financial_status,fulfillment_status,line_items,line_prices,shipping,discounts,refunds,tracking" doc:"shopify: the fields tickets show (default: all but email)"`
-				OrdersShown  *int     `json:"orders_shown,omitempty" minimum:"1" maximum:"5" doc:"shopify: how many of the last orders show (default 5)"`
+				Kind             string   `json:"kind" enum:"shopify,http"`
+				Name             string   `json:"name,omitempty" maxLength:"64"`
+				Shop             string   `json:"shop,omitempty" maxLength:"255" doc:"shopify: the shop's myshopify.com domain or handle"`
+				ClientID         string   `json:"client_id,omitempty" maxLength:"255" doc:"shopify: the client ID of an app installed on the shop"`
+				ClientSecret     string   `json:"client_secret,omitempty" maxLength:"4096" doc:"shopify: that app's client secret"`
+				Token            string   `json:"token,omitempty" maxLength:"4096" doc:"shopify: an Admin API access token, in place of a client ID and secret (apps made before 2026)"`
+				URL              string   `json:"url,omitempty" maxLength:"2000" doc:"http: the https URL OpenDesk posts to"`
+				Fields           []string `json:"fields,omitempty" maxItems:"12" enum:"tags,email,orders_count,total_spent,financial_status,fulfillment_status,line_items,line_prices,shipping,discounts,refunds,tracking" doc:"shopify: the fields tickets show (default: all but email)"`
+				OrdersShown      *int     `json:"orders_shown,omitempty" minimum:"1" maximum:"5" doc:"shopify: how many of the last orders show (default 5)"`
+				ReferencePattern *string  `json:"reference_pattern,omitempty" maxLength:"200" doc:"http: the regular expression (RE2) that finds the ticket's references (default: DefaultReferencePattern; empty finds none)"`
 			}
 		}) (*createdBody, error) {
 			p, err := requireAdminUser(ctx)
@@ -312,6 +320,14 @@ func (s *Service) registerRoutes(api huma.API) {
 			}
 			if b.OrdersShown != nil {
 				x.OrdersShown = *b.OrdersShown
+			}
+			if b.ReferencePattern != nil {
+				if b.Kind != KindHTTP {
+					return nil, httpx.Validation("Only an http panel finds references.")
+				}
+				if x.RefPattern, err = normalizePattern(*b.ReferencePattern); err != nil {
+					return nil, httpx.Validation(err.Error())
+				}
 			}
 			out := &createdBody{CacheControl: "no-store"}
 			switch b.Kind {
@@ -360,9 +376,9 @@ func (s *Service) registerRoutes(api huma.API) {
 				if n >= maxPerWorkspace {
 					return httpx.Conflict("A workspace can have at most 10 ticket panels.")
 				}
-				if _, err := tx.Exec(ctx, `INSERT INTO ticket_panels (id, workspace_id, kind, name, target, client_id, secret_enc, fields, orders_shown, position, created_by)
-					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, x.ID, p.WorkspaceID, x.Kind, x.Name, x.Target, x.ClientID, x.SecretEnc,
-					x.Fields, x.OrdersShown, x.Position, p.ActorUserID()); err != nil {
+				if _, err := tx.Exec(ctx, `INSERT INTO ticket_panels (id, workspace_id, kind, name, target, client_id, secret_enc, fields, orders_shown,
+					reference_pattern, position, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, x.ID, p.WorkspaceID, x.Kind, x.Name, x.Target,
+					x.ClientID, x.SecretEnc, x.Fields, x.OrdersShown, x.RefPattern, x.Position, p.ActorUserID()); err != nil {
 					return err
 				}
 				saved, err := loadRow(ctx, tx, p.WorkspaceID, x.ID)
@@ -388,15 +404,16 @@ func (s *Service) registerRoutes(api huma.API) {
 		func(ctx context.Context, in *struct {
 			ID   string `path:"id"`
 			Body struct {
-				Name         *string  `json:"name,omitempty" maxLength:"64"`
-				Enabled      *bool    `json:"enabled,omitempty"`
-				Position     *int     `json:"position,omitempty" minimum:"0" maximum:"100"`
-				ClientID     *string  `json:"client_id,omitempty" maxLength:"255" doc:"shopify: another app's client ID, with its client_secret"`
-				ClientSecret *string  `json:"client_secret,omitempty" maxLength:"4096" doc:"shopify: the app's new client secret (the client ID stays unless given), checked with the shop first"`
-				Token        *string  `json:"token,omitempty" maxLength:"4096" doc:"shopify: an access token in place of the app's credentials, checked with the shop first"`
-				URL          *string  `json:"url,omitempty" maxLength:"2000" doc:"http: a new URL"`
-				Fields       []string `json:"fields,omitempty" maxItems:"12" enum:"tags,email,orders_count,total_spent,financial_status,fulfillment_status,line_items,line_prices,shipping,discounts,refunds,tracking" doc:"shopify: the fields tickets show, all of them listed ([] shows the name, number, date and total only)"`
-				OrdersShown  *int     `json:"orders_shown,omitempty" minimum:"1" maximum:"5" doc:"shopify: how many of the last orders show"`
+				Name             *string  `json:"name,omitempty" maxLength:"64"`
+				Enabled          *bool    `json:"enabled,omitempty"`
+				Position         *int     `json:"position,omitempty" minimum:"0" maximum:"100"`
+				ClientID         *string  `json:"client_id,omitempty" maxLength:"255" doc:"shopify: another app's client ID, with its client_secret"`
+				ClientSecret     *string  `json:"client_secret,omitempty" maxLength:"4096" doc:"shopify: the app's new client secret (the client ID stays unless given), checked with the shop first"`
+				Token            *string  `json:"token,omitempty" maxLength:"4096" doc:"shopify: an access token in place of the app's credentials, checked with the shop first"`
+				URL              *string  `json:"url,omitempty" maxLength:"2000" doc:"http: a new URL"`
+				Fields           []string `json:"fields,omitempty" maxItems:"12" enum:"tags,email,orders_count,total_spent,financial_status,fulfillment_status,line_items,line_prices,shipping,discounts,refunds,tracking" doc:"shopify: the fields tickets show, all of them listed ([] shows the name, number, date and total only)"`
+				OrdersShown      *int     `json:"orders_shown,omitempty" minimum:"1" maximum:"5" doc:"shopify: how many of the last orders show"`
+				ReferencePattern *string  `json:"reference_pattern,omitempty" maxLength:"200" doc:"http: the regular expression (RE2) that finds the ticket's references; the default pattern puts the default back, empty finds none"`
 			}
 		}) (*panelBody, error) {
 			p, err := requireAdminUser(ctx)
@@ -442,6 +459,15 @@ func (s *Service) registerRoutes(api huma.API) {
 				x.OrdersShown = *b.OrdersShown
 				changes = append(changes, "orders_shown")
 			}
+			if b.ReferencePattern != nil {
+				if x.Kind != KindHTTP {
+					return nil, httpx.Validation("Only an http panel finds references.")
+				}
+				if x.RefPattern, err = normalizePattern(*b.ReferencePattern); err != nil {
+					return nil, httpx.Validation(err.Error())
+				}
+				changes = append(changes, "reference_pattern")
+			}
 			if b.ClientID != nil || b.ClientSecret != nil || b.Token != nil {
 				if x.Kind != KindShopify {
 					return nil, httpx.Validation("Only a Shopify panel has credentials.")
@@ -482,9 +508,10 @@ func (s *Service) registerRoutes(api huma.API) {
 			}
 			err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				if _, err := tx.Exec(ctx, `UPDATE ticket_panels SET name = $3, enabled = $4, position = $5, target = $6,
-					client_id = $7, secret_enc = $8, status = $9, last_error = $10, fields = $11, orders_shown = $12, updated_at = now()
-					WHERE workspace_id = $1 AND id = $2`,
-					p.WorkspaceID, id, x.Name, x.Enabled, x.Position, x.Target, x.ClientID, x.SecretEnc, x.Status, x.LastError, x.Fields, x.OrdersShown); err != nil {
+					client_id = $7, secret_enc = $8, status = $9, last_error = $10, fields = $11, orders_shown = $12, reference_pattern = $13,
+					updated_at = now() WHERE workspace_id = $1 AND id = $2`,
+					p.WorkspaceID, id, x.Name, x.Enabled, x.Position, x.Target, x.ClientID, x.SecretEnc, x.Status, x.LastError, x.Fields, x.OrdersShown,
+					x.RefPattern); err != nil {
 					return err
 				}
 				saved, err := loadRow(ctx, tx, p.WorkspaceID, id)

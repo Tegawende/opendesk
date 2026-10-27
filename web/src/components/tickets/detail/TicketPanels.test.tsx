@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import "@/i18n";
-import type { PanelOrder, ShopifyField, TicketPanelData } from "@/lib/api/types";
+import type { PanelBlock, PanelOrder, PanelValue, ShopifyField, TicketPanelData } from "@/lib/api/types";
+import { panelDate, relDay } from "@/lib/format";
 import { DEFAULT_SHOPIFY_FIELDS, normalizeFields, shownData } from "@/lib/panelFields";
 import { PanelBody, shippingLine } from "./TicketPanels";
 
@@ -142,5 +143,131 @@ describe("Shopify ticket panel", () => {
     expect(shippingLine({ city: "Lyon", country: "FR" })).toBe("Lyon, France");
     expect(shippingLine({ method: "Pickup" })).toBe("Pickup");
     expect(shippingLine(undefined)).toBe("");
+  });
+});
+
+const httpData = (blocks: PanelBlock[]): TicketPanelData => ({ panel_id: "p2", kind: "http", state: "ok", fetched_at: "2026-10-27T10:00:00Z", blocks });
+const inDays = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+describe("URL ticket panel", () => {
+  it("shows a card: its link, badges, fields, lines and footer, dates and money in the reader's locale", () => {
+    const html = renderToStaticMarkup(
+      <PanelBody
+        data={httpData([
+          {
+            type: "card",
+            title: "Sales order S00042",
+            url: "https://erp.example.com/so/42",
+            subtitle: "Ships from Milan",
+            badges: [
+              { text: "Supplier late", tone: "warning" },
+              { text: "Paid", tone: "success" },
+              { text: "VIP", tone: "info" },
+            ],
+            fields: [
+              { label: "Supplier date", value: { type: "date", value: inDays(3), relative: true } },
+              { label: "Supplier", value: { type: "text", text: "Flos S.p.A." }, url: "https://erp.example.com/p/88" },
+            ],
+            lines: [{ quantity: 2, title: "Arco floor lamp", subtitle: "Marble", value: { type: "money", amount: "1890.00", currency: "EUR" } }],
+            footer: [{ label: "Total", value: { type: "money", amount: "3780", currency: "EUR" } }],
+          },
+        ])}
+      />,
+    );
+    const t = text(html);
+    expect(html).toMatch(/<article[^>]*aria-label="Sales order S00042"/);
+    expect(html).toMatch(/<a href="https:\/\/erp\.example\.com\/so\/42"[^>]*rel="noopener noreferrer"[^>]*title="Open Sales order S00042"/);
+    expect(t).toContain("Ships from Milan");
+    expect(t).toContain("Supplier late");
+    expect(t).toContain("in 3 days");
+    expect(html).toContain(`dateTime="${inDays(3)}"`);
+    expect(html).toMatch(/<a href="https:\/\/erp\.example\.com\/p\/88"[^>]*>Flos S\.p\.A\.<\/a>/);
+    expect(t).toContain("2×Arco floor lamp - Marble€1,890.00");
+    expect(t).toContain("Total€3,780.00");
+    // The tones are the badges' own: warning amber, success green, info blue.
+    expect(html).toContain("tone-amber");
+    expect(html).toContain("tone-green");
+    expect(html).toContain("tone-blue");
+  });
+
+  it("shows fields, lists and notes, a day as that day and a time in the reader's timezone", () => {
+    const t = text(
+      renderToStaticMarkup(
+        <PanelBody
+          data={httpData([
+            {
+              type: "fields",
+              title: "Subscription",
+              items: [
+                { label: "Plan", value: { type: "badge", text: "Pro yearly", tone: "info" } },
+                { label: "Started", value: { type: "date", value: "2026-11-04" } },
+                { label: "Seats", value: { type: "text", text: "12" } },
+              ],
+            },
+            {
+              type: "list",
+              title: "Invoices",
+              items: [
+                { title: "INV/2026/00012", subtitle: "Pro yearly", url: "https://erp.example.com/inv/12", value: { type: "money", amount: "490", currency: "EUR" }, badge: { text: "Overdue", tone: "danger" } },
+                { title: "INV/2026/00009" },
+              ],
+            },
+            { type: "note", text: "No open credit note.", tone: "neutral" },
+          ])}
+        />,
+      ),
+    );
+    expect(t).toContain("SubscriptionPlanPro yearlyStartedNov 4");
+    expect(t).not.toContain("Nov 3");
+    expect(t).toContain("Seats12");
+    expect(t).toContain("InvoicesINV/2026/00012Pro yearly€490.00Overdue");
+    expect(t).toContain("INV/2026/00009");
+    expect(t).toContain("No open credit note.");
+    expect(panelDate("2026-11-04T10:30:00Z")).toMatch(/Nov 4/);
+  });
+
+  it("skips a block or a value type it does not know", () => {
+    const html = renderToStaticMarkup(
+      <PanelBody
+        data={httpData([
+          { type: "chart", points: [1, 2] } as unknown as PanelBlock,
+          { type: "fields", items: [{ label: "Odd", value: { type: "video", src: "x" } as unknown as PanelValue }] },
+          { type: "note", text: "Still here.", tone: "warning" },
+        ])}
+      />,
+    );
+    expect(text(html)).toBe("OddStill here.");
+  });
+
+  it("says how far a day is", () => {
+    expect(relDay(inDays(0))).toBe("today");
+    expect(relDay(inDays(1))).toBe("tomorrow");
+    expect(relDay(inDays(-5))).toBe("5 days ago");
+    expect(relDay(inDays(61))).toBe("in 2 months");
+    expect(relDay("not a date")).toBe("");
+  });
+
+  it("shows a version 1 answer as it always has", () => {
+    const html = renderToStaticMarkup(
+      <PanelBody
+        data={{
+          panel_id: "p3",
+          kind: "http",
+          state: "ok",
+          fetched_at: "2026-10-27T10:00:00Z",
+          sections: [{ title: "Sales order", items: [{ label: "Confirmed delivery", value: "2026-11-04", url: "https://erp.example.com/so/42" }, { label: "Supplier", value: "Flos" }] }],
+        }}
+      />,
+    );
+    expect(html).toBe(
+      '<div class="flex flex-col gap-2.5"><div class="flex flex-col gap-1"><h4 class="text-[11.5px] font-medium text-fg-2">Sales order</h4><dl class="flex flex-col gap-0.5">' +
+        '<div class="flex items-baseline gap-2 text-[12px]"><dt class="w-2/5 shrink-0 truncate text-fg-4">Confirmed delivery</dt><dd class="min-w-0 flex-1 break-words text-fg-2">' +
+        '<a href="https://erp.example.com/so/42" target="_blank" rel="noopener noreferrer" class="outline-none hover:underline focus-visible:underline">2026-11-04</a></dd></div>' +
+        '<div class="flex items-baseline gap-2 text-[12px]"><dt class="w-2/5 shrink-0 truncate text-fg-4">Supplier</dt><dd class="min-w-0 flex-1 break-words text-fg-2">Flos</dd></div></dl></div></div>',
+    );
   });
 });

@@ -1,9 +1,11 @@
 // Mock ticket panels (contracts/integrations.md "Ticket panels"): a seeded Shopify store
-// whose orders are made up from the contact's email, and http panels that answer a few
-// sections. Nothing is fetched; credentials are only checked as given, never kept.
+// whose orders are made up from the contact's email, and http panels (a seeded ERP) that
+// answer version 2 blocks for the references in the ticket's subject. Nothing is fetched;
+// credentials are only checked as given, never kept.
 
-import type { PanelOrder, ShopifyField, TicketPanel, TicketPanelData } from "@/lib/api/types";
+import type { PanelBlock, PanelOrder, ShopifyField, TicketPanel, TicketPanelData } from "@/lib/api/types";
 import { DEFAULT_SHOPIFY_FIELDS, isShopifyField, MAX_ORDERS_SHOWN, normalizeFields, panelShows, SHOPIFY_FIELDS, shownData } from "@/lib/panelFields";
+import { DEFAULT_REFERENCE_PATTERN, findReferences, MAX_PATTERN_LENGTH, referenceRegExp } from "@/lib/panelReferences";
 import { db, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
 import { HttpError, del, forbidden, get, invalid, notFound, patch, post, respond, type Ctx } from "../router";
@@ -26,6 +28,20 @@ function seed(): TicketPanel[] {
       orders_shown: MAX_ORDERS_SHOWN,
       enabled: true,
       position: 0,
+      status: "connected",
+      last_error: "",
+      created_at: at,
+      updated_at: at,
+    },
+    {
+      id: uuid(),
+      kind: "http",
+      name: "Odoo",
+      host: "erp.example.com",
+      fields: [],
+      reference_pattern: DEFAULT_REFERENCE_PATTERN,
+      enabled: true,
+      position: 1,
       status: "connected",
       last_error: "",
       created_at: at,
@@ -107,6 +123,15 @@ function urlOf(raw: unknown): string {
   return s;
 }
 
+/** A reference pattern as the server checks it (Go's RE2 reads the usual patterns like the browser). */
+function patternOf(raw: unknown): string {
+  if (typeof raw !== "string") throw invalid("reference_pattern is a string.");
+  const p = raw.trim();
+  if (p.length > MAX_PATTERN_LENGTH) throw invalid("The reference pattern is longer than 200 characters.");
+  if (p && !referenceRegExp(p)) throw invalid("The reference pattern is not a valid regular expression (RE2 syntax), or matches an empty text.");
+  return p;
+}
+
 const secret = () => `pnsec_${uuid().replace(/-/g, "")}`;
 
 function hash(s: string) {
@@ -178,7 +203,60 @@ function ordersFor(email: string, shop: string): { orders: PanelOrder[]; spent: 
   return { orders, spent };
 }
 
-function dataFor(p: TicketPanel, t: { id: string; number: number; contact: { email: string | null; name: string } | null }): TicketPanelData {
+const iso = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * What a URL of the workspace's own might answer: an ERP's order (found by the first reference in
+ * the ticket, else made up from its number) with a supplier running late, the contact's
+ * subscription and invoices, and a note.
+ */
+function blocksFor(p: TicketPanel, t: { number: number; subject: string }): PanelBlock[] {
+  const re = referenceRegExp(p.reference_pattern ?? DEFAULT_REFERENCE_PATTERN);
+  const ref = (re && findReferences(re, t.subject)[0]) || `S${String(42 + (t.number % 300)).padStart(5, "0")}`;
+  const so = 42 + (t.number % 300);
+  return [
+    {
+      type: "card",
+      title: `Sales order ${ref}`,
+      url: `https://erp.example.com/odoo/sales/${so}`,
+      subtitle: "Web shop · ships from Milan, Italy",
+      badges: [
+        { text: "Supplier late", tone: "warning" },
+        { text: "Paid", tone: "success" },
+      ],
+      fields: [
+        { label: "Promised", value: { type: "date", value: iso(2), relative: true } },
+        { label: "Supplier date", value: { type: "date", value: iso(9), relative: true } },
+        { label: "Supplier", value: { type: "text", text: "Flos S.p.A." }, url: "https://erp.example.com/odoo/partners/88" },
+      ],
+      lines: [
+        { quantity: 2, title: "Arco floor lamp", subtitle: "Marble", value: { type: "money", amount: "1890.00", currency: "EUR" } },
+        { quantity: 4, title: "LED bulb E27", subtitle: "2700 K", value: { type: "money", amount: "12.90", currency: "EUR" } },
+      ],
+      footer: [{ label: "Total", value: { type: "money", amount: "3831.60", currency: "EUR" } }],
+    },
+    {
+      type: "fields",
+      title: "Subscription",
+      items: [
+        { label: "Plan", value: { type: "badge", text: "Pro yearly", tone: "info" } },
+        { label: "Renews", value: { type: "date", value: iso(23), relative: true } },
+        { label: "Amount", value: { type: "money", amount: "490", currency: "EUR" } },
+      ],
+    },
+    {
+      type: "list",
+      title: "Invoices",
+      items: [
+        { title: "INV/2026/00012", subtitle: "Pro yearly", url: "https://erp.example.com/odoo/invoices/12", value: { type: "money", amount: "490.00", currency: "EUR" }, badge: { text: "Overdue", tone: "danger" } },
+        { title: "INV/2026/00009", subtitle: `For ${ref}`, url: "https://erp.example.com/odoo/invoices/9", value: { type: "money", amount: "3831.60", currency: "EUR" }, badge: { text: "Paid", tone: "success" } },
+      ],
+    },
+    { type: "note", text: "Credit note RINV/2026/0003 is waiting for approval.", tone: "info" },
+  ];
+}
+
+function dataFor(p: TicketPanel, t: { id: string; number: number; subject: string; contact: { email: string | null; name: string } | null }): TicketPanelData {
   const base: TicketPanelData = { panel_id: p.id, kind: p.kind, state: "ok", fetched_at: nowIso() };
   const email = t.contact?.email?.toLowerCase() ?? "";
   if (p.kind === "shopify") {
@@ -207,19 +285,7 @@ function dataFor(p: TicketPanel, t: { id: string; number: number; contact: { ema
       ordersShown,
     );
   }
-  return {
-    ...base,
-    sections: [
-      {
-        title: "Sales order",
-        items: [
-          { label: "Order", value: `SO-${2200 + (t.number % 300)}`, url: `https://erp.example.com/so/${2200 + (t.number % 300)}` },
-          { label: "Confirmed delivery", value: new Date(Date.now() + 9 * 86_400_000).toISOString().slice(0, 10) },
-          { label: "Supplier", value: "Flos S.p.A." },
-        ],
-      },
-    ],
-  };
+  return { ...base, blocks: blocksFor(p, t) };
 }
 
 export function registerTicketPanels() {
@@ -234,6 +300,7 @@ export function registerTicketPanels() {
     let p: TicketPanel;
     let s: string | undefined;
     if (kind === "shopify") {
+      if (ctx.body.reference_pattern !== undefined) throw invalid("Only an http panel finds references.");
       const host = shopOf(ctx.body.shop);
       const auth = shopifyAuth(ctx.body);
       const fields = ctx.body.fields === undefined ? [...DEFAULT_SHOPIFY_FIELDS] : fieldsOf(ctx.body.fields);
@@ -242,7 +309,8 @@ export function registerTicketPanels() {
     } else if (kind === "http") {
       if (ctx.body.fields !== undefined || ctx.body.orders_shown !== undefined) throw invalid("Only a Shopify panel has fields to choose.");
       const url = urlOf(ctx.body.url);
-      p = { id: uuid(), kind, name: String(ctx.body.name ?? "").trim() || new URL(url).host, host: new URL(url).host, fields: [], enabled: true, position: list.length, status: "connected", last_error: "", created_at: at, updated_at: at };
+      const reference_pattern = ctx.body.reference_pattern === undefined ? DEFAULT_REFERENCE_PATTERN : patternOf(ctx.body.reference_pattern);
+      p = { id: uuid(), kind, name: String(ctx.body.name ?? "").trim() || new URL(url).host, host: new URL(url).host, fields: [], reference_pattern, enabled: true, position: list.length, status: "connected", last_error: "", created_at: at, updated_at: at };
       s = secret();
     } else throw invalid("A panel is shopify or http.");
     list.push(p);
@@ -269,6 +337,10 @@ export function registerTicketPanels() {
       Object.assign(p, shopifyAuth(b.token !== undefined ? b : { client_id: p.client_id, ...b }));
       p.status = "connected";
       p.last_error = "";
+    }
+    if (b.reference_pattern !== undefined) {
+      if (p.kind !== "http") throw invalid("Only an http panel finds references.");
+      p.reference_pattern = patternOf(b.reference_pattern);
     }
     if (b.url !== undefined) {
       if (p.kind !== "http") throw invalid("Only an http panel has a URL.");

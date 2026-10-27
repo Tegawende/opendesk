@@ -14,7 +14,7 @@ import (
 
 // Data is what a panel shows for one ticket. Commerce panels (shopify) fill Customer and
 // Orders, the same shape whatever the store, so another commerce source plugs into the
-// same section; http panels fill Sections.
+// same section; http panels fill Blocks (an answer of version 2) or Sections (version 1).
 type Data struct {
 	PanelID   uuid.UUID `json:"panel_id"`
 	Kind      string    `json:"kind" enum:"shopify,http"`
@@ -22,7 +22,8 @@ type Data struct {
 	Message   string    `json:"message,omitempty" doc:"error: what went wrong, in a few words"`
 	Customer  *Customer `json:"customer,omitempty"`
 	Orders    []Order   `json:"orders,omitempty"`
-	Sections  []Section `json:"sections,omitempty"`
+	Sections  []Section `json:"sections,omitempty" doc:"http: a version 1 answer's sections"`
+	Blocks    []Block   `json:"blocks,omitempty" doc:"http: a version 2 answer's blocks, cleaned"`
 	FetchedAt time.Time `json:"fetched_at"`
 }
 
@@ -93,7 +94,9 @@ type SectionItem struct {
 	URL   string `json:"url,omitempty"`
 }
 
-// subject is what a lookup is about: the ticket and its contact.
+// subject is what a lookup is about: the ticket and its contact. An http panel's request also
+// carries the references found in the ticket, the contact's addresses and phone (lookupContext),
+// and whether an agent asked again.
 type subject struct {
 	TicketID     uuid.UUID
 	TicketNumber int64
@@ -101,6 +104,10 @@ type subject struct {
 	ContactID    *uuid.UUID
 	Email        string
 	Name         string
+	References   []string
+	Emails       []string
+	Phone        string
+	Refresh      bool
 }
 
 func subjectOf(t *domain.Ticket) subject {
@@ -116,9 +123,11 @@ func subjectOf(t *domain.Ticket) subject {
 }
 
 // read answers the panel for the ticket: from the cache when it answered in the last
-// minute (a failure, the last 15 seconds), else from the product, within fetchTimeout.
+// minute (a failure, the last 15 seconds; an http answer may choose its own time), else from
+// the product, within fetchTimeout.
 func (s *Service) read(ctx context.Context, x *row, t *domain.Ticket, refresh bool) Data {
 	sub := subjectOf(t)
+	sub.Refresh = refresh
 	base := Data{PanelID: x.ID, Kind: x.Kind, FetchedAt: time.Now().UTC()}
 	if x.Kind == KindShopify && sub.Email == "" {
 		base.State = "no_contact"
@@ -126,8 +135,14 @@ func (s *Service) read(ctx context.Context, x *row, t *domain.Ticket, refresh bo
 	}
 	key := cacheKey{panel: x.ID, version: x.UpdatedAt.UnixNano(), email: sub.Email}
 	if x.Kind == KindHTTP {
-		// The URL is told the ticket too, so its answer may differ per ticket.
-		key.ticket = sub.TicketID
+		// The URL is told the ticket too, so its answer may differ per ticket, and a new
+		// reference in it asks again.
+		if err := s.lookupContext(ctx, x, t, &sub); err != nil {
+			s.d.Log.Warn("ticket panel context", "panel", x.ID, "err", err)
+			base.State, base.Message = "error", "Couldn't read the ticket."
+			return base
+		}
+		key.ticket, key.refs = sub.TicketID, strings.Join(sub.References, "\n")
 	}
 	if !refresh {
 		if d, ok := s.cache.get(key); ok {
@@ -141,22 +156,24 @@ func (s *Service) read(ctx context.Context, x *row, t *domain.Ticket, refresh bo
 	lctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 	var err error
+	ttl := cacheTTL
 	switch x.Kind {
 	case KindShopify:
 		err = s.readShopify(lctx, x, sub, &base)
 	case KindHTTP:
-		err = s.readHTTP(lctx, x, sub, &base)
+		ttl, err = s.readHTTP(lctx, x, sub, &base)
 	}
-	ttl := cacheTTL
 	if err != nil {
-		base.State, base.Message, base.Customer, base.Orders, base.Sections = "error", lookupMessage(err), nil, nil, nil
+		base.State, base.Message, base.Customer, base.Orders, base.Sections, base.Blocks = "error", lookupMessage(err), nil, nil, nil, nil
 		ttl = errTTL
 		s.d.Log.Info("ticket panel lookup failed", "panel", x.ID, "kind", x.Kind, "host", x.api().Host, "err", lookupMessage(err))
 	}
 	// A refused credential, or a lookup that works again, shows in settings (a write only
 	// when the status changes).
 	s.markStatus(context.WithoutCancel(ctx), x, err)
-	s.cache.set(key, base, ttl)
+	if ttl > 0 {
+		s.cache.set(key, base, ttl)
+	}
 	return base
 }
 
@@ -183,6 +200,7 @@ type cacheKey struct {
 	version int64
 	email   string
 	ticket  uuid.UUID
+	refs    string
 }
 
 type cached struct {

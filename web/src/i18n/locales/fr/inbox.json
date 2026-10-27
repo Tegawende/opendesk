@@ -853,6 +853,7 @@
     "discountCodes_one": "Code de réduction",
     "discountCodes_many": "Codes de réduction",
     "discountCodes_other": "Codes de réduction",
-    "refunded": "Remboursé : {{amount}}"
+    "refunded": "Remboursé : {{amount}}",
+    "openLink": "Ouvrir {{name}}"
   }
 }

@@ -1,0 +1,148 @@
+package panels
+
+import (
+	"context"
+	"errors"
+	"regexp"
+	"slices"
+	"strings"
+
+	"github.com/useopendesk/opendesk/internal/domain"
+)
+
+// DefaultReferencePattern finds what reads as an order or invoice number: a # and 3 digits or
+// more (#1042), or 1 to 4 capital letters, an optional - or /, an optional year or other group
+// of 2 to 4 digits and a separator, then 3 digits or more (S00042, SO-2026-0042, INV/2026/00012,
+// PO4471). It needs the # or the letters, so years, prices, postcodes and phone numbers are not
+// references.
+const DefaultReferencePattern = `#\d{3,}\b|\b[A-Z]{1,4}[-/]?(?:\d{2,4}[-/])?\d{3,}\b`
+
+const (
+	// maxReferences bounds what one request carries, and maxReferenceLen each one.
+	maxReferences   = 10
+	maxReferenceLen = 64
+	// maxPatternLen bounds a workspace's pattern (RE2: linear in the text, whatever it is).
+	maxPatternLen = 200
+	// referenceMessages is how many of the ticket's newest messages are read, and
+	// maxScannedText how much of each.
+	referenceMessages = 50
+	maxScannedText    = 20000
+	// maxContactEmails bounds contact.emails.
+	maxContactEmails = 5
+)
+
+// compilePattern checks a workspace's pattern: RE2 syntax, at most 200 characters, and it must
+// not match an empty text (it would find a reference everywhere).
+func compilePattern(p string) (*regexp.Regexp, error) {
+	if len(p) > maxPatternLen {
+		return nil, errors.New("The reference pattern is longer than 200 characters.")
+	}
+	re, err := regexp.Compile(p)
+	if err != nil {
+		return nil, errors.New("The reference pattern is not a valid regular expression (RE2 syntax).")
+	}
+	if re.MatchString("") {
+		return nil, errors.New("The reference pattern matches an empty text: it would find a reference everywhere.")
+	}
+	return re, nil
+}
+
+// normalizePattern checks a pattern an admin saves: the default is stored as NULL, so a later
+// default applies to the panel by itself; "" finds no reference.
+func normalizePattern(p string) (*string, error) {
+	p = strings.TrimSpace(p)
+	if p == DefaultReferencePattern {
+		return nil, nil
+	}
+	if p != "" {
+		if _, err := compilePattern(p); err != nil {
+			return nil, err
+		}
+	}
+	return &p, nil
+}
+
+// findReferences is what re finds in texts, in order, each once: the first group when the
+// pattern has one, else the whole match. At most maxReferences.
+func findReferences(re *regexp.Regexp, texts ...string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, text := range texts {
+		if r := []rune(text); len(r) > maxScannedText {
+			text = string(r[:maxScannedText])
+		}
+		for _, m := range re.FindAllStringSubmatch(text, -1) {
+			ref := m[0]
+			if len(m) > 1 {
+				ref = m[1]
+			}
+			ref = cleanText(ref, maxReferenceLen)
+			if ref == "" || seen[ref] {
+				continue
+			}
+			seen[ref] = true
+			out = append(out, ref)
+			if len(out) == maxReferences {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+// referencePattern is the pattern the panel finds references with; "" finds none.
+func (x *row) referencePattern() string {
+	if x.RefPattern == nil {
+		return DefaultReferencePattern
+	}
+	return *x.RefPattern
+}
+
+// lookupContext adds to sub what an http panel's request carries beyond the ticket: the
+// references found in its subject and newest messages (never their text), every address the
+// contact wrote from and the contact's phone.
+func (s *Service) lookupContext(ctx context.Context, x *row, t *domain.Ticket, sub *subject) error {
+	sub.References = []string{}
+	if sub.Email != "" {
+		sub.Emails = []string{sub.Email}
+	} else {
+		sub.Emails = []string{}
+	}
+	if sub.ContactID != nil {
+		if err := s.d.DB.Pool.QueryRow(ctx, `SELECT phone FROM contacts WHERE workspace_id = $1 AND id = $2`,
+			x.WorkspaceID, *sub.ContactID).Scan(&sub.Phone); err != nil {
+			return err
+		}
+		sub.Phone = cleanText(sub.Phone, 50)
+	}
+	rows, err := s.d.DB.Pool.Query(ctx, `SELECT body_text, from_email, author_contact_id IS NOT DISTINCT FROM $3 FROM messages
+		WHERE workspace_id = $1 AND ticket_id = $2 ORDER BY created_at DESC LIMIT $4`, x.WorkspaceID, t.ID, sub.ContactID, referenceMessages)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	texts := []string{t.Subject}
+	for rows.Next() {
+		var body, from string
+		var byContact bool
+		if err := rows.Scan(&body, &from, &byContact); err != nil {
+			return err
+		}
+		texts = append(texts, body)
+		from = strings.ToLower(strings.TrimSpace(from))
+		if byContact && sub.ContactID != nil && from != "" && len(sub.Emails) < maxContactEmails && !slices.Contains(sub.Emails, from) {
+			sub.Emails = append(sub.Emails, from)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if p := x.referencePattern(); p != "" {
+		re, err := compilePattern(p)
+		if err != nil {
+			return nil // checked when saved; a pattern that no longer compiles finds nothing
+		}
+		sub.References = findReferences(re, texts...)
+	}
+	return nil
+}

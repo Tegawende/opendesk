@@ -3,7 +3,7 @@
 // each panel loads on its own, folds away, and a failure is one quiet line.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, BadgePercent, ChevronRight, Globe, MapPin, RefreshCw, Truck, Undo2 } from "lucide-react";
+import { ArrowUpRight, BadgePercent, ChevronRight, CircleAlert, CircleCheck, Globe, Info, MapPin, RefreshCw, TriangleAlert, Truck, Undo2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -12,9 +12,22 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api } from "@/lib/api/endpoints";
-import type { PanelOrder, PanelSection, ShopifyField, TicketPanel, TicketPanelData } from "@/lib/api/types";
+import type {
+  PanelBadge,
+  PanelBlock,
+  PanelField,
+  PanelLine,
+  PanelListItem,
+  PanelOrder,
+  PanelSection,
+  PanelTone,
+  PanelValue,
+  ShopifyField,
+  TicketPanel,
+  TicketPanelData,
+} from "@/lib/api/types";
 import { cn } from "@/lib/cn";
-import { countryName, money, shortDate } from "@/lib/format";
+import { countryName, fullDate, money, number, panelDate, relDay, shortDate } from "@/lib/format";
 import { ease } from "@/lib/motion";
 import { DEFAULT_SHOPIFY_FIELDS, MAX_ORDERS_SHOWN, panelShows, shownData } from "@/lib/panelFields";
 import { q, qk } from "@/lib/queries";
@@ -183,7 +196,8 @@ export function PanelBody({
         </p>
       );
   }
-  return data.kind === "shopify" ? <Commerce data={shownData(data, fields, ordersShown)} /> : <Sections sections={data.sections ?? []} />;
+  if (data.kind === "shopify") return <Commerce data={shownData(data, fields, ordersShown)} />;
+  return data.blocks ? <Blocks blocks={data.blocks} /> : <Sections sections={data.sections ?? []} />;
 }
 
 /** "Partly refunded" for partially_refunded, the word Shopify uses otherwise. */
@@ -372,5 +386,236 @@ function Sections({ sections }: { sections: PanelSection[] }) {
         </div>
       ))}
     </div>
+  );
+}
+
+// Blocks: a version 2 answer from a URL (contracts/integrations.md "The http answer"), already
+// cleaned by the server. A card looks like a Shopify order, and tones are the badges' own. A
+// block or value type this version does not know shows nothing.
+
+const BADGE_TONE: Record<PanelTone, "neutral" | "blue" | "ok" | "warn" | "danger"> = {
+  neutral: "neutral",
+  info: "blue",
+  success: "ok",
+  warning: "warn",
+  danger: "danger",
+};
+
+function ToneBadge({ badge }: { badge: PanelBadge }) {
+  const tone = BADGE_TONE[badge.tone] ?? "neutral";
+  return (
+    <Badge tone={tone} dot={tone === "blue"}>
+      {badge.text}
+    </Badge>
+  );
+}
+
+/** A link out to the other product, or the content alone. */
+function Out({ url, children }: { url?: string; children: ReactNode }) {
+  if (!url) return <>{children}</>;
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="outline-none hover:underline focus-visible:underline">
+      {children}
+    </a>
+  );
+}
+
+/** A value as the reader's locale writes it: a date in their timezone (a day as it is), money in its currency. */
+export function PanelValueView({ value }: { value: PanelValue }) {
+  switch (value.type) {
+    case "text":
+      return <>{value.text}</>;
+    case "date": {
+      const rel = value.relative ? relDay(value.value) : "";
+      return (
+        <time dateTime={value.value} title={value.value.length > 10 ? fullDate(value.value) : undefined}>
+          {panelDate(value.value)}
+          {rel && <span className="text-fg-4"> · {rel}</span>}
+        </time>
+      );
+    }
+    case "money":
+      return <span className="tabular-nums">{money(value.amount, value.currency)}</span>;
+    case "badge":
+      return <ToneBadge badge={value} />;
+    default:
+      return null;
+  }
+}
+
+function Blocks({ blocks }: { blocks: PanelBlock[] }) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      {blocks.map((b, i) => (
+        <BlockView key={i} block={b} />
+      ))}
+    </div>
+  );
+}
+
+function BlockView({ block }: { block: PanelBlock }) {
+  switch (block.type) {
+    case "card":
+      return <CardBlock block={block} />;
+    case "fields":
+      return (
+        <div className="flex flex-col gap-1">
+          {block.title && <h4 className="text-[11.5px] font-medium text-fg-2">{block.title}</h4>}
+          <FieldList fields={block.items} />
+        </div>
+      );
+    case "list":
+      return <ListBlock title={block.title} items={block.items} />;
+    case "note":
+      return <NoteBlock text={block.text} tone={block.tone} />;
+    default:
+      return null;
+  }
+}
+
+/** Labelled values: the label on the left, its value beside it. */
+function FieldList({ fields, className }: { fields: PanelField[]; className?: string }) {
+  return (
+    <dl className={cn("flex flex-col gap-0.5", className)}>
+      {fields.map((f, i) => (
+        <div key={i} className="flex items-baseline gap-2 text-[12px]">
+          {f.label && (
+            <dt className="w-2/5 shrink-0 truncate text-fg-4" title={f.label}>
+              {f.label}
+            </dt>
+          )}
+          <dd className="min-w-0 flex-1 break-words text-fg-2">
+            <Out url={f.url}>
+              <PanelValueView value={f.value} />
+            </Out>
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function CardBlock({ block }: { block: Extract<PanelBlock, { type: "card" }> }) {
+  const { t } = useTranslation("inbox");
+  const badges = block.badges ?? [];
+  const fields = block.fields ?? [];
+  const lines = block.lines ?? [];
+  const footer = block.footer ?? [];
+  return (
+    <article className="rounded-md border border-line-soft px-2.5 py-2" aria-label={block.title}>
+      <h4 className="min-w-0 text-[12px] font-medium text-fg">
+        {block.url ? (
+          <a
+            href={block.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={t("panels.openLink", { name: block.title })}
+            className="group inline-flex min-w-0 max-w-full items-center gap-0.5 outline-none hover:underline focus-visible:underline"
+          >
+            <span className="truncate">{block.title}</span>
+            <ArrowUpRight className="size-3 shrink-0 text-fg-4 group-hover:text-fg" aria-hidden />
+          </a>
+        ) : (
+          <span className="block truncate">{block.title}</span>
+        )}
+      </h4>
+      {block.subtitle && <p className="truncate text-[11.5px] text-fg-4">{block.subtitle}</p>}
+      {badges.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {badges.map((b, i) => (
+            <ToneBadge key={i} badge={b} />
+          ))}
+        </div>
+      )}
+      {fields.length > 0 && <FieldList fields={fields} className="mt-1.5" />}
+      {lines.length > 0 && (
+        <ul className="mt-1.5 flex flex-col gap-0.5 text-[11.5px] text-fg-3">
+          {lines.map((l, i) => (
+            <LineRow key={i} line={l} />
+          ))}
+        </ul>
+      )}
+      {footer.length > 0 && (
+        <dl className="mt-1.5 flex flex-col gap-0.5 border-t border-line-soft pt-1.5">
+          {footer.map((f, i) => (
+            <div key={i} className="flex items-baseline gap-2 text-[12px]">
+              <dt className="min-w-0 flex-1 truncate text-fg-3">{f.label}</dt>
+              <dd className="shrink-0 font-medium text-fg-2">
+                <Out url={f.url}>
+                  <PanelValueView value={f.value} />
+                </Out>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </article>
+  );
+}
+
+function LineRow({ line }: { line: PanelLine }) {
+  return (
+    <li className="flex gap-1.5">
+      {line.quantity !== undefined && <span className="tabular-nums text-fg-4">{number(line.quantity)}×</span>}
+      <span className="min-w-0 flex-1 truncate" title={line.subtitle ? line.title + " - " + line.subtitle : line.title}>
+        <Out url={line.url}>
+          {line.title}
+          {line.subtitle ? <span className="text-fg-4"> - {line.subtitle}</span> : null}
+        </Out>
+      </span>
+      {line.value && (
+        <span className="shrink-0 text-fg-4">
+          <PanelValueView value={line.value} />
+        </span>
+      )}
+    </li>
+  );
+}
+
+function ListBlock({ title, items }: { title?: string; items: PanelListItem[] }) {
+  return (
+    <div className="flex flex-col gap-1">
+      {title && <h4 className="text-[11.5px] font-medium text-fg-2">{title}</h4>}
+      <ul className="flex flex-col divide-y divide-line-soft">
+        {items.map((it, i) => (
+          <li key={i} className="flex items-start gap-2 py-1 text-[12px] first:pt-0 last:pb-0">
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-fg-2" title={it.title}>
+                <Out url={it.url}>{it.title}</Out>
+              </div>
+              {it.subtitle && <div className="truncate text-[11.5px] text-fg-4">{it.subtitle}</div>}
+            </div>
+            {(it.value || it.badge) && (
+              <div className="flex shrink-0 flex-col items-end gap-0.5">
+                {it.value && (
+                  <span className="text-fg-2">
+                    <PanelValueView value={it.value} />
+                  </span>
+                )}
+                {it.badge && <ToneBadge badge={it.badge} />}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const NOTE_MARK: Record<Exclude<PanelTone, "neutral">, { icon: typeof Info; cls: string }> = {
+  info: { icon: Info, cls: "text-tone-blue" },
+  success: { icon: CircleCheck, cls: "text-tone-green" },
+  warning: { icon: TriangleAlert, cls: "text-tone-amber" },
+  danger: { icon: CircleAlert, cls: "text-tone-red" },
+};
+
+function NoteBlock({ text, tone }: { text: string; tone: PanelTone }) {
+  const mark = tone === "neutral" ? undefined : NOTE_MARK[tone];
+  const Icon = mark?.icon;
+  return (
+    <p className="flex items-start gap-1.5 text-[12px] text-fg-3">
+      {Icon && <Icon className={cn("mt-px size-3.5 shrink-0", mark?.cls)} aria-hidden />}
+      <span className="min-w-0">{text}</span>
+    </p>
   );
 }

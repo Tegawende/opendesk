@@ -523,7 +523,7 @@
     "token": "Admin-API-Zugriffstoken",
     "tokenHint": "Nur für eine App, die vor 2026 im Shopify-Admin erstellt wurde (Einstellungen → Apps → Apps entwickeln), mit den Berechtigungen read_customers und read_orders: ihr Admin-API-Zugriffstoken.",
     "url": "URL",
-    "urlHint": "OpenDesk sendet das Ticket und seinen Kontakt signiert dorthin und zeigt die Abschnitte, die zurückkommen.",
+    "urlHint": "OpenDesk sendet das Ticket, seinen Kontakt und die gefundenen Referenzen signiert an diese URL und zeigt, was sie antwortet.",
     "name": "Name",
     "namePlaceholder": "Odoo",
     "connect": "Panel hinzufügen",
@@ -538,7 +538,7 @@
     "secretTitle": "Signatur-Secret",
     "secretDescription": "Kopiere es jetzt. Du siehst es nicht wieder.",
     "secretVerify": "Jede Anfrage trägt OD-Signature, wie Webhook-Zustellungen. Prüfe sie, bevor du antwortest:",
-    "secretAnswer": "Antworte mit JSON-Abschnitten benannter Werte, höchstens 64 KB:",
+    "secretAnswer": "Antworten Sie mit JSON-Blöcken (Karten, beschriftete Werte, Listen, Hinweise), höchstens 64 KB:",
     "secretSaved": "Gespeichert",
     "fields": {
       "menu": "Auswählen, was angezeigt wird",
@@ -577,6 +577,20 @@
       "show": "{{name}} in den Ticket-Panels zeigen",
       "ownTitle": "Eigene Daten",
       "ownBody": "Zeig, was ein eigenes System über den Kontakt weiß, von einer URL, die antwortet."
+    },
+    "references": {
+      "menu": "Bestellreferenzen",
+      "title": "Bestellreferenzen für {{name}}",
+      "description": "OpenDesk sucht Bestell- und Rechnungsnummern in Betreff und Nachrichten des Tickets und sendet, was es findet, nie die Nachrichten, damit Ihre URL den Datensatz findet.",
+      "pattern": "Muster",
+      "hint": "Ein regulärer Ausdruck (RE2). Mit einer Gruppe wird die Gruppe gesendet. Leer lassen, um keine zu senden.",
+      "none": "Keine",
+      "try": "An einem Text ausprobieren",
+      "found": "Gefunden:",
+      "nothing": "nichts",
+      "off": "nichts, Referenzen sind aus",
+      "defaults": "Standard verwenden",
+      "saved": "Referenzen von {{name}} gespeichert"
     }
   }
 }

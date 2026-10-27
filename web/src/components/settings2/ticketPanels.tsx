@@ -4,11 +4,12 @@
 // token. Secrets and tokens never come back: they are replaced, a signing secret renewed.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, KeyRound, Link2, ListChecks, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { ArrowUpRight, Hash, KeyRound, Link2, ListChecks, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Section } from "@/components/layout";
 import { PanelBody, PanelMark } from "@/components/tickets/detail/TicketPanels";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useConfirm } from "@/components/ui/confirm";
@@ -24,6 +25,7 @@ import { errorMessage } from "@/lib/api/client";
 import type { ShopifyField, TicketPanel, TicketPanelData } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { CUSTOMER_FIELDS, DEFAULT_SHOPIFY_FIELDS, MAX_ORDERS_SHOWN, normalizeFields, ORDER_FIELDS, panelShows } from "@/lib/panelFields";
+import { DEFAULT_REFERENCE_PATTERN, findReferences, MAX_PATTERN_LENGTH, referenceRegExp } from "@/lib/panelReferences";
 import { qk, q, removeFromList, upsertInList } from "@/lib/queries";
 import { ListSkeleton, StatePill } from "./bits";
 import { CatalogTile, ProviderMark } from "./integrations";
@@ -140,6 +142,7 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
   const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [choosing, setChoosing] = useState(false);
+  const [referencing, setReferencing] = useState(false);
   const state = !p.enabled ? ("paused" as const) : p.status === "error" ? ("failing" as const) : ("active" as const);
   const stateWord = !p.enabled ? t("panels.state.off") : t(`panels.state.${p.status}`);
 
@@ -213,6 +216,9 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
                     <MenuItem icon={<Link2 />} onSelect={() => setEditing(true)}>
                       {t("panels.changeUrl")}
                     </MenuItem>
+                    <MenuItem icon={<Hash />} onSelect={() => setReferencing(true)}>
+                      {t("panels.references.menu")}
+                    </MenuItem>
                     <MenuItem icon={<KeyRound />} onSelect={() => rotate.mutate()}>
                       {t("panels.rotateSecret")}
                     </MenuItem>
@@ -239,6 +245,7 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
       </div>
       {editing && <EditPanelDialog p={p} onClose={() => setEditing(false)} />}
       {choosing && <ShopifyFieldsDialog p={p} onClose={() => setChoosing(false)} />}
+      {referencing && <ReferencesDialog p={p} onClose={() => setReferencing(false)} />}
     </MotionRow>
   );
 }
@@ -461,6 +468,98 @@ function EditPanelDialog({ p, onClose }: { p: TicketPanel; onClose: () => void }
   );
 }
 
+/**
+ * An http panel's reference pattern: what it finds in a ticket's subject and messages is sent as
+ * ticket.references, so the URL can find the order or invoice. Empty sends none.
+ */
+function ReferencesDialog({ p, onClose }: { p: TicketPanel; onClose: () => void }) {
+  const { t } = useTranslation("settingsDev");
+  const qc = useQueryClient();
+  const [pattern, setPattern] = useState(p.reference_pattern ?? DEFAULT_REFERENCE_PATTERN);
+  const [sample, setSample] = useState("Where is order SO-2026-0042? I paid invoice INV/2026/00012.");
+  const [error, setError] = useState<string | null>(null);
+  const re = pattern.trim() ? referenceRegExp(pattern) : null;
+  const found = re ? findReferences(re, sample) : [];
+  const save = useMutation({
+    mutationFn: () => api.ticketPanels.update(p.id, { reference_pattern: pattern.trim() }),
+    onSuccess: (row) => {
+      upsertInList(qc, qk.ticketPanels, row);
+      toast.success(t("panels.references.saved", { name: p.name }));
+      onClose();
+    },
+    onError: (e) => setError(errorMessage(e)),
+  });
+  return (
+    <Dialog
+      open
+      size="md"
+      onOpenChange={(o) => !o && onClose()}
+      title={t("panels.references.title", { name: p.name })}
+      description={t("panels.references.description")}
+      footer={
+        <>
+          <Button variant="ghost" className="mr-auto" disabled={pattern === DEFAULT_REFERENCE_PATTERN} onClick={() => setPattern(DEFAULT_REFERENCE_PATTERN)}>
+            {t("panels.references.defaults")}
+          </Button>
+          <span className="text-xs text-danger-fg">{error}</span>
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
+          <Button variant="primary" loading={save.isPending} onClick={() => {
+            setError(null);
+            save.mutate();
+          }}>
+            {t("panels.save")}
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="flex flex-col gap-4 pb-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError(null);
+          save.mutate();
+        }}
+      >
+        <Field label={t("panels.references.pattern")} hint={t("panels.references.hint")}>
+          {(f) => (
+            <TextInput
+              {...f}
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={MAX_PATTERN_LENGTH}
+              className="mono"
+              value={pattern}
+              placeholder={t("panels.references.none")}
+              onChange={(e) => setPattern(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t("panels.references.try")}>
+          {(f) => <TextInput {...f} autoComplete="off" value={sample} onChange={(e) => setSample(e.target.value)} />}
+        </Field>
+        <div className="flex min-h-[19px] flex-wrap items-center gap-1" aria-live="polite">
+          <span className="text-[12px] text-fg-3">{t("panels.references.found")}</span>
+          {!pattern.trim() ? (
+            <span className="text-[12px] text-fg-4">{t("panels.references.off")}</span>
+          ) : found.length ? (
+            found.map((r) => (
+              <Badge key={r} className="mono">
+                {r}
+              </Badge>
+            ))
+          ) : (
+            <span className="text-[12px] text-fg-4">{t("panels.references.nothing")}</span>
+          )}
+        </div>
+        <button type="submit" className="hidden" />
+      </form>
+    </Dialog>
+  );
+}
+
 const day = (n: number) => new Date(Date.UTC(2026, 9, 27 - n, 9)).toISOString();
 
 /** A made-up answer for the preview of what tickets show: every field Shopify gives, filled. */
@@ -670,8 +769,9 @@ export function OwnDataPanelCard({ onAdd }: { onAdd: () => void }) {
   );
 }
 
-const ANSWER_SAMPLE = `{ "sections": [ { "title": "Order", "items": [
-  { "label": "Confirmed delivery", "value": "2026-11-04", "url": "https://erp.example.com/so/42" } ] } ] }`;
+const ANSWER_SAMPLE = `{ "version": 2, "blocks": [ { "type": "card", "title": "Sales order S00042",
+  "url": "https://erp.example.com/so/42", "badges": [ { "text": "Supplier late", "tone": "warning" } ],
+  "fields": [ { "label": "Delivery", "value": { "type": "date", "value": "2026-11-12", "relative": true } } ] } ] }`;
 
 function PanelSecretDialog({ secret, onClose }: { secret: string | null; onClose: () => void }) {
   const { t } = useTranslation("settingsDev");

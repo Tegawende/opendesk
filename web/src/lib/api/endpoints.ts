@@ -417,7 +417,18 @@ export const api = {
   ticketPanels: {
     list: () => http.get<{ data: T.TicketPanel[] }>("/v1/ticket-panels"),
     /** An http panel answers its signing `secret`, shown once. */
-    create: (b: { kind: "shopify" | "http"; name?: string; shop?: string; client_id?: string; client_secret?: string; token?: string; url?: string; fields?: T.ShopifyField[]; orders_shown?: number }) =>
+    create: (b: {
+      kind: "shopify" | "http";
+      name?: string;
+      shop?: string;
+      client_id?: string;
+      client_secret?: string;
+      token?: string;
+      url?: string;
+      fields?: T.ShopifyField[];
+      orders_shown?: number;
+      reference_pattern?: string;
+    }) =>
       http.create<{ panel: T.TicketPanel; secret?: string }>("/v1/ticket-panels", b),
     update: (
       id: string,
@@ -431,6 +442,7 @@ export const api = {
         url?: string;
         fields?: T.ShopifyField[];
         orders_shown?: number;
+        reference_pattern?: string;
       },
     ) =>
       http.patch<T.TicketPanel>(`/v1/ticket-panels/${id}`, b),

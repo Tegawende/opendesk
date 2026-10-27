@@ -1086,6 +1086,8 @@ export type TicketPanel = {
   fields: ShopifyField[];
   /** shopify: how many of the last orders show, 1 to 5. */
   orders_shown?: number;
+  /** http: the regular expression (RE2) that finds order and invoice numbers in the ticket for the request's `ticket.references`; empty finds none. */
+  reference_pattern?: string;
   enabled: boolean;
   position: number;
   /** error: the last lookup found the credentials refused. */
@@ -1119,6 +1121,27 @@ export type PanelOrder = {
   tracking: { company?: string; number?: string; url?: string }[];
 };
 export type PanelSection = { title: string; items: { label: string; value: string; url?: string }[] };
+/** A tone of an http panel's badges and notes. */
+export type PanelTone = "neutral" | "info" | "success" | "warning" | "danger";
+export type PanelBadge = { text: string; tone: PanelTone };
+/**
+ * A value of an http panel's blocks, as the server cleaned it: always an object. `date` is
+ * YYYY-MM-DD for a day, else an RFC 3339 time in UTC; `money` a decimal and an ISO 4217 code.
+ */
+export type PanelValue =
+  | { type: "text"; text: string }
+  | { type: "date"; value: string; relative?: boolean }
+  | { type: "money"; amount: string; currency: string }
+  | { type: "badge"; text: string; tone: PanelTone };
+export type PanelField = { label?: string; value: PanelValue; url?: string };
+export type PanelLine = { quantity?: number; title: string; subtitle?: string; value?: PanelValue; url?: string };
+export type PanelListItem = { title: string; subtitle?: string; value?: PanelValue; badge?: PanelBadge; url?: string };
+/** A block of an http panel's version 2 answer (contracts/integrations.md "The http answer"). */
+export type PanelBlock =
+  | { type: "card"; title: string; url?: string; subtitle?: string; badges?: PanelBadge[]; fields?: PanelField[]; lines?: PanelLine[]; footer?: PanelField[] }
+  | { type: "fields"; title?: string; items: PanelField[] }
+  | { type: "list"; title?: string; items: PanelListItem[] }
+  | { type: "note"; text: string; tone: PanelTone };
 export type TicketPanelData = {
   panel_id: string;
   kind: "shopify" | "http";
@@ -1126,7 +1149,10 @@ export type TicketPanelData = {
   message?: string;
   customer?: PanelCustomer;
   orders?: PanelOrder[];
+  /** http: a version 1 answer's sections. */
   sections?: PanelSection[];
+  /** http: a version 2 answer's blocks. */
+  blocks?: PanelBlock[];
   fetched_at: string;
 };
 export type TicketLink = {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_REFERENCE_PATTERN } from "@/lib/panelReferences";
 import { installMock } from "../index";
 import { dispatch } from "../router";
 import { db } from "../db";
@@ -81,13 +82,19 @@ describe("mock ticket panels", () => {
   it("adds an http panel with a secret shown once, refuses bad input, and removes it", async () => {
     expect((await call("POST", "/v1/ticket-panels", { kind: "http", url: "ftp://erp.example.com" })).status).toBe(422);
     expect((await call("POST", "/v1/ticket-panels", { kind: "shopify", shop: "evil.example.com", token: "x" })).status).toBe(422);
+    expect((await call("POST", "/v1/ticket-panels", { kind: "shopify", shop: "lumen-store", token: "x", reference_pattern: "x" })).status).toBe(422);
     const made = await call("POST", "/v1/ticket-panels", { kind: "http", url: "https://erp.example.com/panel", name: "Odoo" });
     expect(made.status).toBe(201);
     expect(made.body.secret).toMatch(/^pnsec_/);
     expect(made.body.panel).toMatchObject({ kind: "http", name: "Odoo", host: "erp.example.com" });
     const tickets = (await call("GET", "/v1/tickets")).body.data as { id: string }[];
     const d = (await call("GET", `/v1/tickets/${tickets[0]!.id}/panels/${made.body.panel.id}`)).body;
-    expect(d.sections[0].items.length).toBeGreaterThan(0);
+    expect(d.sections).toBeUndefined();
+    expect(d.blocks.map((b: { type: string }) => b.type)).toEqual(["card", "fields", "list", "note"]);
+    expect(made.body.panel.reference_pattern).toBe(DEFAULT_REFERENCE_PATTERN);
+    expect((await call("PATCH", `/v1/ticket-panels/${made.body.panel.id}`, { reference_pattern: "(unclosed" })).status).toBe(422);
+    expect((await call("PATCH", `/v1/ticket-panels/${made.body.panel.id}`, { reference_pattern: "x?" })).status).toBe(422);
+    expect((await call("PATCH", `/v1/ticket-panels/${made.body.panel.id}`, { reference_pattern: "" })).body.reference_pattern).toBe("");
     const off = await call("PATCH", `/v1/ticket-panels/${made.body.panel.id}`, { enabled: false });
     expect(off.body.enabled).toBe(false);
     expect((await call("GET", `/v1/tickets/${tickets[0]!.id}/panels/${made.body.panel.id}`)).status).toBe(404);

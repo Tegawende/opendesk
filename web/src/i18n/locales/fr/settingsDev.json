@@ -532,7 +532,7 @@
     "token": "Jeton d’accès Admin API",
     "tokenHint": "Seulement pour une application créée dans l’admin Shopify avant 2026 (Paramètres → Applications → Développer des applications) avec les accès read_customers et read_orders : son jeton d’accès Admin API.",
     "url": "URL",
-    "urlHint": "OpenDesk y envoie le ticket et son contact, signés, et affiche les sections qu’elle renvoie.",
+    "urlHint": "OpenDesk envoie à cette URL le ticket, son contact et les références qu’il y trouve, avec une signature, et affiche ce qu’elle répond.",
     "name": "Nom",
     "namePlaceholder": "Odoo",
     "connect": "Ajouter le panneau",
@@ -547,7 +547,7 @@
     "secretTitle": "Secret de signature",
     "secretDescription": "Copiez-le maintenant. Vous ne le reverrez plus.",
     "secretVerify": "Chaque requête porte OD-Signature, comme les envois de webhooks. Vérifiez-la avant de répondre :",
-    "secretAnswer": "Répondez en JSON par sections de valeurs nommées, 64 Ko au plus :",
+    "secretAnswer": "Répondez par des blocs JSON (cartes, valeurs avec libellé, listes, notes), 64 Ko au plus :",
     "secretSaved": "Je l’ai enregistré",
     "fields": {
       "menu": "Choisir ce qui s’affiche",
@@ -586,6 +586,20 @@
       "show": "Afficher {{name}} dans les panneaux de ticket",
       "ownTitle": "Vos propres données",
       "ownBody": "Affichez ce qu’un système à vous sait du contact, depuis une URL qui répond."
+    },
+    "references": {
+      "menu": "Références de commande",
+      "title": "Références de commande pour {{name}}",
+      "description": "OpenDesk cherche les numéros de commande et de facture dans l’objet et les messages du ticket et envoie ce qu’il trouve, jamais les messages, pour que votre URL retrouve la fiche.",
+      "pattern": "Motif",
+      "hint": "Une expression régulière (RE2). Avec un groupe, c’est le groupe qui est envoyé. Laissez vide pour n’en envoyer aucune.",
+      "none": "Aucune",
+      "try": "Essayer sur un texte",
+      "found": "Trouvé :",
+      "nothing": "rien",
+      "off": "rien, les références sont désactivées",
+      "defaults": "Motif par défaut",
+      "saved": "Références de {{name}} enregistrées"
     }
   }
 }

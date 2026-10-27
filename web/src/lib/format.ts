@@ -224,6 +224,34 @@ export function money(amount: string, code: string): string {
   }
 }
 
+const DAY_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Another product's day or time as a Date: a day (YYYY-MM-DD) is that day here, never shifted by the timezone. */
+function dayOrTime(v: string): Date | null {
+  const m = DAY_ONLY.exec(v);
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Another product's date: "Nov 4" for a day, "Nov 4, 2:05 PM" for a time (in the reader's timezone); the year outside this one. */
+export function panelDate(v: string): string {
+  const d = dayOrTime(v);
+  if (!d) return v;
+  const year = sameYear(d) ? {} : { year: "numeric" as const };
+  return DAY_ONLY.test(v) ? dtf({ month: "short", day: "numeric", ...year }).format(d) : dtf({ month: "short", day: "numeric", ...year, hour: "numeric", minute: "2-digit" }).format(d);
+}
+
+/** How far a day or time is, by calendar days: "today", "tomorrow", "in 3 days", "5 days ago", then months and years. */
+export function relDay(v: string, now = Date.now()): string {
+  const d = dayOrTime(v);
+  if (!d) return "";
+  const days = Math.round((startOfDay(d) - startOfDay(new Date(now))) / 86_400_000);
+  const f = rtf({ numeric: "auto" });
+  if (Math.abs(days) < 45) return f.format(days, "day");
+  if (Math.abs(days) < 365) return f.format(Math.round(days / 30), "month");
+  return f.format(Math.round(days / 365), "year");
+}
+
 /** 0.874 -> "87%" (or "87 %" in fr/de). */
 export function percent(ratio: number, digits = 0): string {
   return nf({ style: "percent", maximumFractionDigits: digits }).format(ratio);

@@ -626,7 +626,7 @@ func TestHTTPPanel(t *testing.T) {
 	path := "/v1/tickets/" + tid + "/panels/" + created.Panel.ID.String()
 	var d Data
 	d = readPanel(t, e, path, viewer)
-	if d.State != "ok" || len(d.Sections) != 1 || d.Sections[0].Title != "Odoo order" {
+	if d.State != "ok" || len(d.Sections) != 1 || d.Sections[0].Title != "Odoo order" || d.Blocks != nil {
 		t.Fatalf("data = %+v", d)
 	}
 	items := d.Sections[0].Items

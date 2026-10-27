@@ -872,6 +872,7 @@
     "shipping": "Versand",
     "discountCodes_one": "Rabattcode",
     "discountCodes_other": "Rabattcodes",
-    "refunded": "{{amount}} erstattet"
+    "refunded": "{{amount}} erstattet",
+    "openLink": "{{name}} öffnen"
   }
 }

@@ -156,9 +156,10 @@ connection and gives Ollie no tool. Two kinds:
   older than 60 days), installs it on the shop and pastes its client ID and secret. An app made
   in Shopify admin before 2026 (a "legacy custom app") can instead paste its Admin API access
   token: Shopify no longer lets anyone create those.
-- `http`: a URL of the workspace's own (an ERP, billing, a CRM). OpenDesk posts the ticket and
-  its contact to it and shows the sections it answers. The workspace's code decides what to
-  show; OpenDesk learns no product.
+- `http`: a URL of the workspace's own (an ERP, billing, a CRM). OpenDesk posts the ticket, its
+  contact and the order or invoice numbers it finds in the ticket to it, and shows the blocks it
+  answers: cards, labelled values, lists and notes, with dates, money and badges the app formats.
+  The workspace's code decides what to show; OpenDesk learns no product.
 
 ```ts
 interface TicketPanel { id: string; kind: "shopify" | "http"; name: string;
@@ -167,12 +168,14 @@ interface TicketPanel { id: string; kind: "shopify" | "http"; name: string;
   client_id?: string /* shopify client_credentials: the app's client ID, not a secret */;
   fields: ShopifyField[] /* shopify: what tickets show, in catalogue order; the defaults until an admin chooses. http: [] */;
   orders_shown?: number /* shopify: how many of the last orders show, 1 to 5, default 5 */;
+  reference_pattern?: string /* http: the RE2 pattern that finds ticket.references ("The http request"); "" finds none */;
   enabled: boolean; position: number; status: "connected" | "error" /* error: the last lookup found the credentials refused */;
   last_error: string; created_at: string; updated_at: string }
 interface TicketPanelData { panel_id: string; kind: "shopify" | "http";
   state: "ok" | "empty" /* nothing about this contact */ | "no_contact" /* shopify: the contact has no email */ | "error";
   message?: string /* error: a few words, never a URL */; customer?: Customer; orders?: Order[] /* shopify */;
-  sections?: Section[] /* http */; fetched_at: string }
+  sections?: Section[] /* http, a version 1 answer */; blocks?: Block[] /* http, a version 2 answer, cleaned ("The http answer") */;
+  fetched_at: string }
 /* A field the panel does not show is left out of Customer and Order, and its list is empty. */
 interface Customer { name: string; url: string /* in the store's admin */; email?: string /* the store's, field email */;
   orders_count?: number; total_spent?: string /* decimal */; currency?: string /* total_spent's */; tags: string[] }
@@ -205,8 +208,8 @@ into the same section.
 | method | path | role | body → response |
 | --- | --- | --- | --- |
 | GET | `/v1/ticket-panels` | viewer, `tickets:read` | → `{data: TicketPanel[]}` in `position` order |
-| POST | `/v1/ticket-panels` | admin user | `{kind, name?, shop? /* shopify: domain, handle or admin URL */, client_id?, client_secret? /* shopify: an app */, token? /* shopify: in place of the app */, fields?, orders_shown? /* shopify; 422 on http */, url? /* http */}` → 201 `{panel, secret? /* http: the signing secret, shown once */}`, `Cache-Control: no-store` |
-| PATCH | `/v1/ticket-panels/{id}` | admin user | `{name?, enabled?, position?, client_secret?, client_id? /* shopify: a new secret keeps the client ID */, token? /* shopify */, fields? /* shopify: the whole list; an unknown field, or line_prices without line_items: 422 */, orders_shown? /* shopify, 1 to 5 */, url? /* http */}` → `TicketPanel` |
+| POST | `/v1/ticket-panels` | admin user | `{kind, name?, shop? /* shopify: domain, handle or admin URL */, client_id?, client_secret? /* shopify: an app */, token? /* shopify: in place of the app */, fields?, orders_shown? /* shopify; 422 on http */, url?, reference_pattern? /* http; 422 on shopify */}` → 201 `{panel, secret? /* http: the signing secret, shown once */}`, `Cache-Control: no-store` |
+| PATCH | `/v1/ticket-panels/{id}` | admin user | `{name?, enabled?, position?, client_secret?, client_id? /* shopify: a new secret keeps the client ID */, token? /* shopify */, fields? /* shopify: the whole list; an unknown field, or line_prices without line_items: 422 */, orders_shown? /* shopify, 1 to 5 */, url?, reference_pattern? /* http: the default pattern stores the default, "" none; 422 when it does not compile or matches an empty text */}` → `TicketPanel` |
 | POST | `/v1/ticket-panels/{id}/rotate-secret` | admin user | → `{panel, secret}` (http; the old secret stops at once) |
 | DELETE | `/v1/ticket-panels/{id}` | admin user | → 204 |
 | GET | `/v1/tickets/{id}/panels/{panelId}` | viewer, `tickets:read` | `?refresh=true` asks the product again → `TicketPanelData`. A hidden or missing ticket, or a panel that is off or gone: `404` |
@@ -217,9 +220,10 @@ into the same section.
   becomes the panel's name unless one is given: `422 panel_failed` otherwise. An http URL passes the outbound
   URL rules: `422 invalid_url`. At most 10 panels per workspace (`409`), 30 new panels an hour (`429`).
 - API keys never connect (`403`): pasting another product's credentials needs a person.
-- A lookup is one request within 3 s. Its answer is kept for a minute (a failure for 15 s) per
-  panel and contact (and ticket, for http), and a changed panel never answers from before the
-  change; `refresh` skips the copy. A panel makes at most 120 lookups a minute that the copy did
+- A lookup is one request within 3 s. Its answer is kept for a minute (a failure for 15 s; an http
+  answer may choose 0 to 600 s with `cache_seconds`) per panel and contact (and ticket and
+  references, for http), and a changed panel never answers from before the change; `refresh` skips
+  the copy. A panel makes at most 120 lookups a minute that the copy did
   not answer. A failure is `state: "error"` with a 200, never an error status: the ticket shows a
   quiet note. Refused credentials (Shopify `401`, `403` or `ACCESS_DENIED`; the URL's `401` or
   `403`) also mark the panel `error` with `last_error` and publish `ticket_panel.updated`; a
@@ -257,23 +261,86 @@ into the same section.
 panel's secret: the scheme of outgoing webhooks (`contracts/events.md`), verified the same way.
 
 ```json
-{ "panel_id": "…", "workspace_id": "…",
-  "ticket": { "id": "…", "number": 1042, "subject": "Where is my order?" },
-  "contact": { "id": "…", "email": "ada@example.com", "name": "Ada Buyer" } }
+{ "panel_id": "…", "workspace_id": "…", "refresh": false,
+  "ticket": { "id": "…", "number": 1042, "subject": "Where is my order S00042?",
+              "references": ["S00042", "INV/2026/00012"] },
+  "contact": { "id": "…", "email": "ada@example.com", "name": "Ada Buyer",
+               "emails": ["ada@example.com"], "phone": "+32 470 12 34 56" } }
 ```
 
-`contact.id` is null and `email` empty for a ticket without a contact. The answer:
+- `contact.id` is null, `email` empty and `emails` `[]` for a ticket without a contact. `emails` is
+  every address the contact is known by (the contact's own first, then the other addresses it wrote
+  to this ticket from, 5 at most); `phone` is left out when the contact has none.
+- `ticket.references` is what the panel's `reference_pattern` finds in the ticket's subject, then
+  its 50 newest messages (replies and notes; the first 20,000 characters of each), newest first:
+  each once, at most 10 of 64 characters. A pattern with a group sends the group, else the whole
+  match. Message bodies are never sent. The default, `#\d{3,}\b|\b[A-Z]{1,4}[-/]?(?:\d{2,4}[-/])?\d{3,}\b`,
+  needs a `#` or 1 to 4 capitals before the digits (`#1042`, `S00042`, `SO-2026-0042`,
+  `INV/2026/00012`, `PO4471`), so years, amounts, postcodes and phone numbers are not references. An
+  admin sets the pattern (RE2 syntax, 200 characters at most, never one that matches an empty text:
+  `422`); `""` sends `[]`, and saving the default stores NULL so a later default applies.
+- `refresh` is true when an agent asked again (the panel's refresh button, `?refresh=true`).
+- Fields are only ever added: ignore the ones you don't know.
+
+### The http answer
+
+Version 2 answers `blocks`; an answer without `blocks` and without `version` 2 or more is version 1
+and answers `sections`, shown as they always were. Both are at most 64 KB.
+
+```ts
+interface Answer { version?: 2; blocks: Block[]; cache_seconds?: number /* 0 to 600; 0: not kept */ }
+type Block =
+  | { type: "card"; title: string; url?: string; subtitle?: string; badges?: Badge[]; fields?: Field[]; lines?: Line[]; footer?: Field[] }
+  | { type: "fields"; title?: string; items: Field[] }
+  | { type: "list"; title?: string; items: { title: string; url?: string; subtitle?: string; value?: Value; badge?: Badge }[] }
+  | { type: "note"; text: string; tone?: Tone };
+interface Field { label: string; value: Value; url?: string }
+interface Line { quantity?: number; title: string; subtitle?: string; value?: Value; url?: string }
+interface Badge { text: string; tone: Tone }
+type Tone = "neutral" | "info" | "success" | "warning" | "danger";
+type Value = string | number | boolean
+  | { type: "text"; text: string }
+  | { type: "date"; value: string /* YYYY-MM-DD, or a time: RFC 3339, or without an offset in UTC */; relative?: boolean }
+  | { type: "money"; amount: string | number /* a decimal: 129.00 */; currency: string /* ISO 4217 */ }
+  | { type: "badge"; text: string; tone: Tone };
+```
+
+- `card`: one record (an order, an invoice, a subscription, a deal): a title that may link, a
+  subtitle, badges, labelled fields, lines (an order's products) and a footer (a total). `fields`:
+  labelled values. `list`: rows (invoices, tickets, contracts). `note`: one short sentence ("No
+  subscription.").
+- The app formats dates in the agent's locale and timezone (a day as it is, never shifted) and, with
+  `relative`, adds "in 3 days" or "5 days ago"; money in the agent's locale; a badge's tone is the
+  app's own colour (info blue, success green, warning amber, danger red).
+- What is shown: 10 blocks; 30 fields in a card or a `fields` block; 20 lines; 6 footer fields; 4
+  badges on a card; 20 list rows. Text is plain, control characters dropped: titles and labels 80
+  characters, line and row titles and subtitles 160, values 500, badges 40, notes 280. Never HTML.
+- What does not read is left out, never the whole answer: a block or value type this version does not
+  know, a date or an amount that does not read, a currency that is not three letters, a field without
+  a value, a card, line or row without a title, an empty block. An unknown tone is `neutral`. A `url`
+  that is not https (http on a development instance) is dropped; links open in a new tab and are
+  never fetched.
+- The server cleans the answer once: `TicketPanelData.blocks` has the shape above with every value an
+  object (`{type: "text", text}` for a string, number or boolean, written as given), dates as
+  `YYYY-MM-DD` or an RFC 3339 time in UTC, amounts as decimal strings, currencies in capitals and
+  every tone set. Clients only render it.
+- `cache_seconds` keeps the answer that long for the panel, ticket, contact and references (default
+  60; above 600 is 600). A failure is kept 15 s. A new reference in the ticket asks again.
+- Version 1: `{ sections: [{ title, items: [{ label, value, url? }] }] }`. 10 sections of 30 items;
+  title and label 80 characters, value 500 (a number or boolean as written).
+- `204` or `404`: nothing about this contact (`empty`); an answer whose blocks all drop is `empty`
+  too. `401` or `403`: refused credentials. Any other status, a timeout or an answer that is not
+  this JSON: `error`.
 
 ```json
-{ "sections": [ { "title": "Odoo order", "items": [
-  { "label": "Confirmed delivery", "value": "2026-11-04", "url": "https://erp.example/so/42" } ] } ] }
+{ "version": 2, "cache_seconds": 120, "blocks": [
+  { "type": "card", "title": "Sales order S00042", "url": "https://erp.example/so/42",
+    "badges": [ { "text": "Supplier late", "tone": "warning" } ],
+    "fields": [ { "label": "Supplier date", "value": { "type": "date", "value": "2026-11-12", "relative": true } } ],
+    "lines": [ { "quantity": 2, "title": "Arco floor lamp", "value": { "type": "money", "amount": "1890.00", "currency": "EUR" } } ],
+    "footer": [ { "label": "Total", "value": { "type": "money", "amount": "3780.00", "currency": "EUR" } } ] },
+  { "type": "note", "text": "No open invoice." } ] }
 ```
-
-- At most 64 KB; 10 sections of 30 items are shown. Text is plain (control characters dropped,
-  title and label 80 characters, value 500; a number or boolean value is shown as written), never
-  HTML. A `url` that is not https (http on a development instance) is dropped.
-- `204` or `404`: nothing about this contact (`empty`). `401` or `403`: refused credentials. Any
-  other status, a timeout or an answer that is not this JSON: `error`.
 
 ### Security
 
@@ -283,7 +350,7 @@ panel's secret: the scheme of outgoing webhooks (`contracts/events.md`), verifie
   answers, events, logs or audit entries. Requests go through the outbound URL rules at connect
   time (https, public addresses only, no redirects, no proxy; loopback on development instances).
 - Audit: `ticket_panel.connected`, `ticket_panel.updated` (`changes` names the fields:
-  `credentials` for new Shopify credentials, `secret` for a rotation, `fields`, `orders_shown`), `ticket_panel.disconnected`,
+  `credentials` for new Shopify credentials, `secret` for a rotation, `fields`, `orders_shown`, `reference_pattern`), `ticket_panel.disconnected`,
   with the kind and host.
 - The ticket is read through domain visibility: a contact on a ticket of a private team the
   reader is not on is never looked up.

@@ -528,7 +528,7 @@
     "token": "Admin API access token",
     "tokenHint": "Only for an app made in Shopify admin before 2026 (Settings → Apps → Develop apps) with the read_customers and read_orders scopes: its Admin API access token.",
     "url": "URL",
-    "urlHint": "OpenDesk posts the ticket and its contact here, signed, and shows the sections it answers.",
+    "urlHint": "OpenDesk posts the ticket, its contact and the references it finds to this URL, signed, and shows what it answers.",
     "name": "Name",
     "namePlaceholder": "Odoo",
     "connect": "Add panel",
@@ -543,7 +543,7 @@
     "secretTitle": "Signing secret",
     "secretDescription": "Copy it now. You won’t see it again.",
     "secretVerify": "Every request carries OD-Signature, like webhook deliveries. Verify it before answering:",
-    "secretAnswer": "Answer JSON sections of labelled values, at most 64 KB:",
+    "secretAnswer": "Answer JSON blocks (cards, labelled values, lists, notes), at most 64 KB:",
     "secretSaved": "I’ve saved it",
     "fields": {
       "menu": "Choose what shows",
@@ -582,6 +582,20 @@
       "show": "Show {{name}} in ticket panels",
       "ownTitle": "Your own data",
       "ownBody": "Show what a system of your own knows about the contact, from a URL that answers."
+    },
+    "references": {
+      "menu": "Order references",
+      "title": "Order references for {{name}}",
+      "description": "OpenDesk looks for order and invoice numbers in the ticket’s subject and messages and sends what it finds, never the messages, so your URL can find the record.",
+      "pattern": "Pattern",
+      "hint": "A regular expression (RE2). With a group, the group is sent. Leave it empty to send none.",
+      "none": "None",
+      "try": "Try it on a text",
+      "found": "Found:",
+      "nothing": "nothing",
+      "off": "nothing, references are off",
+      "defaults": "Use the default",
+      "saved": "Saved the references of {{name}}"
     }
   }
 }

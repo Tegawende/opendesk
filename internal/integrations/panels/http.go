@@ -31,24 +31,51 @@ const (
 	maxValue        = 500
 )
 
-// lookupRequest is what OpenDesk posts to an http panel's URL.
+// lookupRequest is what OpenDesk posts to an http panel's URL. Later fields only add to it.
 type lookupRequest struct {
 	PanelID     uuid.UUID     `json:"panel_id"`
 	WorkspaceID uuid.UUID     `json:"workspace_id"`
 	Ticket      lookupTicket  `json:"ticket"`
 	Contact     lookupContact `json:"contact"`
+	// Refresh is true when an agent asked again (the panel's refresh button).
+	Refresh bool `json:"refresh"`
 }
 
 type lookupTicket struct {
 	ID      uuid.UUID `json:"id"`
 	Number  int64     `json:"number"`
 	Subject string    `json:"subject"`
+	// References is what the panel's pattern found in the subject and the newest messages.
+	References []string `json:"references"`
 }
 
 type lookupContact struct {
-	ID    *uuid.UUID `json:"id"`
-	Email string     `json:"email"`
-	Name  string     `json:"name"`
+	ID     *uuid.UUID `json:"id"`
+	Email  string     `json:"email"`
+	Name   string     `json:"name"`
+	Emails []string   `json:"emails"`
+	Phone  string     `json:"phone,omitempty"`
+}
+
+// answer is what an http panel's URL answers: version 1 sections, or version 2 blocks.
+type answer struct {
+	Version      json.RawMessage   `json:"version"`
+	Blocks       []json.RawMessage `json:"blocks"`
+	CacheSeconds json.RawMessage   `json:"cache_seconds"`
+	Sections     []struct {
+		Title string `json:"title"`
+		Items []struct {
+			Label string `json:"label"`
+			Value any    `json:"value"`
+			URL   string `json:"url"`
+		} `json:"items"`
+	} `json:"sections"`
+}
+
+// blocksAnswer is true for a version 2 answer: one with blocks, or that says version 2 or later.
+func (a *answer) blocksAnswer() bool {
+	var v float64
+	return a.Blocks != nil || (json.Unmarshal(a.Version, &v) == nil && v >= 2)
 }
 
 // sign is the OD-Signature value of body at t, the scheme outgoing webhooks use
@@ -83,21 +110,29 @@ func (s *Service) cleanLink(raw string) string {
 	return u.String()
 }
 
-// readHTTP posts the ticket and contact to the panel's URL and fills d with its sections.
-func (s *Service) readHTTP(ctx context.Context, x *row, sub subject, d *Data) error {
+// readHTTP posts the ticket and contact to the panel's URL and fills d with its blocks or
+// sections. It answers how long to keep the answer: the answer's cache_seconds, else cacheTTL.
+func (s *Service) readHTTP(ctx context.Context, x *row, sub subject, d *Data) (time.Duration, error) {
+	ttl := cacheTTL
 	secret, err := s.d.Box.Open(x.SecretEnc)
 	if err != nil {
-		return err
+		return ttl, err
 	}
-	body, err := json.Marshal(lookupRequest{PanelID: x.ID, WorkspaceID: x.WorkspaceID,
-		Ticket:  lookupTicket{ID: sub.TicketID, Number: sub.TicketNumber, Subject: sub.Subject},
-		Contact: lookupContact{ID: sub.ContactID, Email: sub.Email, Name: sub.Name}})
+	if sub.References == nil {
+		sub.References = []string{}
+	}
+	if sub.Emails == nil {
+		sub.Emails = []string{}
+	}
+	body, err := json.Marshal(lookupRequest{PanelID: x.ID, WorkspaceID: x.WorkspaceID, Refresh: sub.Refresh,
+		Ticket:  lookupTicket{ID: sub.TicketID, Number: sub.TicketNumber, Subject: sub.Subject, References: sub.References},
+		Contact: lookupContact{ID: sub.ContactID, Email: sub.Email, Name: sub.Name, Emails: sub.Emails, Phone: sub.Phone}})
 	if err != nil {
-		return err
+		return ttl, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, x.Target, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return ttl, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
@@ -110,37 +145,36 @@ func (s *Service) readHTTP(ctx context.Context, x *row, sub subject, d *Data) er
 		if errors.As(err, &ue) {
 			err = ue.Err // never the URL: a path or query can carry a secret
 		}
-		return err
+		return ttl, err
 	}
 	defer res.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(res.Body, maxHTTPAnswer+1))
 	if err != nil {
-		return err
+		return ttl, err
 	}
 	switch {
 	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
-		return &authError{fmt.Sprintf("The panel's URL refused the request (%d): check its signing secret.", res.StatusCode)}
+		return ttl, &authError{fmt.Sprintf("The panel's URL refused the request (%d): check its signing secret.", res.StatusCode)}
 	case res.StatusCode == http.StatusNoContent || res.StatusCode == http.StatusNotFound:
 		d.State = "empty"
-		return nil
+		return ttl, nil
 	case res.StatusCode >= 300:
-		return fmt.Errorf("The panel's URL answered %d.", res.StatusCode)
+		return ttl, fmt.Errorf("The panel's URL answered %d.", res.StatusCode)
 	}
 	if len(raw) > maxHTTPAnswer {
-		return errors.New("The panel's answer is larger than 64 KB.")
+		return ttl, errors.New("The panel's answer is larger than 64 KB.")
 	}
-	var answer struct {
-		Sections []struct {
-			Title string `json:"title"`
-			Items []struct {
-				Label string `json:"label"`
-				Value any    `json:"value"`
-				URL   string `json:"url"`
-			} `json:"items"`
-		} `json:"sections"`
-	}
+	var answer answer
 	if err := json.Unmarshal(raw, &answer); err != nil {
-		return errors.New("The panel's answer is not the expected JSON.")
+		return ttl, errors.New("The panel's answer is not the expected JSON.")
+	}
+	ttl = cacheFor(answer.CacheSeconds)
+	d.State = "ok"
+	if answer.blocksAnswer() {
+		if d.Blocks = s.cleanBlocks(answer.Blocks); len(d.Blocks) == 0 {
+			d.State, d.Blocks = "empty", nil
+		}
+		return ttl, nil
 	}
 	d.Sections = []Section{}
 	for _, sec := range answer.Sections {
@@ -162,11 +196,10 @@ func (s *Service) readHTTP(ctx context.Context, x *row, sub subject, d *Data) er
 			d.Sections = append(d.Sections, out)
 		}
 	}
-	d.State = "ok"
 	if len(d.Sections) == 0 {
 		d.State, d.Sections = "empty", nil
 	}
-	return nil
+	return ttl, nil
 }
 
 // valueText reads a value as text: a string, a number or a boolean as written.
