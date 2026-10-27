@@ -26,6 +26,7 @@ import { useMyAvatar } from "@/lib/pictures";
 import { q } from "@/lib/queries";
 import { updateUser, useRole, useSession } from "@/lib/session";
 import { useTheme, type ThemePref } from "@/lib/theme";
+import { setConversationLayout, useConversationLayout } from "@/lib/conversationLayout";
 
 export default function Profile() {
   const { t } = useTranslation("settings");
@@ -175,6 +176,7 @@ export default function Profile() {
           <ThemeCards />
         </div>
         <AssigneeSetting />
+        <ConversationLayout />
       </Section>
 
       <Section title={t("profile.clock.title")} description={t("profile.clock.hint")}>
@@ -233,6 +235,17 @@ function AssigneeSetting() {
           { value: "none", label: t("profile.assignee.none") },
         ]}
       />
+    </Row>
+  );
+}
+
+/** The ticket timeline as a conversation: the customer's messages on one side, the team's on the other. */
+function ConversationLayout() {
+  const { t } = useTranslation("settings");
+  const on = useConversationLayout();
+  return (
+    <Row label={t("profile.conversation.label")} description={t("profile.conversation.hint")}>
+      <Switch checked={on} onCheckedChange={setConversationLayout} aria-label={t("profile.conversation.label")} />
     </Row>
   );
 }
