@@ -22,6 +22,8 @@
   "adminsOnly": "Nur Admins",
   "askAWorkspaceAdminIfYouNeedToChange": "Frag einen Workspace-Admin, wenn du Folgendes ändern musst:",
   "signInAgain": "Erneut anmelden",
+  "reauthMfa": "Melde dich erneut mit deinem Zwei-Faktor-Code an, um das zu tun.",
+  "reauthRecent": "Dafür ist eine Anmeldung aus den letzten 12 Stunden nötig. Melde dich erneut an, um zu bestätigen, dass du es bist.",
   "private": "Privat",
   "allEvents": "Alle Ereignisse",
   "webhookActive": "Webhook aktiv",

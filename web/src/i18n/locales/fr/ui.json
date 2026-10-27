@@ -22,6 +22,8 @@
   "adminsOnly": "Réservé aux administrateurs",
   "askAWorkspaceAdminIfYouNeedToChange": "Demandez à un administrateur de l’espace de travail de modifier",
   "signInAgain": "Se reconnecter",
+  "reauthMfa": "Reconnectez-vous avec votre code à deux facteurs pour effectuer cette action.",
+  "reauthRecent": "Cette action exige une connexion datant de moins de 12 heures. Reconnectez-vous pour confirmer votre identité.",
   "private": "Privé",
   "allEvents": "Tous les événements",
   "webhookActive": "Webhook actif",

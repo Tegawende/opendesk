@@ -22,6 +22,8 @@
   "adminsOnly": "Admins only",
   "askAWorkspaceAdminIfYouNeedToChange": "Ask a workspace admin if you need to change",
   "signInAgain": "Sign in again",
+  "reauthMfa": "Sign in again with your two-factor code to do this.",
+  "reauthRecent": "This needs a sign-in from the last 12 hours. Sign in again to confirm it's you.",
   "private": "Private",
   "allEvents": "All events",
   "webhookActive": "Webhook active",
