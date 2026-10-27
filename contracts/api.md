@@ -173,7 +173,7 @@ type Condition = {
   value: string; // up to 500 characters; any/none on a text field: a phrase list (below)
   question?: string; // ai_decide only: a yes/no question, 3..300 characters of plain text
 }; // subject, body, from_email, received_at, tag also take any ("contains any of") and none ("contains none of"): value holds phrases, one per line, each trimmed, empty lines dropped, stored that way; 1..100 phrases of up to 500 characters, 5000 characters in all; case-insensitive like contains; tag any holds when a label contains a phrase, tag none when no label does; other built-in fields refuse them. severity: equals/not_equals with a Severity or "none"; ai_decide: gt/lt with value a probability 0.01..0.99 (contracts/ai.md "Automations"); sentiment: equals/not_equals only; assignee_id, team_id, widget_id: equals/not_equals with an id of the workspace or "none"; brand_id: equals/not_equals with a brand id; received_at (the address the first email was written to): equals/not_equals/contains/any/none, case-insensitive; eq = equals, ne = not_equals. field.<key>: a ticket custom field, contact.field.<key>: the ticket contact's; ops per field type (below)
-type Action = { type: "set_status" | "set_priority" | "set_severity" /* value Severity, or "" to clear */ | "assign_user" | "assign_team" | "add_tag" | "remove_tag" | "send_reply" | "add_note" | "mark_spam" | "delete_ticket" /* soft-deletes the ticket; the run's later steps, automations and notifications skip it */ | "ai_triage" | "set_field" | "set_reply_address" /* value a mailbox id of the ticket's brand; skipped when removed or of another brand */; value: string; field?: string /* set_field: the ticket field key */ }; // assign_team records routed {via: "automation"}
+type Action = { type: "set_status" | "set_priority" | "set_severity" /* value Severity, or "" to clear */ | "assign_user" | "assign_team" | "add_tag" | "remove_tag" | "send_reply" | "add_note" | "mark_spam" | "delete_ticket" /* soft-deletes the ticket; the run's later steps, automations and notifications skip it */ | "merge_into_open_ticket" /* ticket_created only; value the window in days, "1".."30", "" stores "7"; below */ | "ai_triage" | "set_field" | "set_reply_address" /* value a mailbox id of the ticket's brand; skipped when removed or of another brand */; value: string; field?: string /* set_field: the ticket field key */; same_subject?: boolean /* merge_into_open_ticket only, stored; default true */ }; // assign_team records routed {via: "automation"}
 type Mailbox = {
   id: string; name: string; email: string; display_name: string;
   inbound_kind: "forwarding" | "imap" | "google" | "microsoft"; outbound_kind: "smtp" | "google" | "microsoft" | "system";
@@ -676,6 +676,20 @@ Automations: conditions take `field.<key>` (ticket field) and `contact.field.<ke
 (`equals`/`not_equals` are `eq`/`ne`); `set`/`not_set` ignore `value`. The `set_field` action sets ticket field `field` to `value`
 written as a string (`"12.5"`, `"true"`, `"2026-10-11"`, comma separated option ids; `""` clears); it is validated when the
 automation is saved and skipped at run time if the field was archived or deleted since.
+
+`merge_into_open_ticket` (trigger `ticket_created` only; another trigger is `422`) merges a new email ticket the customer opened into
+their earlier ticket, for a customer who writes again without replying in the thread. It merges into the most recent other
+ticket (by its last reply, else its creation) that is of the same contact, brand and channel, created before it, `open`,
+`pending` or `on_hold`, not spam, deleted or merged, created or replied on within `value` days, and, with `same_subject`, about
+the same subject: equal once reply prefixes (`Re:`, `Fwd:`, `AW:`, `TR:`...), ticket tags (`[#123]`), extra spaces and case are
+dropped (an empty subject or `(no subject)` matches none). A merge never changes who sees a message: both tickets are of one
+team, or neither is of a private team. It is skipped for a ticket without a contact, one the team started (no customer message),
+mail that failed sender checks, and a ticket solved, closed or marked spam earlier in the run. The merge is the
+`POST /v1/tickets/{id}/merge` one, by actor `automation` (`merged` activities on both tickets carry `automation_id` and
+`automation_name`); then the ticket merged into is set `open` when it was `pending` or `on_hold`, and its assignee (else whoever
+hears of an unassigned ticket) gets a `customer_replied` notification. When it merges, the automation's other actions are skipped
+and nothing else runs on the merged ticket: no later automation, `ticket_updated` chain, auto-assignment or new ticket
+notification. With nothing to merge into, the other actions run as usual.
 
 #### Profile pictures and logos
 
