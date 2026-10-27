@@ -157,8 +157,7 @@
     "openApi": "Über die API öffnen"
   },
   "connection": {
-    "lost": "Verbindung unterbrochen. Neue Verbindung wird aufgebaut, Änderungen werden danach synchronisiert.",
-    "back": "Wieder online"
+    "lost": "Verbindung unterbrochen. Neue Verbindung wird aufgebaut, Änderungen werden danach synchronisiert."
   },
   "desktop": {
     "switchServer": "Server wechseln",

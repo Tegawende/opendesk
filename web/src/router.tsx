@@ -715,10 +715,25 @@ const sMailAccountDetail = createRoute({
     await requireCollab(qc);
     void qc.prefetchQuery(q.teams());
     void qc.prefetchQuery(q.members());
+    void qc.prefetchQuery(q.mailCategories());
     return qc.ensureQueryData(q.mailAccounts());
   },
   component: page(() => import("./pages/settings/MailAccountDetail")),
   staticData: { title: "mailAccount" },
+});
+// Inbox categories (contracts/collab.md "Categories"): the workspace's and teams' defaults, listed while Collab is on.
+const sMailCategories = createRoute({
+  getParentRoute: () => settingsLayout,
+  path: "/mail-categories",
+  loader: async ({ context }) => {
+    const qc = context.queryClient;
+    await requireCollab(qc);
+    void qc.prefetchQuery(q.teams());
+    void qc.prefetchQuery(q.mailAccounts());
+    return qc.ensureQueryData(q.mailCategories());
+  },
+  component: page(() => import("./pages/settings/MailCategories")),
+  staticData: { title: "mailCategories" },
 });
 const sTags = settingsPage("/tags", "labels", () => import("./pages/settings/Tags"), (qc) => qc.ensureQueryData(q.tags()));
 const sCustomFields = settingsPage("/custom-fields", "customFields", () => import("./pages/settings/CustomFields"));
@@ -949,6 +964,7 @@ const routeTree = rootRoute.addChildren([
       sMailboxDetail,
       sMailAccounts,
       sMailAccountDetail,
+      sMailCategories,
       sTags,
       sCustomFields,
       sAssignment,
