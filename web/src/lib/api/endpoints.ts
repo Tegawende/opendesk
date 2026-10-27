@@ -671,6 +671,12 @@ export const api = {
       test: (b: T.AIProviderKeyInput) => http.post<T.AIProviderTest>("/v1/ai/provider/test", b),
       set: (b: T.AIProviderKeyInput) => http.put<T.AIProvider>("/v1/ai/provider", b),
       remove: () => http.del("/v1/ai/provider"),
+      /** The workspace's own TypeSafe key, for decisions only. */
+      decisions: {
+        test: (b: { api_key: string }) => http.post<T.AIProviderTest>("/v1/ai/provider/decisions/test", b),
+        set: (b: { api_key: string }) => http.put<T.AIProvider>("/v1/ai/provider/decisions", b),
+        remove: () => http.del("/v1/ai/provider/decisions"),
+      },
     },
     agent: {
       report: (r: T.ReportsRange) => http.get<T.AgentReport>("/v1/ai/agent/report", { query: r }),
@@ -760,6 +766,7 @@ export const api = {
       previewIdentity: (id: string, b: T.MailIdentityPreviewBody) => http.post<T.MailIdentityPreview>(`/v1/collab/accounts/${id}/identities/preview`, b),
       removeIdentity: (id: string, identityId: string) => http.del<T.MailAccount>(`/v1/collab/accounts/${id}/identities/${identityId}`),
       /** Microsoft: the account's other addresses, when Microsoft shares them. */
+      refreshIdentities: (id: string) => http.post<T.MailAccount>(`/v1/collab/accounts/${id}/identities/refresh`),
       identitySuggestions: (id: string) => http.get<{ addresses: string[] }>(`/v1/collab/accounts/${id}/identities/suggestions`),
       folders: (id: string) => http.get<T.MailFolder[] | T.Page<T.MailFolder>>(`/v1/collab/accounts/${id}/folders`),
       /** kind label on Microsoft makes an Outlook category; color is a tone, labels only. */
@@ -775,7 +782,7 @@ export const api = {
       list: (q: CollabThreadQuery) => http.get<T.Page<T.MailThread>>("/v1/collab/threads", { query: q }),
       get: (id: string) => http.get<T.MailThreadDetail>(`/v1/collab/threads/${id}`),
       /** All or nothing: a thread the caller cannot act on is 404. */
-      action: (b: { thread_ids: string[]; action: T.MailThreadAction; folder_id?: string }) =>
+      action: (b: { thread_ids: string[]; action: T.MailThreadAction; folder_id?: string; category?: string }) =>
         http.post<{ threads: T.MailThread[] }>("/v1/collab/threads/actions", b),
       share: (id: string, shares: T.MailAudience) => http.put<T.MailThreadDetail>(`/v1/collab/threads/${id}/shares`, { shares }),
       assign: (id: string, user_ids: string[]) => http.put<T.MailThreadDetail>(`/v1/collab/threads/${id}/assignees`, { user_ids }),
@@ -788,6 +795,22 @@ export const api = {
     /** One address across the conversations you see; exclude: the open one, left out of threads. */
     person: (q: { email: string; exclude?: string; limit?: number }) => http.get<T.MailPerson>("/v1/collab/person", { query: q }),
     counts: () => http.get<T.MailCounts>("/v1/collab/counts"),
+    /** Inbox categories (contracts/collab.md "Categories"). */
+    categories: {
+      get: () => http.get<T.MailCategorySettings>("/v1/collab/categories"),
+      setWorkspace: (b: { enabled: boolean; categories?: T.MailCategory[]; locked?: boolean }) => http.put<T.MailCategorySettings>("/v1/collab/categories/workspace", b),
+      removeWorkspace: () => http.del<T.MailCategorySettings>("/v1/collab/categories/workspace"),
+      setTeam: (teamId: string, b: { enabled: boolean; categories?: T.MailCategory[] }) => http.put<T.MailCategorySettings>(`/v1/collab/categories/teams/${teamId}`, b),
+      removeTeam: (teamId: string) => http.del<T.MailCategorySettings>(`/v1/collab/categories/teams/${teamId}`),
+      orderTeams: (team_ids: string[]) => http.put<T.MailCategorySettings>("/v1/collab/categories/team-order", { team_ids }),
+      /** Ollie's proposal, not saved: from an account's inbox and what about says. */
+      suggest: (b: { account_id?: string; about?: string }) => http.post<{ categories: T.MailCategory[] }>("/v1/collab/categories/suggest", b),
+      setAccount: (id: string, b: { mode: T.MailAccountCategories["mode"]; categories?: T.MailCategory[]; ai?: boolean }) =>
+        http.put<T.MailAccount>(`/v1/collab/accounts/${id}/categories`, b),
+      rules: (id: string) => http.get<{ rules: T.MailCategoryRule[] }>(`/v1/collab/accounts/${id}/category-rules`),
+      addRule: (id: string, b: { sender: string; category: string }) => http.post<T.MailCategoryRule>(`/v1/collab/accounts/${id}/category-rules`, b),
+      removeRule: (id: string, ruleId: string) => http.del(`/v1/collab/accounts/${id}/category-rules/${ruleId}`),
+    },
     /** Sent through the provider within the request (502 send_failed, nothing stored). */
     send: (b: CollabSendBody) => http.create<T.MailMessage>("/v1/collab/messages", b),
     /** Read from the message's source at the provider (502 provider_error). */
@@ -842,6 +865,8 @@ export type CollabThreadQuery = {
   to?: string;
   /** Only conversations with this person on them; without account_id, every conversation you see. */
   with?: string;
+  /** One tab of the inbox (box inbox): a category key. */
+  category?: string;
   limit?: number;
   cursor?: string | null;
 };

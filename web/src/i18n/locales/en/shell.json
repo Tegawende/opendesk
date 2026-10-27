@@ -156,8 +156,7 @@
     "openApi": "Open it on the API"
   },
   "connection": {
-    "lost": "Connection lost. Reconnecting, changes will sync when it is back.",
-    "back": "Back online"
+    "lost": "Connection lost. Reconnecting, changes will sync when it is back."
   },
   "desktop": {
     "switchServer": "Switch server",
