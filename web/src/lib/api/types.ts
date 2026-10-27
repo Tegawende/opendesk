@@ -688,6 +688,8 @@ export type ActionType =
   | "send_reply"
   | "add_note"
   | "mark_spam"
+  /** Soft-deletes the ticket; later steps and automations skip it. */
+  | "delete_ticket"
   /** ticket_created only. value: the window in days, "1".."30"; same_subject (default true). */
   | "merge_into_open_ticket"
   | "ai_triage"

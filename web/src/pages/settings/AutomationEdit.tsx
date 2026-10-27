@@ -840,6 +840,9 @@ function ActionRow({
     case "mark_spam":
       control = <span className="text-[12px] text-fg-3">{ts("edit.markSpamHint")}</span>;
       break;
+    case "delete_ticket":
+      control = <span className="text-[12px] text-fg-3">{ts("edit.deleteTicketHint")}</span>;
+      break;
     case "merge_into_open_ticket":
       control = <MergeControl a={a} onChange={onChange} />;
       break;

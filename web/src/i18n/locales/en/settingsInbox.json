@@ -297,6 +297,7 @@
     "chooseTeammate": "Choose a teammate",
     "chooseTeam": "Choose a team",
     "markSpamHint": "Moves the ticket to Spam. No reply is sent.",
+    "deleteTicketHint": "Deletes the ticket: it leaves every view, and nothing else runs on it.",
     "mergeHint": "Merges a new ticket into the same contact's latest open, pending or on hold ticket. Nothing else runs on it after that.",
     "mergeWindow_one": "Within {{count}} day",
     "mergeWindow_other": "Within {{count}} days",
@@ -367,6 +368,7 @@
     "send_reply": "Send a reply",
     "add_note": "Add an internal note",
     "mark_spam": "Mark as spam",
+    "delete_ticket": "Delete ticket",
     "merge_into_open_ticket": "Merge into the contact's open ticket",
     "set_field": "Set field",
     "set_reply_address": "Set reply address"
