@@ -297,6 +297,11 @@ export const qk = {
   get mailSidebar() {
     return w(["collab", "sidebar"] as const);
   },
+  /** Inbox categories: the workspace's and teams' (contracts/collab.md "Categories"). */
+  get mailCategories() {
+    return w(["collab", "categories"] as const);
+  },
+  mailCategoryRules: (accountId: string) => w(["collab", "categoryRules", accountId] as const),
   get mailThreadLists() {
     return w(["collab", "threads"] as const);
   },
@@ -502,6 +507,9 @@ export const q = {
   mailFolders: (accountId: string) => list(qk.mailFolders(accountId), () => api.collab.accounts.folders(accountId), { staleTime: 60_000 }),
   mailCounts: () => queryOptions({ queryKey: qk.mailCounts, queryFn: api.collab.counts, staleTime: 30_000 }),
   mailSidebar: () => queryOptions({ queryKey: qk.mailSidebar, queryFn: api.collab.sidebar.get, staleTime: 5 * 60_000 }),
+  mailCategories: () => queryOptions({ queryKey: qk.mailCategories, queryFn: api.collab.categories.get, staleTime: 60_000 }),
+  mailCategoryRules: (accountId: string) =>
+    queryOptions({ queryKey: qk.mailCategoryRules(accountId), queryFn: () => api.collab.categories.rules(accountId).then((r) => r.rules), staleTime: 60_000 }),
   mailThreads: (query: CollabThreadQuery) =>
     infiniteQueryOptions({
       queryKey: qk.mailThreads(query),

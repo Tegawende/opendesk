@@ -77,7 +77,8 @@
     "changelog": "Änderungsprotokoll",
     "changelogEntry": "Update",
     "newUpdate": "Neues Update",
-    "myTeams": "Meine Teams"
+    "myTeams": "Meine Teams",
+    "mailCategories": "Posteingangskategorien"
   },
   "folders": {
     "unassigned": "Nicht zugewiesen",
@@ -134,7 +135,8 @@
     "apiKeys": "API-Schlüssel",
     "aiClients": "KI-Clients",
     "webhooks": "Webhooks",
-    "auditLog": "Audit-Log"
+    "auditLog": "Audit-Log",
+    "mailCategories": "Posteingangskategorien"
   },
   "settingsPage": "Einstellungsseite",
   "command": {
