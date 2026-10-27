@@ -635,3 +635,29 @@ func TestBlockedContactsCallsReachNoTicket(t *testing.T) {
 		t.Fatalf("tickets %d, contacts %d", tickets, contacts)
 	}
 }
+
+// call_ended automations wait a minute after the call's end, for the labels the team adds
+// right after hanging up.
+func TestCallEndedAutomationsWaitAMinute(t *testing.T) {
+	h := newHarness(t)
+	for _, b := range h.recorded(t, "answered") {
+		if got := h.send(t, b); got != 200 {
+			t.Fatal(got)
+		}
+	}
+	for _, raw := range h.e.Jobs(jobs.PhoneInboundArgs{}.Kind(), h.ws.ID) {
+		var a jobs.PhoneInboundArgs
+		_ = json.Unmarshal(raw, &a)
+		if err := h.s.ProcessInbound(h.e.Ctx, a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var later, total int
+	h.e.Scalar(`SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'workspace_id' = $2 AND args->>'trigger' = 'call_ended'`,
+		&total, jobs.TicketTriggerArgs{}.Kind(), h.ws.ID.String())
+	h.e.Scalar(`SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'workspace_id' = $2 AND args->>'trigger' = 'call_ended'
+		AND scheduled_at > now() + interval '50 seconds'`, &later, jobs.TicketTriggerArgs{}.Kind(), h.ws.ID.String())
+	if total != 1 || later != 1 {
+		t.Fatalf("call_ended jobs %d, %d of them a minute out", total, later)
+	}
+}

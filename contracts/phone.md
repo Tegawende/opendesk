@@ -157,8 +157,9 @@ whose team the member is on, as the system (`assigned` with `via: "phone"`).
 ### Automations
 
 When a call ends (the provider's final event, once per call) the `call_ended` automations
-of its ticket run, with these conditions (only that trigger takes them; another trigger with
-one is refused):
+of its ticket run a minute later, so the tags and comments the team adds right after hanging
+up are in the call's facts, which are read when they run. Their conditions (only that
+trigger takes them; another trigger with one is refused):
 
 | field | ops | values |
 | --- | --- | --- |

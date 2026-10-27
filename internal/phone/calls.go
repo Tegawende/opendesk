@@ -32,6 +32,11 @@ const (
 // ActivityCall is the timeline entry of a call (contracts/phone.md "Timeline").
 const ActivityCall = "call"
 
+// callEndedDelay is how long after a call's final event its call_ended automations run:
+// the tags and comments the team adds in the provider right after hanging up are then in
+// the facts they read (read when they run, not when they are queued).
+const callEndedDelay = time.Minute
+
 // errCallUnknown: an AI event about a call whose own events are not in yet. River retries.
 var errCallUnknown = errors.New("phone event about a call not seen yet")
 
@@ -338,7 +343,7 @@ func (s *Service) applyCall(ctx context.Context, tx pgx.Tx, c PhoneConnection, e
 		}
 		callID := call.ID
 		if _, err := s.d.Jobs.InsertTx(ctx, tx, jobs.TicketTriggerArgs{WorkspaceID: c.WorkspaceID, TicketID: *call.TicketID,
-			Trigger: jobs.TriggerCallEnded, CallID: &callID}, nil); err != nil {
+			Trigger: jobs.TriggerCallEnded, CallID: &callID}, &river.InsertOpts{ScheduledAt: time.Now().Add(callEndedDelay)}); err != nil {
 			return fmt.Errorf("queue trigger: %w", err)
 		}
 	}
