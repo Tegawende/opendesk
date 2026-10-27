@@ -57,7 +57,7 @@ func TestParseAnsweredCall(t *testing.T) {
 	if c.Agent == nil || c.Agent.Email != "anna@example.com" || c.AnsweredAt == nil || !c.Recording {
 		t.Fatalf("agent or answer %+v", c)
 	}
-	if c.RecordingURL != "https://short.aircall.io/r/AbC" || c.LinksValid != 3*time.Hour || c.AssetURL == "" || c.Link != "https://api.aircall.io/v1/calls/1290001" {
+	if c.RecordingURL != "https://short.aircall.io/r/AbC" || c.LinksValid != 3*time.Hour || c.AssetURL == "" {
 		t.Fatalf("links %+v", c)
 	}
 	if len(c.Tags) != 1 || c.Tags[0] != "Order" || len(c.Comments) != 1 || c.Comments[0].Text != "Wants a replacement bulb" || c.Comments[0].Author != "Anna Agent" {

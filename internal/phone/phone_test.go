@@ -363,7 +363,11 @@ func TestAnsweredCallIsOneEntryFromRingingToSummary(t *testing.T) {
 		t.Fatalf("entry %+v", d)
 	}
 	if d["recording_url"] != "https://short.aircall.io/r/AbC" || d["asset_url"] != "https://assets.aircall.io/calls/1290001/recording" ||
-		d["link"] != "https://api.aircall.io/v1/calls/1290001" || d["links_expire_at"] == nil {
+		d["links_expire_at"] == nil {
+		t.Fatalf("links %+v", d)
+	}
+	// direct_link is an API URL, not a page for people: it is not kept.
+	if _, ok := d["link"]; ok {
 		t.Fatalf("links %+v", d)
 	}
 	if tags, _ := d["tags"].([]any); len(tags) != 1 || tags[0] != "Order" {

@@ -266,7 +266,6 @@ type user struct {
 
 type callData struct {
 	ID           flexID  `json:"id"`
-	DirectLink   string  `json:"direct_link"`
 	Direction    string  `json:"direction"`
 	Status       string  `json:"status"`
 	MissedReason *string `json:"missed_call_reason"`
@@ -385,7 +384,6 @@ func (Adapter) Parse(body []byte) (provider.Event, error) {
 	if d.Asset != nil {
 		c.AssetURL = httpsURL(*d.Asset)
 	}
-	c.Link = httpsURL(d.DirectLink)
 	c.RecordingURL, c.LinksValid = firstURL(d.RecordingSU, d.Recording)
 	vm, valid := firstURL(d.VoicemailSU, d.Voicemail)
 	if vm != "" {

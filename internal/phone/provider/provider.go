@@ -90,14 +90,13 @@ type Call struct {
 	MissedReason string `json:"missed_reason,omitempty"`
 	Voicemail    bool   `json:"voicemail,omitempty"`
 	Recording    bool   `json:"recording,omitempty"`
-	// AssetURL is a lasting provider page for the recording or voicemail; RecordingURL and
-	// VoicemailURL are direct links that expire (LinksValid after the event); Link opens
-	// the call at the provider. https only.
+	// AssetURL is a lasting provider page for the call's recording or voicemail, which
+	// the app also offers as the call at the provider; RecordingURL and VoicemailURL are
+	// direct links that expire (LinksValid after the event). https only.
 	AssetURL     string        `json:"asset_url,omitempty"`
 	RecordingURL string        `json:"recording_url,omitempty"`
 	VoicemailURL string        `json:"voicemail_url,omitempty"`
 	LinksValid   time.Duration `json:"links_valid,omitempty"`
-	Link         string        `json:"link,omitempty"`
 	// Tags are the provider's labels on the call as of the event, nil when the event did
 	// not say. An empty list says there are none, so it survives storage (no omitempty).
 	Tags []string `json:"tags"`

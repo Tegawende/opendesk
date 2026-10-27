@@ -64,7 +64,6 @@ type phoneCall struct {
 	RecordingURL   string
 	VoicemailURL   string
 	LinksExpireAt  *time.Time
-	Link           string
 	Tags           []string
 	TagsAt         *time.Time
 	Comments       []provider.Comment
@@ -78,7 +77,7 @@ type phoneCall struct {
 
 const callSelect = `SELECT id, workspace_id, connection_id, provider, external_call_id, ticket_id, activity_id, contact_id, direction,
 	stage, outcome, missed_reason, number, line_id, line_name, agent_user_id, agent_name, caller_name, started_at, answered_at, ended_at,
-	duration_seconds, has_recording, has_voicemail, asset_url, recording_url, voicemail_url, links_expire_at, link, tags, comments,
+	duration_seconds, has_recording, has_voicemail, asset_url, recording_url, voicemail_url, links_expire_at, tags, comments,
 	summary, transcript, outside_hours, ended_trigger_at, card_queued_at, tags_at, comments_at
 	FROM phone_calls`
 
@@ -86,7 +85,7 @@ func scanCall(row pgx.Row) (phoneCall, error) {
 	var c phoneCall
 	err := row.Scan(&c.ID, &c.WorkspaceID, &c.ConnectionID, &c.Provider, &c.ExternalID, &c.TicketID, &c.ActivityID, &c.ContactID, &c.Direction,
 		&c.Stage, &c.Outcome, &c.MissedReason, &c.Number, &c.LineID, &c.LineName, &c.AgentUserID, &c.AgentName, &c.CallerName, &c.StartedAt, &c.AnsweredAt,
-		&c.EndedAt, &c.Duration, &c.HasRecording, &c.HasVoicemail, &c.AssetURL, &c.RecordingURL, &c.VoicemailURL, &c.LinksExpireAt, &c.Link,
+		&c.EndedAt, &c.Duration, &c.HasRecording, &c.HasVoicemail, &c.AssetURL, &c.RecordingURL, &c.VoicemailURL, &c.LinksExpireAt,
 		&c.Tags, &c.Comments, &c.Summary, &c.Transcript, &c.OutsideHours, &c.EndedTriggerAt, &c.CardQueuedAt, &c.TagsAt, &c.CommentsAt)
 	return c, err
 }
@@ -207,9 +206,6 @@ func merge(c *phoneCall, ev provider.Event) {
 	c.HasRecording = c.HasRecording || x.Recording
 	if x.AssetURL != "" {
 		c.AssetURL = x.AssetURL
-	}
-	if x.Link != "" {
-		c.Link = x.Link
 	}
 	if x.RecordingURL != "" || x.VoicemailURL != "" {
 		if x.RecordingURL != "" {
@@ -384,12 +380,12 @@ func (s *Service) saveCall(ctx context.Context, tx pgx.Tx, c phoneCall) error {
 		missed_reason = $7, number = $8, line_name = $9, agent_user_id = $10, agent_name = $11, caller_name = $12, started_at = $13,
 		answered_at = $14, ended_at = $15, duration_seconds = $16, has_recording = $17, has_voicemail = $18, asset_url = $19,
 		summary = $20, transcript = $21, outside_hours = $22, ended_trigger_at = $23, card_queued_at = $24, line_id = $25,
-		recording_url = $26, voicemail_url = $27, links_expire_at = $28, link = $29, tags = $30, comments = $31, tags_at = $32,
-		comments_at = $33, updated_at = now()
+		recording_url = $26, voicemail_url = $27, links_expire_at = $28, tags = $29, comments = $30, tags_at = $31,
+		comments_at = $32, updated_at = now()
 		WHERE id = $1`, c.ID, c.TicketID, c.ActivityID, c.ContactID, c.Stage, c.Outcome, c.MissedReason, c.Number, c.LineName,
 		c.AgentUserID, c.AgentName, c.CallerName, c.StartedAt, c.AnsweredAt, c.EndedAt, c.Duration, c.HasRecording, c.HasVoicemail,
 		c.AssetURL, c.Summary, c.Transcript, c.OutsideHours, c.EndedTriggerAt, c.CardQueuedAt, c.LineID,
-		c.RecordingURL, c.VoicemailURL, c.LinksExpireAt, c.Link, nonNil(c.Tags), commentsOrEmpty(c.Comments), c.TagsAt, c.CommentsAt)
+		c.RecordingURL, c.VoicemailURL, c.LinksExpireAt, nonNil(c.Tags), commentsOrEmpty(c.Comments), c.TagsAt, c.CommentsAt)
 	if err != nil {
 		return fmt.Errorf("save call: %w", err)
 	}
@@ -400,7 +396,7 @@ func (s *Service) saveCall(ctx context.Context, tx pgx.Tx, c phoneCall) error {
 // or AI text.
 func withoutContent(c phoneCall) phoneCall {
 	c.Number, c.CallerName, c.AgentName, c.Summary, c.Transcript = "", "", "", "", ""
-	c.AssetURL, c.RecordingURL, c.VoicemailURL, c.Link, c.LinksExpireAt = "", "", "", "", nil
+	c.AssetURL, c.RecordingURL, c.VoicemailURL, c.LinksExpireAt = "", "", "", nil
 	c.Tags, c.Comments = []string{}, []provider.Comment{}
 	return c
 }
@@ -543,7 +539,7 @@ func (s *Service) entryData(ctx context.Context, tx pgx.Tx, c phoneCall) (map[st
 		"missed_reason": c.MissedReason, "number": c.Number, "line": c.LineName, "line_id": c.LineID, "caller_name": c.CallerName,
 		"agent": nil, "agent_name": c.AgentName, "started_at": ts(c.StartedAt), "answered_at": ts(c.AnsweredAt), "ended_at": ts(c.EndedAt),
 		"duration": c.Duration, "recording": c.HasRecording, "voicemail": c.HasVoicemail, "asset_url": c.AssetURL,
-		"recording_url": c.RecordingURL, "voicemail_url": c.VoicemailURL, "links_expire_at": ts(c.LinksExpireAt), "link": c.Link,
+		"recording_url": c.RecordingURL, "voicemail_url": c.VoicemailURL, "links_expire_at": ts(c.LinksExpireAt),
 		"tags": nonNil(c.Tags), "comments": commentsOrEmpty(c.Comments),
 		"summary": c.Summary, "transcript": c.Transcript, "outside_hours": c.OutsideHours,
 	}

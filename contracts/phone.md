@@ -136,15 +136,16 @@ type CallData = { call_id: string; provider: string; direction: "inbound" | "out
   agent: UserRef | null; agent_name: string;
   started_at: string | null; answered_at: string | null; ended_at: string | null; duration: number;
   recording: boolean; voicemail: boolean;
-  asset_url: string; recording_url: string; voicemail_url: string; links_expire_at: string | null; link: string;
+  asset_url: string; recording_url: string; voicemail_url: string; links_expire_at: string | null;
   tags: string[]; comments: { id: string; text: string; author?: string; at?: string }[];
   summary: string; transcript: string; outside_hours: boolean };
 ```
 
 opendesk stores links, never media. `recording_url` and `voicemail_url` are the provider's
 direct links and stop working at `links_expire_at`; the app then plays through `asset_url`,
-the provider's lasting page. `link` opens the call at the provider. Only https links are
-kept. The summary is bounded to 4,000 characters, the transcript to 20,000, comments to 20.
+the provider's lasting page, which is also what "Open in Aircall" opens, shown only when
+there is one. The provider's API link to the call is not kept, as it is no page for people.
+Only https links are kept. The summary is bounded to 4,000 characters, the transcript to 20,000, comments to 20.
 
 ### Agents
 
@@ -212,8 +213,8 @@ Docs: [API reference](https://developers.aircall.io/api-references),
 - A call's `raw_digits` is its number (`anonymous` when withheld), `number` its line,
   `user` who took or made it, `missed_call_reason` why it was missed, `asset` the lasting
   page for its media, `recording_short_url`/`voicemail_short_url` (three hours) else
-  `recording`/`voicemail` (one hour) its direct links, `direct_link` the call, `tags`
-  and `comments` the team's.
+  `recording`/`voicemail` (one hour) its direct links, `tags` and `comments` the team's.
+  `direct_link` is an API URL (it needs the API key), so it is not kept.
 - Insight card: `POST /v1/calls/:id/insight_cards` with a `title` and `shortText` lines.
 - Rate limit: Aircall allows a company a set number of requests a minute; a 429 snoozes the
   job until `X-AircallApi-Reset`. opendesk calls the API on connect, test, disconnect, the

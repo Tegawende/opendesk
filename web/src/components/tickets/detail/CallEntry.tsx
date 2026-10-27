@@ -88,7 +88,8 @@ export function CallEntry({ a }: { a: Activity }) {
   const talk = d.outcome === "answered" ? talkSeconds({ answered_at: d.answered_at ?? null, ended_at: d.ended_at ?? null, duration: d.duration ?? 0 }) : 0;
   const recording = d.recording ? playLink(d.recording_url ?? "", d.asset_url ?? "", d.links_expire_at ?? null) : null;
   const voicemail = d.voicemail ? playLink(d.voicemail_url ?? "", d.asset_url ?? "", d.links_expire_at ?? null) : null;
-  const open = https(d.link);
+  // The provider's lasting page for the call's media is also where it opens there.
+  const open = https(d.asset_url);
   const comments = Array.isArray(d.comments) ? d.comments : [];
   const tags = Array.isArray(d.tags) ? d.tags : [];
 

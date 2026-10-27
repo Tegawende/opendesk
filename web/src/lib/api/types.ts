@@ -545,14 +545,12 @@ export type CallData = {
   duration: number;
   recording: boolean;
   voicemail: boolean;
-  /** The provider's lasting page for the recording or voicemail. */
+  /** The provider's lasting page for the recording or voicemail, also "Open in" the provider. */
   asset_url: string;
   /** Direct links, working until links_expire_at. */
   recording_url: string;
   voicemail_url: string;
   links_expire_at: string | null;
-  /** The call at the provider. */
-  link: string;
   tags: string[];
   comments: { id: string; text: string; author?: string; at?: string }[];
   summary: string;

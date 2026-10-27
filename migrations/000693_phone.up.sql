@@ -79,13 +79,12 @@ CREATE TABLE phone_calls (
     has_recording    boolean NOT NULL DEFAULT false,
     has_voicemail    boolean NOT NULL DEFAULT false,
     -- Links only, never media: the provider's lasting page for the recording or voicemail
-    -- (asset_url), its direct links, which stop working at links_expire_at
-    -- (recording_url, voicemail_url), and the call itself (link).
+    -- (asset_url), and its direct links, which stop working at links_expire_at
+    -- (recording_url, voicemail_url).
     asset_url        text NOT NULL DEFAULT '',
     recording_url    text NOT NULL DEFAULT '',
     voicemail_url    text NOT NULL DEFAULT '',
     links_expire_at  timestamptz,
-    link             text NOT NULL DEFAULT '',
     -- The provider's labels on the call and its users' comments on it, each with the time
     -- of the event they came with: an older event never replaces a newer list.
     tags             text[] NOT NULL DEFAULT '{}',

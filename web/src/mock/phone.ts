@@ -58,7 +58,6 @@ export function callData(over: Partial<CallData>): CallData {
     recording_url: "",
     voicemail_url: "",
     links_expire_at: null,
-    link: "",
     tags: [],
     comments: [],
     summary: "",
@@ -127,7 +126,6 @@ export function seedPhone(ws: WsData, agent: UserRef) {
       duration: 282,
       recording: true,
       asset_url: "https://assets.aircall.io/calls/1290001/recording",
-      link: "https://api.aircall.io/v1/calls/1290001",
       tags: ["Export"],
       comments: [{ id: "77", text: "Export cache cleared, follow up on Friday.", author: agent.name }],
       summary: "Lena could not export her notebooks to PDF since the last update. The export cache was cleared and the export worked again; she calls back if it fails.",
@@ -151,7 +149,6 @@ export function seedPhone(ws: WsData, agent: UserRef) {
       started_at: iso(missedAt),
       ended_at: iso(missedAt + 6_000),
       duration: 6,
-      link: "https://api.aircall.io/v1/calls/1290002",
       outside_hours: true,
     }),
   );

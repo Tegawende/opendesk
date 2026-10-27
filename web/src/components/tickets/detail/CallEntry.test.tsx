@@ -74,7 +74,6 @@ describe("CallEntry", () => {
         duration: 200,
         recording: true,
         asset_url: "https://assets.aircall.io/calls/1/recording",
-        link: "https://api.aircall.io/v1/calls/1",
         summary: "Asked for a replacement.",
         transcript: "Agent: Hello",
         comments: [{ id: "1", text: "Follow up Friday", author: "Anna Agent" }],
@@ -92,7 +91,7 @@ describe("CallEntry", () => {
     const links = [...el.querySelectorAll("a")].map((a) => [a.textContent, a.getAttribute("href")]);
     expect(links).toEqual([
       ["Play recording", "https://assets.aircall.io/calls/1/recording"],
-      ["Open in Aircall", "https://api.aircall.io/v1/calls/1"],
+      ["Open in Aircall", "https://assets.aircall.io/calls/1/recording"],
     ]);
     expect(text).not.toContain("Agent: Hello");
     const toggle = [...el.querySelectorAll("button")].find((b) => b.textContent === "Show transcript")!;
@@ -120,5 +119,12 @@ describe("CallEntry", () => {
     el = await render(entry({ outcome: "voicemail", voicemail: true, voicemail_url: "https://short/v", links_expire_at: new Date(Date.now() + 3600_000).toISOString() }));
     expect(el.textContent).toContain("Voicemail");
     expect(el.querySelector("a")?.getAttribute("href")).toBe("https://short/v");
+    // Without the provider's page there is nothing to open there; the play button stays.
+    expect([...el.querySelectorAll("a")].map((a) => a.textContent)).toEqual(["Play voicemail"]);
+  });
+
+  it("never opens the provider's API link to the call", async () => {
+    const el = await render(entry({ outcome: "missed", link: "https://api.aircall.io/v1/calls/1" } as Partial<CallData>));
+    expect(el.querySelectorAll("a")).toHaveLength(0);
   });
 });
