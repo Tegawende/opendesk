@@ -670,6 +670,41 @@ func TestHTTPPanel(t *testing.T) {
 	}
 }
 
+// TestStatusFollowsTheSavedPanel checks a lookup's status is recorded only for the panel as it
+// was saved when the lookup began: a refusal of the old URL or secret does not mark the new one.
+func TestStatusFollowsTheSavedPanel(t *testing.T) {
+	e, ws := apiEnv(t)
+	admin := ws.Admin.As(ws)
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+	var created struct {
+		Panel Panel `json:"panel"`
+	}
+	e.Do("POST", "/v1/ticket-panels", admin, map[string]any{"kind": "http", "url": srv.URL + "/panel"}).Want(t, 201).JSON(t, &created)
+	s := For(e.D)
+	old, err := loadRow(e.Ctx, e.D.DB.Pool, ws.ID, created.Panel.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Do("PATCH", "/v1/ticket-panels/"+created.Panel.ID.String(), admin, map[string]any{"url": srv.URL + "/v2"}).Want(t, 200)
+	refused := &authError{"The URL refused the signing secret."}
+	s.markStatus(e.Ctx, old, refused)
+	var status string
+	e.Scalar(`SELECT status FROM ticket_panels WHERE id = $1`, &status, created.Panel.ID)
+	if status != "connected" {
+		t.Fatalf("a lookup of the old URL marked the new one %q", status)
+	}
+	cur, err := loadRow(e.Ctx, e.D.DB.Pool, ws.ID, created.Panel.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.markStatus(e.Ctx, cur, refused)
+	e.Scalar(`SELECT status FROM ticket_panels WHERE id = $1`, &status, created.Panel.ID)
+	if status != "error" {
+		t.Fatalf("a refusal of the saved panel left it %q", status)
+	}
+}
+
 func TestPanelLimitAndKinds(t *testing.T) {
 	e, ws := apiEnv(t)
 	admin := ws.Admin.As(ws)

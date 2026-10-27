@@ -209,7 +209,7 @@ into the same section.
 | --- | --- | --- | --- |
 | GET | `/v1/ticket-panels` | viewer, `tickets:read` | → `{data: TicketPanel[]}` in `position` order |
 | POST | `/v1/ticket-panels` | admin user | `{kind, name?, shop? /* shopify: domain, handle or admin URL */, client_id?, client_secret? /* shopify: an app */, token? /* shopify: in place of the app */, fields?, orders_shown? /* shopify; 422 on http */, url?, reference_pattern? /* http; 422 on shopify */}` → 201 `{panel, secret? /* http: the signing secret, shown once */}`, `Cache-Control: no-store` |
-| PATCH | `/v1/ticket-panels/{id}` | admin user | `{name?, enabled?, position?, client_secret?, client_id? /* shopify: a new secret keeps the client ID */, token? /* shopify */, fields? /* shopify: the whole list; an unknown field, or line_prices without line_items: 422 */, orders_shown? /* shopify, 1 to 5 */, url?, reference_pattern? /* http: the default pattern stores the default, "" none; 422 when it does not compile or matches an empty text */}` → `TicketPanel` |
+| PATCH | `/v1/ticket-panels/{id}` | admin user | `{name?, enabled?, position?, client_secret?, client_id? /* shopify: a new secret keeps the client ID */, token? /* shopify */, fields? /* shopify: the whole list; an unknown field, or line_prices without line_items: 422 */, orders_shown? /* shopify, 1 to 5 */, url?, reference_pattern? /* http: the default pattern stores the default, "" none; 422 when it does not compile, compiles to more than 64 instructions or matches an empty text */}` → `TicketPanel` |
 | POST | `/v1/ticket-panels/{id}/rotate-secret` | admin user | → `{panel, secret}` (http; the old secret stops at once) |
 | DELETE | `/v1/ticket-panels/{id}` | admin user | → 204 |
 | GET | `/v1/tickets/{id}/panels/{panelId}` | viewer, `tickets:read` | `?refresh=true` asks the product again → `TicketPanelData`. A hidden or missing ticket, or a panel that is off or gone: `404` |
@@ -272,13 +272,15 @@ panel's secret: the scheme of outgoing webhooks (`contracts/events.md`), verifie
   every address the contact is known by (the contact's own first, then the other addresses it wrote
   to this ticket from, 5 at most); `phone` is left out when the contact has none.
 - `ticket.references` is what the panel's `reference_pattern` finds in the ticket's subject, then
-  its 50 newest messages (replies and notes; the first 20,000 characters of each), newest first:
-  each once, at most 10 of 64 characters. A pattern with a group sends the group, else the whole
-  match. Message bodies are never sent. The default, `#\d{3,}\b|\b[A-Z]{1,4}[-/]?(?:\d{2,4}[-/])?\d{3,}\b`,
+  its 50 newest messages that every reader of the ticket reads (replies and notes, never a deleted
+  message or a note sent as a reply), newest first: the first 20,000 characters of each, 100,000
+  in all, and the first 20 matches. Each once, at most 10 of 64 characters. A pattern with a group
+  sends the group, else the whole match. Message bodies are never sent. The default, `#\d{3,}\b|\b[A-Z]{1,4}[-/]?(?:\d{2,4}[-/])?\d{3,}\b`,
   needs a `#` or 1 to 4 capitals before the digits (`#1042`, `S00042`, `SO-2026-0042`,
   `INV/2026/00012`, `PO4471`), so years, amounts, postcodes and phone numbers are not references. An
-  admin sets the pattern (RE2 syntax, 200 characters at most, never one that matches an empty text:
-  `422`); `""` sends `[]`, and saving the default stores NULL so a later default applies.
+  admin sets the pattern (RE2 syntax, 200 characters at most and 64 instructions compiled, never one
+  that matches an empty text: `422`); `""` sends `[]`, and saving the default stores NULL so a later
+  default applies.
 - `refresh` is true when an agent asked again (the panel's refresh button, `?refresh=true`).
 - Fields are only ever added: ignore the ones you don't know.
 

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"regexp/syntax"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/useopendesk/opendesk/internal/domain"
 )
@@ -21,18 +23,24 @@ const (
 	// maxReferences bounds what one request carries, and maxReferenceLen each one.
 	maxReferences   = 10
 	maxReferenceLen = 64
-	// maxPatternLen bounds a workspace's pattern (RE2: linear in the text, whatever it is).
-	maxPatternLen = 200
-	// referenceMessages is how many of the ticket's newest messages are read, and
-	// maxScannedText how much of each.
+	// maxPatternLen bounds a workspace's pattern, and maxPatternInsts its compiled program: RE2
+	// scans in time linear in the text times the program.
+	maxPatternLen   = 200
+	maxPatternInsts = 64
+	// referenceMessages is how many of the ticket's newest messages are read, maxScannedText
+	// how much of each, maxScannedTotal how much of the subject and messages together, and
+	// maxMatches how many matches are read in all (each search may read to the end of its text).
 	referenceMessages = 50
 	maxScannedText    = 20000
+	maxScannedTotal   = 100000
+	maxMatches        = 20
 	// maxContactEmails bounds contact.emails.
 	maxContactEmails = 5
 )
 
-// compilePattern checks a workspace's pattern: RE2 syntax, at most 200 characters, and it must
-// not match an empty text (it would find a reference everywhere).
+// compilePattern checks a workspace's pattern: RE2 syntax, at most 200 characters, a program of
+// at most 64 instructions, and it must not match an empty text (it would find a reference
+// everywhere).
 func compilePattern(p string) (*regexp.Regexp, error) {
 	if len(p) > maxPatternLen {
 		return nil, errors.New("The reference pattern is longer than 200 characters.")
@@ -41,10 +49,27 @@ func compilePattern(p string) (*regexp.Regexp, error) {
 	if err != nil {
 		return nil, errors.New("The reference pattern is not a valid regular expression (RE2 syntax).")
 	}
+	if patternInsts(p) > maxPatternInsts {
+		return nil, errors.New("The reference pattern is too complex: use fewer or smaller repeat counts.")
+	}
 	if re.MatchString("") {
 		return nil, errors.New("The reference pattern matches an empty text: it would find a reference everywhere.")
 	}
 	return re, nil
+}
+
+// patternInsts is the size of the program regexp.Compile builds for p: parsed with the same
+// flags, simplified, then compiled.
+func patternInsts(p string) int {
+	re, err := syntax.Parse(p, syntax.Perl)
+	if err != nil {
+		return 0
+	}
+	prog, err := syntax.Compile(re.Simplify())
+	if err != nil {
+		return 0
+	}
+	return len(prog.Inst)
 }
 
 // normalizePattern checks a pattern an admin saves: the default is stored as NULL, so a later
@@ -63,15 +88,23 @@ func normalizePattern(p string) (*string, error) {
 }
 
 // findReferences is what re finds in texts, in order, each once: the first group when the
-// pattern has one, else the whole match. At most maxReferences.
+// pattern has one, else the whole match. At most maxReferences, from the first maxScannedText
+// characters of each text, maxScannedTotal in all, and the first maxMatches matches.
 func findReferences(re *regexp.Regexp, texts ...string) []string {
 	out := []string{}
 	seen := map[string]bool{}
+	scan, matches := maxScannedTotal, maxMatches
 	for _, text := range texts {
-		if r := []rune(text); len(r) > maxScannedText {
-			text = string(r[:maxScannedText])
+		if scan == 0 || matches == 0 {
+			break
 		}
-		for _, m := range re.FindAllStringSubmatch(text, -1) {
+		if r := []rune(text); len(r) > min(maxScannedText, scan) {
+			text = string(r[:min(maxScannedText, scan)])
+		}
+		scan -= utf8.RuneCountInString(text)
+		found := re.FindAllStringSubmatch(text, matches)
+		matches -= len(found)
+		for _, m := range found {
 			ref := m[0]
 			if len(m) > 1 {
 				ref = m[1]
@@ -115,8 +148,10 @@ func (s *Service) lookupContext(ctx context.Context, x *row, t *domain.Ticket, s
 		}
 		sub.Phone = cleanText(sub.Phone, 50)
 	}
-	rows, err := s.d.DB.Pool.Query(ctx, `SELECT body_text, from_email, author_contact_id IS NOT DISTINCT FROM $3 FROM messages
-		WHERE workspace_id = $1 AND ticket_id = $2 ORDER BY created_at DESC LIMIT $4`, x.WorkspaceID, t.ID, sub.ContactID, referenceMessages)
+	// Only messages every reader of the ticket reads: never a deleted one or a note sent as a reply.
+	rows, err := s.d.DB.Pool.Query(ctx, `SELECT left(m.body_text, $5), m.from_email, m.author_contact_id IS NOT DISTINCT FROM $3
+		FROM messages m WHERE m.workspace_id = $1 AND m.ticket_id = $2 AND NOT `+domain.HiddenMessageSQL+`
+		ORDER BY m.created_at DESC LIMIT $4`, x.WorkspaceID, t.ID, sub.ContactID, referenceMessages, maxScannedText)
 	if err != nil {
 		return err
 	}

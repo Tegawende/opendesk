@@ -667,7 +667,8 @@ func (e *authError) Is(target error) bool {
 }
 
 // markStatus records a refused credential, or a lookup that works again, publishing the
-// change. Other failures (a timeout, an outage) leave the status as it is.
+// change. Other failures (a timeout, an outage) leave the status as it is, and so does a lookup
+// made with a configuration saved over since (updated_at moved).
 func (s *Service) markStatus(ctx context.Context, x *row, lookupErr error) {
 	status, last := "connected", ""
 	switch {
@@ -681,7 +682,7 @@ func (s *Service) markStatus(ctx context.Context, x *row, lookupErr error) {
 	}
 	err := s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE ticket_panels SET status = $3, last_error = $4 WHERE workspace_id = $1 AND id = $2
-			AND (status <> $3 OR last_error <> $4)`, x.WorkspaceID, x.ID, status, last)
+			AND updated_at = $5 AND (status <> $3 OR last_error <> $4)`, x.WorkspaceID, x.ID, status, last, x.UpdatedAt)
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
 		}

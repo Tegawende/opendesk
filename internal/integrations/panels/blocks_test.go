@@ -271,10 +271,31 @@ func TestReferences(t *testing.T) {
 	if got := findReferences(regexp.MustCompile(DefaultReferencePattern), "nothing here"); got == nil || len(got) != 0 {
 		t.Fatalf("none = %#v", got)
 	}
+	// Each text is read to 20,000 characters, all of them to 100,000, and only the first 20
+	// matches count, so a pattern that matches everywhere stops early.
+	long := strings.Repeat("é", maxScannedText)
+	if got := findReferences(regexp.MustCompile(DefaultReferencePattern), long+" #1001", "#1002"); !reflect.DeepEqual(got, []string{"#1002"}) {
+		t.Fatalf("one text = %q", got)
+	}
+	texts := []string{"Order #1001"}
+	for range 5 {
+		texts = append(texts, long)
+	}
+	if got := findReferences(regexp.MustCompile(DefaultReferencePattern), append(texts, "#1002")...); !reflect.DeepEqual(got, []string{"#1001"}) {
+		t.Fatalf("in all = %q", got)
+	}
+	if got := findReferences(regexp.MustCompile(DefaultReferencePattern), strings.Repeat("#1001 ", maxMatches)+"#1002"); !reflect.DeepEqual(got, []string{"#1001"}) {
+		t.Fatalf("matches = %q", got)
+	}
+	if got := findReferences(regexp.MustCompile(`[^x]*x|a`), strings.Repeat("a", maxScannedText)); !reflect.DeepEqual(got, []string{"a"}) {
+		t.Fatalf("everywhere = %q", got)
+	}
 
 	// What an admin may save.
 	for p, ok := range map[string]bool{DefaultReferencePattern: true, `\bSO\d{5}\b`: true, `(?i)order (\d+)`: true,
-		`(unclosed`: false, `\d*`: false, `x?`: false, strings.Repeat("a", 201): false, `(a+)+$`: true /* RE2: linear, no backtracking */} {
+		`(unclosed`: false, `\d*`: false, `x?`: false, strings.Repeat("a", 201): false, `(a+)+$`: true, /* RE2: linear, no backtracking */
+		`\b(?:SO|INV|PO)[-/]?\d{4,10}\b`: true, `(?i)\border\s*#?\s*([A-Z0-9-]{4,20})`: true,
+		`\w{100}x`: false, `\w{1000}x`: false, `[\pL\pN]{1000}#`: false, `(?:\d{1,9}-){9}\d+`: false} {
 		if _, err := compilePattern(p); (err == nil) != ok {
 			t.Errorf("compilePattern(%q) = %v", p, err)
 		}
@@ -320,6 +341,7 @@ func TestHTTPPanelBlocks(t *testing.T) {
 		Secret string `json:"secret"`
 	}
 	e.Do("POST", "/v1/ticket-panels", admin, map[string]any{"kind": "http", "url": srv.URL + "/blocks", "reference_pattern": `(unclosed`}).Want(t, 422)
+	e.Do("POST", "/v1/ticket-panels", admin, map[string]any{"kind": "http", "url": srv.URL + "/blocks", "reference_pattern": `\w{1000}x`}).Want(t, 422)
 	e.Do("POST", "/v1/ticket-panels", admin, map[string]any{"kind": "http", "url": srv.URL + "/blocks"}).Want(t, 201).JSON(t, &created)
 	if created.Panel.ReferencePattern == nil || *created.Panel.ReferencePattern != DefaultReferencePattern {
 		t.Fatalf("default pattern = %v", created.Panel.ReferencePattern)
@@ -387,7 +409,25 @@ func TestHTTPPanelBlocks(t *testing.T) {
 	}
 
 	// The workspace's own pattern, then none; Shopify panels have none.
+	// Deleted messages and notes sent as replies are read by admins alone: none of their
+	// references is sent.
+	var note struct {
+		ID string `json:"id"`
+	}
+	e.Do("POST", "/v1/tickets/"+tk.ID+"/messages", agent, map[string]any{"kind": "note", "body_html": "<p>Wrong customer: #30001</p>"}).Want(t, 201).JSON(t, &note)
+	e.Do("DELETE", "/v1/tickets/"+tk.ID+"/messages/"+note.ID, agent, nil).Want(t, 204)
+	e.Do("POST", "/v1/tickets/"+tk.ID+"/messages", agent, map[string]any{"kind": "note", "body_html": "<p>Draft about #30002</p>"}).Want(t, 201).JSON(t, &note)
+	e.Do("POST", "/v1/tickets/"+tk.ID+"/messages", agent, map[string]any{"kind": "reply", "body_html": "<p>It is on its way.</p>", "from_note_id": note.ID}).Want(t, 201)
+	readPanel(t, e, path+"?refresh=true", viewer)
+	mu.Lock()
+	req = sent[len(sent)-1]
+	mu.Unlock()
+	if slices.Contains(req.Ticket.References, "#30001") || slices.Contains(req.Ticket.References, "#30002") || !slices.Contains(req.Ticket.References, "#10442") {
+		t.Fatalf("hidden messages = %q", req.Ticket.References)
+	}
+
 	e.Do("PATCH", "/v1/ticket-panels/"+id, admin, map[string]any{"reference_pattern": `\d*`}).Want(t, 422)
+	e.Do("PATCH", "/v1/ticket-panels/"+id, admin, map[string]any{"reference_pattern": `\w{1000}x`}).Want(t, 422)
 	var p Panel
 	e.Do("PATCH", "/v1/ticket-panels/"+id, admin, map[string]any{"reference_pattern": `\bINV/(\d{4}/\d+)`}).Want(t, 200).JSON(t, &p)
 	if *p.ReferencePattern != `\bINV/(\d{4}/\d+)` {

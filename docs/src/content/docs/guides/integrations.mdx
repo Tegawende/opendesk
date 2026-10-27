@@ -119,7 +119,7 @@ Choose **From a URL** and enter an https address of yours. opendesk shows its si
 </Step>
 <Step title="Choose which numbers it looks for">
 
-Open the panel's menu and click **Order references**. opendesk looks for them in the ticket's subject and its newest messages, and sends only what it finds, never the messages. The default finds a `#` and digits (`#1042`) or a few capitals and digits (`S00042`, `SO-2026-0042`, `INV/2026/00012`, `PO4471`), so years, prices, postcodes and phone numbers are left alone. Write your own regular expression if your numbers look different (with a group, only the group is sent), try it on a sample text, or leave it empty to send none.
+Open the panel's menu and click **Order references**. opendesk looks for them in the ticket's subject and its newest messages (never a deleted one), and sends only what it finds, never the messages. The default finds a `#` and digits (`#1042`) or a few capitals and digits (`S00042`, `SO-2026-0042`, `INV/2026/00012`, `PO4471`), so years, prices, postcodes and phone numbers are left alone. Write your own regular expression if your numbers look different (with a group, only the group is sent; large repeat counts such as `{100}` are refused), try it on a sample text, or leave it empty to send none.
 
 </Step>
 </Steps>
