@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -997,11 +998,14 @@ func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uu
 			into = map[string]any{"into": nil, "into_number": nil}
 		}
 	}
+	from := map[string]any{"from": src.String(), "from_number": srcState.Number}
+	// An automation's merge names it on both timelines, as its other changes do.
+	maps.Copy(into, actor.Meta)
+	maps.Copy(from, actor.Meta)
 	if _, err := domain.LogActivity(ctx, tx, wid, src, actor.Type, actor.UserID, "merged", into); err != nil {
 		return err
 	}
-	if _, err := domain.LogActivity(ctx, tx, wid, dst, actor.Type, actor.UserID, "merged",
-		map[string]any{"from": src.String(), "from_number": srcState.Number}); err != nil {
+	if _, err := domain.LogActivity(ctx, tx, wid, dst, actor.Type, actor.UserID, "merged", from); err != nil {
 		return err
 	}
 	if err := domain.PublishTicketUpdated(ctx, tx, wid, src, []string{"merged_into", "message_count"}); err != nil {
