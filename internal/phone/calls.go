@@ -436,8 +436,8 @@ func (s *Service) memberByEmail(ctx context.Context, tx pgx.Tx, wid uuid.UUID, e
 }
 
 // place finds the call's contact by its number (creating one for a new number) and its
-// ticket: the contact's open ticket, else their latest solved one updated within the
-// connection's reuse_days, else a new ticket on the phone channel. A withheld number
+// ticket: the contact's open ticket, else their latest one solved within the connection's
+// reuse_days (when it was solved, not last touched), else a new ticket on the phone channel. A withheld number
 // always opens a new ticket without a contact. A blocked contact's call gets no ticket,
 // like their email (internal/email).
 func (s *Service) place(ctx context.Context, tx pgx.Tx, c PhoneConnection, call *phoneCall) error {
@@ -456,8 +456,8 @@ func (s *Service) place(ctx context.Context, tx pgx.Tx, c PhoneConnection, call 
 		var tid uuid.UUID
 		err = tx.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id = $1 AND contact_id = $2 AND deleted_at IS NULL
 			AND merged_into_id IS NULL AND NOT spam
-			AND (status IN ('open', 'pending', 'on_hold') OR ($3::int > 0 AND status = 'solved' AND updated_at > now() - make_interval(days => $3::int)))
-			ORDER BY (status <> 'solved') DESC, updated_at DESC LIMIT 1`, wid, cid, c.ReuseDays).Scan(&tid)
+			AND (status IN ('open', 'pending', 'on_hold') OR ($3::int > 0 AND status = 'solved' AND solved_at > now() - make_interval(days => $3::int)))
+			ORDER BY (status <> 'solved') DESC, CASE WHEN status = 'solved' THEN solved_at END DESC NULLS LAST, updated_at DESC LIMIT 1`, wid, cid, c.ReuseDays).Scan(&tid)
 		if err == nil {
 			call.TicketID = &tid
 			return nil

@@ -20,8 +20,8 @@ CREATE TABLE phone_connections (
     health_status      text NOT NULL DEFAULT 'unknown' CHECK (health_status IN ('unknown', 'healthy', 'action_required', 'error')),
     health_detail      text NOT NULL DEFAULT '',
     health_checked_at  timestamptz,
-    -- Placement: a call goes on the caller's open ticket, else on their latest solved
-    -- ticket updated within reuse_days (0: never), else on a new phone ticket.
+    -- Placement: a call goes on the caller's open ticket, else on their latest ticket
+    -- solved within reuse_days (0: never), else on a new phone ticket.
     reuse_days         integer NOT NULL DEFAULT 7 CHECK (reuse_days BETWEEN 0 AND 90),
     -- An answered call assigns an unassigned ticket to the member who took it.
     assign_answered    boolean NOT NULL DEFAULT false,

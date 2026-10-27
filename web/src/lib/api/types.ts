@@ -1069,7 +1069,7 @@ export type PhoneConnection = {
   health_code: PhoneHealthCode;
   health_detail: string;
   health_checked_at: string | null;
-  /** A call goes on the caller's latest solved ticket updated within this many days; 0 opens a new one. */
+  /** A call goes on the caller's latest ticket solved within this many days; 0 opens a new one. */
   reuse_days: number;
   assign_answered: boolean;
   insight_cards: boolean;

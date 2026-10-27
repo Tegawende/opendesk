@@ -114,7 +114,7 @@ a ticket when its contact is blocked stays there.
 ### Placement
 
 A call goes on the contact's open ticket (open, pending or on hold, most recently updated);
-else on their latest solved ticket updated within the connection's `reuse_days` (0: never);
+else on their latest ticket solved (`solved_at`) within the connection's `reuse_days` (0: never);
 else on a new ticket on the `phone` channel, routed like any new ticket
 (`routing.Resolve` with channel `phone`, so routing rules can send phone tickets to a team),
 named "Call from …" or "Call to …" and running the `ticket_created` automations. Like an

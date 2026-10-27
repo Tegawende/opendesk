@@ -434,7 +434,7 @@ func TestMissedCallOutsideHoursReopensTheTicket(t *testing.T) {
 		"body_html": "<p>Earlier</p>", "status": "solved"}).Want(t, 201).JSON(t, &tk)
 	cid := uuid.New()
 	h.e.Exec(`INSERT INTO contacts (id, workspace_id, name, phone) VALUES ($1, $2, 'Jane Doe', '0032 470 12 34 56')`, cid, h.ws.ID)
-	h.e.Exec(`UPDATE tickets SET contact_id = $2, status = 'solved' WHERE id = $1`, tk.ID, cid)
+	h.e.Exec(`UPDATE tickets SET contact_id = $2, status = 'solved', solved_at = now() - interval '1 day' WHERE id = $1`, tk.ID, cid)
 
 	// Validation: call conditions need the call_ended trigger.
 	h.e.Do("POST", "/v1/automations", h.ws.Admin.As(h.ws), map[string]any{"name": "Wrong", "trigger": "ticket_created",
@@ -659,5 +659,21 @@ func TestCallEndedAutomationsWaitAMinute(t *testing.T) {
 		AND scheduled_at > now() + interval '50 seconds'`, &later, jobs.TicketTriggerArgs{}.Kind(), h.ws.ID.String())
 	if total != 1 || later != 1 {
 		t.Fatalf("call_ended jobs %d, %d of them a minute out", total, later)
+	}
+}
+
+// The reuse window counts from when a ticket was solved: a ticket solved long ago that
+// was touched since (a label, a note) is not reused.
+func TestReuseCountsFromWhenTheTicketWasSolved(t *testing.T) {
+	h := newHarness(t)
+	var tk domain.Ticket
+	h.e.Do("POST", "/v1/tickets", h.ws.Agent.As(h.ws), map[string]any{"subject": "Old order", "channel": "api", "kind": "note",
+		"body_html": "<p>Earlier</p>", "status": "solved"}).Want(t, 201).JSON(t, &tk)
+	cid := uuid.New()
+	h.e.Exec(`INSERT INTO contacts (id, workspace_id, name, phone) VALUES ($1, $2, 'Jane Doe', '+32 470 12 34 56')`, cid, h.ws.ID)
+	h.e.Exec(`UPDATE tickets SET contact_id = $2, status = 'solved', solved_at = now() - interval '10 days', updated_at = now() WHERE id = $1`, tk.ID, cid)
+	h.sendAll(t, h.recorded(t, "answered"))
+	if got := h.ticketOfCall(t, "1290001"); got.ID == tk.ID {
+		t.Fatal("a ticket solved ten days ago was reused with a seven day window")
 	}
 }

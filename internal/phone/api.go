@@ -170,7 +170,7 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 			ID   string `path:"id"`
 			Body struct {
 				Name           *string           `json:"name,omitempty" maxLength:"80"`
-				ReuseDays      *int              `json:"reuse_days,omitempty" minimum:"0" maximum:"90" doc:"A call goes on the caller's latest solved ticket updated within this many days when they have no open one; 0 opens a new ticket instead"`
+				ReuseDays      *int              `json:"reuse_days,omitempty" minimum:"0" maximum:"90" doc:"A call goes on the caller's latest ticket solved within this many days when they have no open one; 0 opens a new ticket instead"`
 				AssignAnswered *bool             `json:"assign_answered,omitempty" doc:"An answered call assigns an unassigned ticket to the member who took it"`
 				InsightCards   *bool             `json:"insight_cards,omitempty" doc:"A ringing call shows the caller and their tickets in the provider's app"`
 				Credentials    map[string]string `json:"credentials,omitempty" doc:"Replacement credentials; the webhook is checked with them"`
