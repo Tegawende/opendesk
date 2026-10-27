@@ -33,7 +33,12 @@ export function useTicketFields() {
 export const isUnknownLabel = (e: unknown) => isApiError(e, "unknown_label");
 
 type Override = { label?: string; color?: string; hidden?: boolean };
-type DisplaySettings = { label_creation?: "anyone" | "admins"; status_labels?: Record<string, Override>; priority_labels?: Record<string, Override> };
+type DisplaySettings = {
+  label_creation?: "anyone" | "admins";
+  status_labels?: Record<string, Override>;
+  priority_labels?: Record<string, Override>;
+  send_and_finish_button?: boolean;
+};
 
 /** The workspace's display overrides for status and priority names and colours, and who may create labels. */
 export function useDisplay() {
@@ -54,6 +59,8 @@ export function useDisplay() {
     finish: finishStatus(s.status_labels),
     /** The words for that action wherever it is offered. */
     finishWords: finishWords(s.status_labels),
+    /** Whether the composer shows sending and finishing on a button of its own, next to Send. */
+    finishButton: !!s.send_and_finish_button,
   };
 }
 

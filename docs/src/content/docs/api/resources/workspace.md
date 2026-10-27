@@ -45,6 +45,7 @@ type WorkspaceSettings = {
   domain_logos?: boolean; // default true
   undo_send_seconds?: 0 | 5 | 10 | 20 | 30;      // default 5: how long the app holds an email reply before sending it
   undo_send_chat_seconds?: 0 | 5 | 10 | 20 | 30; // default 0: the same for chat replies, which go at once
+  send_and_finish_button?: boolean;              // default false: a Send and solve (or close) button next to Send in the reply box
   message_delete?: "off" | "own" | "all";        // default "own" (own internal notes); "all": any agent's notes and replies; admins any
 };
 type Member = {

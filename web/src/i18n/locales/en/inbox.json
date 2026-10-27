@@ -478,6 +478,11 @@
     "waitUploads": "Waiting for uploads",
     "andStatus": "{{label}} and set status",
     "andMark": "{{label}} and mark {{status}}",
+    "noteAndFinish": {
+      "solve": "Add note and solve",
+      "close": "Add note and close",
+      "mark": "Add note and mark as {{status}}"
+    },
     "sending": "Sending",
     "sent": "Sent",
     "replyingAs": "Replying as",

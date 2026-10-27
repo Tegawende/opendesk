@@ -3,7 +3,7 @@ import { EditorContent, useEditor, type Editor, type Extensions } from "@tiptap/
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
-import { Bold, Code, Heading2, Heading3, ImageIcon, Italic, Link2, List, ListOrdered, Quote, Strikethrough } from "lucide-react";
+import { Bold, Code, Heading2, Heading3, ImageIcon, Italic, Link2, List, ListOrdered, Quote, Strikethrough, Type } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from "react";
 import { Popover } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,8 @@ export type RichEditorProps = {
   /** "compact" shows inline formatting only; "full" adds headings, quotes, code and images. */
   toolbar?: "none" | "compact" | "full";
   toolbarEnd?: ReactNode;
+  /** The formatting buttons fold into one, to leave the toolbar's end the room it needs. */
+  toolbarFolded?: boolean;
   /** Drawn under what is written, above the toolbar: what goes out with it (a reply's signature). */
   afterContent?: ReactNode;
   extensions?: Extensions;
@@ -50,6 +52,7 @@ export const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function
     contentClassName,
     toolbar = "compact",
     toolbarEnd,
+    toolbarFolded,
     afterContent,
     extensions = [],
     onSubmit,
@@ -133,7 +136,7 @@ export const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function
       <EditorContent editor={editor} className="min-h-0 flex-1 overflow-y-auto" />
       {afterContent}
       {toolbar !== "none" && editor && (
-        <Toolbar editor={editor} full={toolbar === "full"} onImage={onImage} end={toolbarEnd} />
+        <Toolbar editor={editor} full={toolbar === "full"} onImage={onImage} end={toolbarEnd} folded={toolbarFolded} />
       )}
     </div>
   );
@@ -159,10 +162,10 @@ function TB({ label, active, onClick, children, shortcut }: { label: string; act
   );
 }
 
-export function Toolbar({ editor, full, onImage, end }: { editor: Editor; full?: boolean; onImage?: () => void; end?: ReactNode }) {
+export function Toolbar({ editor, full, onImage, end, folded }: { editor: Editor; full?: boolean; onImage?: () => void; end?: ReactNode; folded?: boolean }) {
   const { t: ui } = useTranslation("ui");
-  return (
-    <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
+  const formatting = (
+    <>
       {full && (
         <>
           <TB label={ui("heading")} active={editor.isActive("heading", { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
@@ -207,10 +210,41 @@ export function Toolbar({ editor, full, onImage, end }: { editor: Editor; full?:
           )}
         </>
       )}
+    </>
+  );
+  return (
+    <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
+      {folded ? <FoldedFormatting>{formatting}</FoldedFormatting> : formatting}
       <div className="ml-auto flex items-center gap-1">{end}</div>
     </div>
   );
 }
+
+/** The formatting buttons behind one, on a narrow toolbar; their shortcuts keep working. */
+function FoldedFormatting({ children }: { children: ReactNode }) {
+  const { t: ui } = useTranslation("ui");
+  return (
+    <Popover
+      side="top"
+      className="p-1"
+      trigger={
+        <Tooltip content={ui("formatting")}>
+          <button
+            type="button"
+            aria-label={ui("formatting")}
+            onMouseDown={(e) => e.preventDefault()}
+            className="flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover data-[state=open]:text-fg [&_svg]:size-[15px]"
+          >
+            <Type />
+          </button>
+        </Tooltip>
+      }
+    >
+      <div className="flex items-center gap-0.5">{children}</div>
+    </Popover>
+  );
+}
+
 
 function LinkButton({ editor }: { editor: Editor }) {
   const { t: ui } = useTranslation("ui");

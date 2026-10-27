@@ -347,7 +347,9 @@
     "reset": "Réinitialiser",
     "resetFor": "Réinitialiser {{name}}",
     "hideFor": "Masquer {{name}} des menus",
-    "showFor": "Afficher {{name}} dans les menus"
+    "showFor": "Afficher {{name}} dans les menus",
+    "finishButton": "Bouton {{action}}",
+    "finishButtonHint": "Affichez à côté d’Envoyer, dans la zone de réponse, un bouton qui envoie et résout le ticket en un clic, et pas seulement dans le menu voisin. Si le statut résolu est masqué, il envoie et ferme."
   },
   "danger": {
     "title": "Zone de danger",

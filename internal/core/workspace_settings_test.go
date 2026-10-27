@@ -68,3 +68,23 @@ func TestHiddenStatuses(t *testing.T) {
 		t.Fatal("hidden priority accepted")
 	}
 }
+
+// TestSendAndFinishButton checks the composer's send and finish button is stored on and off.
+func TestSendAndFinishButton(t *testing.T) {
+	for _, v := range []bool{true, false} {
+		out, err := validateSettings(&CoreWorkspaceSettings{SendAndFinish: &v})
+		if err != nil {
+			t.Fatalf("%v: %v", v, err)
+		}
+		if out["send_and_finish_button"] != v {
+			t.Fatalf("%v: stored %v", v, out["send_and_finish_button"])
+		}
+	}
+	out, err := validateSettings(&CoreWorkspaceSettings{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out["send_and_finish_button"]; ok {
+		t.Fatal("stored without being set")
+	}
+}

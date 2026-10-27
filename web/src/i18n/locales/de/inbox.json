@@ -474,6 +474,11 @@
     "waitUploads": "Warte auf Uploads",
     "andStatus": "{{label}} und Status setzen",
     "andMark": "{{label}} und als {{status}} markieren",
+    "noteAndFinish": {
+      "solve": "Notiz hinzufügen und lösen",
+      "close": "Notiz hinzufügen und schließen",
+      "mark": "Notiz hinzufügen und als {{status}} markieren"
+    },
     "sending": "Wird gesendet",
     "sent": "Gesendet",
     "replyingAs": "Antwortet als",

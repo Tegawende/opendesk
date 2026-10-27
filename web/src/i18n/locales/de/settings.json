@@ -368,7 +368,9 @@
     "reset": "Zurücksetzen",
     "resetFor": "{{name}} zurücksetzen",
     "hideFor": "{{name}} in den Menüs ausblenden",
-    "showFor": "{{name}} in den Menüs anzeigen"
+    "showFor": "{{name}} in den Menüs anzeigen",
+    "finishButton": "Schaltfläche „{{action}}“",
+    "finishButtonHint": "Zeige neben Senden im Antwortfeld eine Schaltfläche, die das Ticket mit einem Klick sendet und löst, nicht nur im Menü daneben. Ist gelöst ausgeblendet, sendet und schließt sie."
   },
   "danger": {
     "title": "Gefahrenbereich",
