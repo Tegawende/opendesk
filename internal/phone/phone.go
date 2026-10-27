@@ -97,8 +97,10 @@ type PhoneConnection struct {
 	AssignAnswered  bool       `json:"assign_answered"`
 	InsightCards    bool       `json:"insight_cards"`
 	LastEventAt     *time.Time `json:"last_event_at"`
-	WebhookURL      string     `json:"webhook_url"`
-	CreatedAt       time.Time  `json:"created_at"`
+	// WebhookURL is where the provider sends events: admins only, as it reaches the
+	// connection (contracts/phone.md "Security").
+	WebhookURL string    `json:"webhook_url,omitempty" doc:"Admins only"`
+	CreatedAt  time.Time `json:"created_at"`
 
 	credentialsEnc   []byte
 	webhookID        string

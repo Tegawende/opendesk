@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/deps"
 	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
@@ -203,6 +204,21 @@ func TestConnectManagesOnlyItsOwnWebhook(t *testing.T) {
 	if len(list.Data) != 1 {
 		t.Fatalf("list %+v", list)
 	}
+	// The webhook URL reaches the connection: admins only, never a viewer or a key that
+	// can't change settings.
+	for name, a := range map[string]hdtest.Auth{
+		"viewer":        ws.Viewer.As(ws),
+		"agent":         ws.Agent.As(ws),
+		"read-only key": {Bearer: e.APIKey(ws, auth.ScopeSettingsRead), Workspace: ws.ID},
+		"admin":         ws.Admin.As(ws),
+		"settings key":  {Bearer: e.APIKey(ws, auth.ScopeSettingsRead, auth.ScopeSettingsWrite), Workspace: ws.ID},
+	} {
+		r := e.Do("GET", "/v1/phone/connections", a, nil).Want(t, 200)
+		admin := name == "admin" || name == "settings key"
+		if has := strings.Contains(string(r.Body), "/v1/phone/hooks/"); has != admin {
+			t.Fatalf("%s: webhook URL in the list = %v: %s", name, has, r.Body)
+		}
+	}
 	ours := func() []fake.Webhook {
 		var out []fake.Webhook
 		for _, w := range f.Webhooks() {
@@ -251,6 +267,14 @@ func TestConnectManagesOnlyItsOwnWebhook(t *testing.T) {
 	if audits != 2 {
 		t.Fatalf("audit entries %d", audits)
 	}
+	var published, toAdmins int
+	e.Scalar(`SELECT count(*) FROM events WHERE workspace_id = $1 AND type LIKE 'phone_connection.%'`, &published, ws.ID)
+	e.Scalar(`SELECT count(*) FROM events WHERE workspace_id = $1 AND type LIKE 'phone_connection.%'
+		AND user_ids @> ARRAY[$2::uuid, $3::uuid] AND NOT user_ids && ARRAY[$4::uuid, $5::uuid]`,
+		&toAdmins, ws.ID, ws.Owner.ID, ws.Admin.ID, ws.Agent.ID, ws.Viewer.ID)
+	if published == 0 || toAdmins != published {
+		t.Fatalf("phone_connection events: %d, %d to admins only", published, toAdmins)
+	}
 }
 
 func TestWebhookVerification(t *testing.T) {
@@ -270,6 +294,38 @@ func TestWebhookVerification(t *testing.T) {
 	if n := len(h.e.Jobs(jobs.PhoneInboundArgs{}.Kind(), h.ws.ID)); n != 0 {
 		t.Fatalf("an ignored or forged event was queued: %d", n)
 	}
+	// Requests that fail count against their address, apart from the connection's limit:
+	// a flood of forged events from one address is refused there, and the provider's own
+	// events from another address still come in.
+	cfg := *h.e.D.Cfg
+	h.e.D.Cfg.TrustProxy, h.e.D.Cfg.ProxyHops = true, 0
+	t.Cleanup(func() { *h.e.D.Cfg = cfg })
+	from := func(ip, path string, b []byte) int {
+		req, _ := http.NewRequest("POST", h.e.Srv.URL+path, bytes.NewReader(b))
+		req.Header.Set("CF-Connecting-IP", ip)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	hook := "/v1/phone/hooks/aircall/" + h.conn.ID.String()
+	forged := bytes.ReplaceAll(body, []byte(h.token(t)), []byte("forged"))
+	codes := map[int]int{}
+	for i := 0; i < 40; i++ {
+		codes[from("203.0.113.9", hook, forged)]++
+	}
+	for i := 0; i < 40; i++ {
+		codes[from("203.0.113.10", "/v1/phone/hooks/aircall/"+uuid.NewString(), body)]++
+	}
+	if codes[401] != 30 || codes[404] != 30 || codes[429] != 20 {
+		t.Fatalf("forged and unknown: %v", codes)
+	}
+	if got := from("198.51.100.7", hook, ignored); got != 200 {
+		t.Fatalf("the provider's event after a flood from elsewhere: %d", got)
+	}
+
 	// A retry of the same event is stored and queued once.
 	h.send(t, body)
 	h.send(t, body)

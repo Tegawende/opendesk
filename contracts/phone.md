@@ -28,14 +28,16 @@ type PhoneConnection = { id: string; provider: string; name: string; account_nam
   reuse_days: number;          // 0..90, default 7 (Placement)
   assign_answered: boolean;    // default false (Agents)
   insight_cards: boolean;      // default true (Insight cards)
-  last_event_at: string | null; webhook_url: string; created_at: string };
+  last_event_at: string | null;
+  webhook_url?: string;        // admins only: people with the admin role, API keys and AI clients with settings:write
+  created_at: string };
 type PhoneLine = { id: string; name: string; provider: string };
 ```
 
 | method | path | role | body → response |
 | --- | --- | --- | --- |
 | GET | `/v1/phone/providers` | viewer, `settings:read` | → `{data: PhoneProvider[]}` |
-| GET | `/v1/phone/connections` | viewer, `settings:read` | → `{data: PhoneConnection[]}`; never credentials |
+| GET | `/v1/phone/connections` | viewer, `settings:read` | → `{data: PhoneConnection[]}`; never credentials, `webhook_url` for admins only |
 | POST | `/v1/phone/connections` | admin user | `{provider, name?, credentials}` → 201 `PhoneConnection`; 422 `phone_credentials_refused`; 409 when the workspace already has that provider |
 | PATCH | `/v1/phone/connections/{id}` | admin user | `{name?, reuse_days?, assign_answered?, insight_cards?, credentials?}` → `PhoneConnection` |
 | POST | `/v1/phone/connections/{id}/test` | admin user | checks credentials and webhook, registers the webhook again when it is gone or disabled → `PhoneConnection` |
@@ -46,8 +48,9 @@ type PhoneLine = { id: string; name: string; provider: string };
 "Admin user" routes need a person signed in as an admin: connecting a phone system hands
 it a way into tickets, so API keys get `403`. One connection per provider per workspace.
 
-Events: `phone_connection.created` / `.updated` `{phone_connection}` (also on every new
-health state), `phone_connection.deleted` `{phone_connection_id}`. Audit:
+Events, to admins only (`events.Event.Admins`): `phone_connection.created` / `.updated`
+`{phone_connection}` (also on every new health state), `phone_connection.deleted`
+`{phone_connection_id}`. Audit:
 `phone.connected`, `phone.updated`, `phone.credentials_rotated`, `phone.disconnected`.
 
 ## Provider adapter boundary
@@ -222,8 +225,13 @@ Docs: [API reference](https://developers.aircall.io/api-references),
   (`phone_connections.credentials_enc`, `.webhook_secret_enc`, in `internal/sealed`).
   Responses, events, errors and logs never include them; adapter errors name the
   operation and the status only.
-- The webhook is found by its opaque connection id, rate limited per connection
-  (600 a minute), body-capped at 1 MiB and verified before parsing. Nothing in a payload
+- The webhook is found by its opaque connection id, body-capped at 1 MiB and verified
+  before parsing. Its URL reaches the connection, so only admins read it (`webhook_url`,
+  `phone_connection.*` events). A request that names no connection or fails verification
+  counts against its address (30 a minute, then that address gets `429` before any work);
+  a verified event counts against its connection (600 a minute). The two are apart, so
+  forged requests never use up the provider's own allowance, and ids that name no
+  connection add no limiter keys. Nothing in a payload
   decides the workspace, the ticket or anyone's access: the connection does. The stored
   event and its job are written in one transaction, and the event id (a hash of the body)
   makes a provider's retry a no-op.

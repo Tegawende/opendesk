@@ -1076,7 +1076,8 @@ export type PhoneConnection = {
   assign_answered: boolean;
   insight_cards: boolean;
   last_event_at: string | null;
-  webhook_url: string;
+  /** Where the provider sends events: admins only. */
+  webhook_url?: string;
   created_at: string;
 };
 export type PhoneLine = { id: string; name: string; provider: string };

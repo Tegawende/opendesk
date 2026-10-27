@@ -12,15 +12,23 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
+	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/jobs"
 	"github.com/useopendesk/opendesk/internal/phone/provider"
 )
 
 const (
 	maxWebhookBody = 1 << 20
-	// webhookPerMinute bounds what one connection's URL takes in: a call is a handful of
-	// events, so this is far above a busy line and keeps a flood from filling the queue.
+	// webhookPerMinute bounds what one connection's URL takes in once verified: a call is a
+	// handful of events, so this is far above a busy line and keeps a flood from filling
+	// the queue.
 	webhookPerMinute = 600
+	// badHooksPerMinute bounds the requests one address sends that name no connection or
+	// fail verification, which a provider never does: past it, that address is refused
+	// before any work. They count apart from the connection's limit, so they cannot use it
+	// up and keep the provider's own events out.
+	badHooksPerMinute = 30
 )
 
 // webhook receives a provider's events. The connection is found by its opaque id and
@@ -29,28 +37,36 @@ const (
 // is stored (normalized) and queued in one transaction, then the provider gets its 200
 // at once: Aircall waits five seconds and disables a webhook that keeps failing.
 func (s *Service) webhook(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	if !s.d.Limiter.Allow("phone-hook:"+id.String(), webhookPerMinute, time.Minute) {
+	// Limits are keyed by address and by known connection only, so requests naming random
+	// ids add no keys of their own.
+	bad := "phone-hook-bad:" + httpx.ClientIP(s.d.Cfg.TrustProxy, s.d.Cfg.ProxyHops)(r)
+	if s.d.Limiter.Over(bad, badHooksPerMinute, time.Minute) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		return
 	}
+	refuse := func(status int) {
+		s.d.Limiter.Allow(bad, badHooksPerMinute, time.Minute)
+		w.WriteHeader(status)
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		refuse(http.StatusNotFound)
+		return
+	}
 	c, err := scanConnection(s.d.DB.Pool.QueryRow(r.Context(), connectionSelect+` WHERE id = $1`, id))
-	if err != nil || c.Provider != chi.URLParam(r, "provider") || len(c.webhookSecretEnc) == 0 {
-		http.NotFound(w, r)
+	if err != nil && !db.IsNotFound(err) {
+		s.d.Log.Error("phone webhook connection", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	a, ok := s.adapters[c.Provider]
-	if !ok {
-		http.NotFound(w, r)
+	if err != nil || !ok || c.Provider != chi.URLParam(r, "provider") || len(c.webhookSecretEnc) == 0 {
+		refuse(http.StatusNotFound)
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBody))
 	if err != nil {
-		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		refuse(http.StatusRequestEntityTooLarge)
 		return
 	}
 	secret, err := s.d.Box.Open(c.webhookSecretEnc)
@@ -60,7 +76,11 @@ func (s *Service) webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if a.Verify(body, string(secret)) != nil {
-		w.WriteHeader(http.StatusUnauthorized)
+		refuse(http.StatusUnauthorized)
+		return
+	}
+	if !s.d.Limiter.Allow("phone-hook:"+c.ID.String(), webhookPerMinute, time.Minute) {
+		w.WriteHeader(http.StatusTooManyRequests)
 		return
 	}
 	ev, err := a.Parse(body)

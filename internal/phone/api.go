@@ -101,7 +101,7 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 			}
 			out := &struct{ Body phoneConnectionList }{phoneConnectionList{Data: []PhoneConnectionView{}}}
 			for _, c := range list {
-				out.Body.Data = append(out.Body.Data, s.view(c))
+				out.Body.Data = append(out.Body.Data, s.view(c, seesWebhook(p)))
 			}
 			return out, nil
 		})
@@ -144,14 +144,13 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 			c := PhoneConnection{ID: ids.New(), WorkspaceID: p.WorkspaceID, Provider: a.Describe().Key, Name: name,
 				AccountName: displayname.CleanOr(account.Name, displayname.Workspace, ""), Status: "connected", HealthStatus: "unknown",
 				ReuseDays: 7, InsightCards: true, CreatedAt: time.Now().UTC(), credentialsEnc: sealed}
-			c.WebhookURL = s.webhookURL(c)
 			err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				if _, err := tx.Exec(ctx, `INSERT INTO phone_connections (id, workspace_id, provider, name, account_name, credentials_enc, created_by, created_at)
 					VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, c.ID, c.WorkspaceID, c.Provider, c.Name, c.AccountName, c.credentialsEnc, p.UserID, c.CreatedAt); err != nil {
 					return err
 				}
-				if _, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "phone_connection.created",
-					Data: map[string]any{"phone_connection": s.view(c)}}); err != nil {
+				if _, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "phone_connection.created", Admins: true,
+					Data: map[string]any{"phone_connection": s.view(c, true)}}); err != nil {
 					return err
 				}
 				return audit.Log(ctx, tx, p, p.WorkspaceID, "phone.connected", "phone_connection", &c.ID, map[string]any{"provider": c.Provider})
@@ -163,7 +162,7 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 				return nil, httpx.Wrap(err)
 			}
 			c = s.reconcile(ctx, c, creds)
-			return &struct{ Body PhoneConnectionView }{s.view(c)}, nil
+			return &struct{ Body PhoneConnectionView }{s.view(c, true)}, nil
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "update-phone-connection", Method: http.MethodPatch, Path: "/v1/phone/connections/{id}", Tags: tags, Summary: "Update a phone connection"},
@@ -230,8 +229,8 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 				if tag.RowsAffected() == 0 {
 					return pgx.ErrNoRows
 				}
-				if _, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "phone_connection.updated",
-					Data: map[string]any{"phone_connection": s.view(c)}}); err != nil {
+				if _, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "phone_connection.updated", Admins: true,
+					Data: map[string]any{"phone_connection": s.view(c, true)}}); err != nil {
 					return err
 				}
 				action := "phone.updated"
@@ -249,7 +248,7 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 			if creds != nil {
 				c = s.reconcile(ctx, c, creds)
 			}
-			return &struct{ Body PhoneConnectionView }{s.view(c)}, nil
+			return &struct{ Body PhoneConnectionView }{s.view(c, true)}, nil
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "test-phone-connection", Method: http.MethodPost, Path: "/v1/phone/connections/{id}/test", Tags: tags,
@@ -270,7 +269,7 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 				return nil, httpx.Wrap(err)
 			}
 			c = s.reconcile(ctx, c, creds)
-			return &struct{ Body PhoneConnectionView }{s.view(c)}, nil
+			return &struct{ Body PhoneConnectionView }{s.view(c, true)}, nil
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "delete-phone-connection", Method: http.MethodDelete, Path: "/v1/phone/connections/{id}", Tags: tags,
@@ -302,7 +301,7 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 				if tag.RowsAffected() == 0 {
 					return pgx.ErrNoRows
 				}
-				if _, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "phone_connection.deleted",
+				if _, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "phone_connection.deleted", Admins: true,
 					Data: map[string]any{"phone_connection_id": c.ID}}); err != nil {
 					return err
 				}
@@ -433,8 +432,25 @@ func (s *Service) webhookURL(c PhoneConnection) string {
 	return strings.TrimRight(s.d.Cfg.APIURL, "/") + "/v1/phone/hooks/" + c.Provider + "/" + c.ID.String()
 }
 
-func (s *Service) view(c PhoneConnection) PhoneConnectionView {
-	c.WebhookURL = s.webhookURL(c)
+// seesWebhook reports whether p may read a connection's webhook URL: an admin, or an API
+// key or AI client that may change settings.
+func seesWebhook(p *auth.Principal) bool {
+	switch p.Kind {
+	case auth.KindAPIKey:
+		return p.HasScope(auth.ScopeSettingsWrite)
+	case auth.KindUser:
+		return p.Role.AtLeast(auth.RoleAdmin) && (p.GrantID == uuid.Nil || p.HasScope(auth.ScopeSettingsWrite))
+	}
+	return false
+}
+
+// view is a connection as a response or an event carries it, with its webhook URL only
+// for admins.
+func (s *Service) view(c PhoneConnection, admin bool) PhoneConnectionView {
+	c.WebhookURL = ""
+	if admin {
+		c.WebhookURL = s.webhookURL(c)
+	}
 	v := PhoneConnectionView{PhoneConnection: c}
 	for code, detail := range healthDetails {
 		if detail == c.HealthDetail {
@@ -551,8 +567,8 @@ func (s *Service) storeHealth(ctx context.Context, c PhoneConnection, status, co
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
 		}
-		_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: c.WorkspaceID, Type: "phone_connection.updated",
-			Data: map[string]any{"phone_connection": s.view(c)}})
+		_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: c.WorkspaceID, Type: "phone_connection.updated", Admins: true,
+			Data: map[string]any{"phone_connection": s.view(c, true)}})
 		return err
 	})
 	if err != nil {

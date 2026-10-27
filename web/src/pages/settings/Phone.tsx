@@ -138,7 +138,7 @@ export default function Phone() {
                       <p className="mt-0.5 text-[12px] text-fg-3">
                         {c.last_event_at ? t("phone.lastEvent", { when: relShort(c.last_event_at) }) : t("phone.noEventYet")}
                       </p>
-                      {admin && (
+                      {admin && c.webhook_url && (
                         <div className="mt-2 max-w-[560px]">
                           <p className="mb-1 text-[11.5px] text-fg-4">{t("phone.webhook")}</p>
                           <CopyField value={c.webhook_url} />
