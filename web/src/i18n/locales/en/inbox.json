@@ -64,7 +64,8 @@
     "priority": "{{priority}} priority",
     "awaiting": "Waiting for a reply",
     "severity": "{{severity}}",
-    "receivedAt": "Sent to {{address}}"
+    "receivedAt": "Sent to {{address}}",
+    "assignedTo": "Assigned to {{name}}"
   },
   "waiting": {
     "label": "Waiting {{time}}",
@@ -97,7 +98,11 @@
   },
   "presence": {
     "viewing": "{{name}} is viewing",
-    "replying": "{{name}} is replying"
+    "replying": "{{name}} is replying",
+    "oneViewing": "{{name}} viewing",
+    "oneReplying": "{{name}} replying…",
+    "manyViewing": "{{n}} viewing",
+    "manyReplying": "{{name}} replying… +{{others}}"
   },
   "empty": {
     "unassigned": {
