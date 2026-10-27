@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -27,7 +28,7 @@ var templateFS embed.FS
 //go:embed assets
 var assetFS embed.FS
 
-var tmpl = template.Must(template.New("").ParseFS(templateFS, "templates/*.html"))
+var tmpl = template.Must(template.New("").Funcs(template.FuncMap{"lower": strings.ToLower}).ParseFS(templateFS, "templates/*.html"))
 
 // asset is a static file under /_help/, with a content hash its URLs carry so they can
 // be cached for good.
@@ -106,6 +107,8 @@ type siteInfo struct {
 	Icon    template.URL
 	Tone    string // the glyph's hue class
 	Initial string
+	// Changelog: the help center has a public changelog entry, so the header links it.
+	Changelog bool
 }
 
 type alternate struct{ Lang, URL string }
@@ -118,6 +121,7 @@ type language struct {
 type homeData struct {
 	Collections []kb.KbCollection
 	Featured    []kb.KbArticle
+	Latest      []kb.ChangelogEntry
 }
 
 type collectionData struct {
@@ -129,7 +133,7 @@ type notFoundData struct{ Title, Body string }
 
 // page is one rendered help center page.
 type page struct {
-	Kind      string // home | collection | article | search | notfound
+	Kind      string // home | collection | article | search | changelog | entry | notfound
 	Lang, Dir string
 	T         translator
 	Site      siteInfo
@@ -139,6 +143,7 @@ type page struct {
 	Canonical, XDefault            string
 	Alternates                     []alternate
 	OGType, OGLocale               string
+	LargeCard                      bool // the link preview shows Site.Image large
 	NoIndex                        bool
 	JSONLD                         template.JS
 	Languages                      []language
@@ -154,6 +159,9 @@ type page struct {
 	Query             string
 	Results           []kb.KbArticle
 	NotFound          *notFoundData
+	Changelog         *changelogData
+	Entry             *entryView
+	MoreEntries       []kb.ChangelogEntry
 
 	base     string // the help center's root URL, without a trailing slash
 	path     string // this page's path under base
@@ -178,6 +186,14 @@ func (p *page) langURL(lang string) string {
 	q := url.Values{}
 	if p.Kind == "search" && p.Query != "" {
 		q.Set("q", p.Query)
+	}
+	if c := p.Changelog; p.Kind == "changelog" && c != nil {
+		if c.Category != "" {
+			q.Set("category", c.Category)
+		}
+		if c.Page > 1 {
+			q.Set("page", strconv.Itoa(c.Page))
+		}
 	}
 	if lang != p.defLang {
 		q.Set("lang", lang)
@@ -256,6 +272,24 @@ func (p *page) Empty(lit int, compact bool, title, body string) emptyData {
 	return e
 }
 
+type updatesData struct {
+	Page    *page
+	Entries []kb.ChangelogEntry
+}
+
+// Updates is a list of changelog entries.
+func (p *page) Updates(list []kb.ChangelogEntry) updatesData {
+	return updatesData{Page: p, Entries: list}
+}
+
+type catsData struct {
+	Page  *page
+	Entry kb.ChangelogEntry
+}
+
+// EntryCats are an entry's categories, each linking its timeline.
+func (p *page) EntryCats(e kb.ChangelogEntry) catsData { return catsData{Page: p, Entry: e} }
+
 type crumb struct{ Label, Href string }
 
 type crumbsData struct {
@@ -276,6 +310,10 @@ func (p *page) Crumbs() crumbsData {
 		c.Items = append(c.Items, crumb{Label: p.Article.Title})
 	case "search":
 		c.Items = []crumb{{Label: p.T.T("help.search")}}
+	case "changelog":
+		c.Items = []crumb{{Label: p.T.T("help.changelog")}}
+	case "entry":
+		c.Items = []crumb{{Label: p.T.T("help.changelog"), Href: p.CategoryURL("")}, {Label: p.Entry.Title}}
 	}
 	return c
 }
@@ -298,16 +336,37 @@ func (p *page) Published(a kb.KbArticle) time.Time {
 // ISO is a time for a datetime attribute; the page's script shows it in the reader's language.
 func (p *page) ISO(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
+// monthNames are the long and short month names of languages whose dates browsers may
+// not know ("22 oktyabr 2026", "22 okt"). The page's script keeps the date as the page
+// wrote it when the browser has no data for the page's language.
+var monthNames = map[string][2][12]string{
+	"az": {
+		{"yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avqust", "sentyabr", "oktyabr", "noyabr", "dekabr"},
+		{"yan", "fev", "mar", "apr", "may", "iyn", "iyl", "avq", "sen", "okt", "noy", "dek"},
+	},
+}
+
 // LongDate and ShortDate are what a page shows before its script runs: English words in
-// English, the ISO date otherwise.
+// English, day month year in a language of monthNames, the ISO date otherwise.
 func (p *page) LongDate(t time.Time) string {
+	t = t.UTC()
 	if p.Lang == "en" {
-		return t.UTC().Format("January 2, 2006")
+		return t.Format("January 2, 2006")
 	}
-	return t.UTC().Format("2006-01-02")
+	if names, ok := monthNames[p.Lang]; ok {
+		return fmt.Sprintf("%d %s %d", t.Day(), names[0][t.Month()-1], t.Year())
+	}
+	return t.Format("2006-01-02")
 }
 
 func (p *page) ShortDate(t time.Time) string {
+	if names, ok := monthNames[p.Lang]; ok {
+		t = t.UTC()
+		if t.Year() == time.Now().UTC().Year() {
+			return fmt.Sprintf("%d %s", t.Day(), names[1][t.Month()-1])
+		}
+		return fmt.Sprintf("%d %s %d", t.Day(), names[1][t.Month()-1], t.Year())
+	}
 	if p.Lang != "en" {
 		return t.UTC().Format("2006-01-02")
 	}
