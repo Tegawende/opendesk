@@ -161,7 +161,9 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			c = s.reconcile(ctx, c, creds)
+			if c, err = s.reconcile(ctx, c.WorkspaceID, c.ID); err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			return &struct{ Body PhoneConnectionView }{s.view(c, true)}, nil
 		})
 
@@ -186,26 +188,27 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 			}
 			b := in.Body
 			changes := map[string]any{}
+			var name string
 			if b.Name != nil {
-				n, err := displayname.Validate("Name", strings.TrimSpace(*b.Name), displayname.Workspace, false)
-				if err != nil {
+				if name, err = displayname.Validate("Name", strings.TrimSpace(*b.Name), displayname.Workspace, false); err != nil {
 					return nil, httpx.Wrap(err)
 				}
-				c.Name, changes["name"] = n, n
+				changes["name"] = name
 			}
 			if b.ReuseDays != nil {
-				c.ReuseDays, changes["reuse_days"] = *b.ReuseDays, *b.ReuseDays
+				changes["reuse_days"] = *b.ReuseDays
 			}
 			if b.AssignAnswered != nil {
-				c.AssignAnswered, changes["assign_answered"] = *b.AssignAnswered, *b.AssignAnswered
+				changes["assign_answered"] = *b.AssignAnswered
 			}
 			if b.InsightCards != nil {
-				c.InsightCards, changes["insight_cards"] = *b.InsightCards, *b.InsightCards
+				changes["insight_cards"] = *b.InsightCards
 			}
 			var creds map[string]string
+			var sealed []byte
+			a, known := s.adapters[c.Provider]
 			if len(b.Credentials) > 0 {
-				a, ok := s.adapters[c.Provider]
-				if !ok {
+				if !known {
 					return nil, httpx.Validation("Unknown phone provider.")
 				}
 				if creds = cleanCredentials(a.Describe(), b.Credentials); creds == nil {
@@ -214,29 +217,55 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 				if _, err := a.Validate(ctx, s.http, creds); err != nil {
 					return nil, httpx.E(422, "phone_credentials_refused", "The provider refused these credentials.")
 				}
-				if c.credentialsEnc, err = s.d.Box.SealJSON(creds); err != nil {
+				if sealed, err = s.d.Box.SealJSON(creds); err != nil {
 					return nil, httpx.Wrap(err)
 				}
 				changes["credentials"] = "replaced"
 			}
 			err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				tag, err := tx.Exec(ctx, `UPDATE phone_connections SET name = $3, reuse_days = $4, assign_answered = $5, insight_cards = $6,
-					credentials_enc = $7, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
-					p.WorkspaceID, c.ID, c.Name, c.ReuseDays, c.AssignAnswered, c.InsightCards, c.credentialsEnc)
+				// Changes apply to the connection as stored now, under reconcile's lock, so a
+				// test or another change running at the same time never sees a stale webhook.
+				cur, err := s.lockConnection(ctx, tx, p.WorkspaceID, c.ID)
 				if err != nil {
 					return err
 				}
-				if tag.RowsAffected() == 0 {
-					return pgx.ErrNoRows
+				if b.Name != nil {
+					cur.Name = name
+				}
+				if b.ReuseDays != nil {
+					cur.ReuseDays = *b.ReuseDays
+				}
+				if b.AssignAnswered != nil {
+					cur.AssignAnswered = *b.AssignAnswered
+				}
+				if b.InsightCards != nil {
+					cur.InsightCards = *b.InsightCards
+				}
+				if creds != nil {
+					old, err := s.credentials(cur)
+					if err != nil {
+						return err
+					}
+					if s.leaveOldAccount(ctx, a, cur, old, creds) {
+						cur.webhookID, cur.webhookSecretEnc = "", nil
+					}
+					cur.credentialsEnc = sealed
+				}
+				if _, err := tx.Exec(ctx, `UPDATE phone_connections SET name = $3, reuse_days = $4, assign_answered = $5, insight_cards = $6,
+					credentials_enc = $7, webhook_id = $8, webhook_secret_enc = $9, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
+					p.WorkspaceID, cur.ID, cur.Name, cur.ReuseDays, cur.AssignAnswered, cur.InsightCards, cur.credentialsEnc,
+					cur.webhookID, cur.webhookSecretEnc); err != nil {
+					return err
 				}
 				if _, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "phone_connection.updated", Admins: true,
-					Data: map[string]any{"phone_connection": s.view(c, true)}}); err != nil {
+					Data: map[string]any{"phone_connection": s.view(cur, true)}}); err != nil {
 					return err
 				}
 				action := "phone.updated"
 				if creds != nil {
 					action = "phone.credentials_rotated"
 				}
+				c = cur
 				return audit.Log(ctx, tx, p, p.WorkspaceID, action, "phone_connection", &c.ID, changes)
 			})
 			if db.IsNotFound(err) {
@@ -246,7 +275,9 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 				return nil, httpx.Wrap(err)
 			}
 			if creds != nil {
-				c = s.reconcile(ctx, c, creds)
+				if c, err = s.reconcile(ctx, c.WorkspaceID, c.ID); err != nil {
+					return nil, httpx.Wrap(err)
+				}
 			}
 			return &struct{ Body PhoneConnectionView }{s.view(c, true)}, nil
 		})
@@ -264,11 +295,9 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 			if err != nil {
 				return nil, err
 			}
-			creds, err := s.credentials(c)
-			if err != nil {
+			if c, err = s.reconcile(ctx, c.WorkspaceID, c.ID); err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			c = s.reconcile(ctx, c, creds)
 			return &struct{ Body PhoneConnectionView }{s.view(c, true)}, nil
 		})
 
@@ -285,15 +314,20 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 			if err != nil {
 				return nil, err
 			}
-			if a, ok := s.adapters[c.Provider]; ok && c.webhookID != "" {
-				if creds, err := s.credentials(c); err == nil {
-					if err := a.DeleteWebhook(ctx, s.http, creds, c.webhookID); err != nil {
-						// The webhook stays at the provider, which disables it once its events are refused.
-						s.d.Log.Warn("phone webhook not removed", "provider", c.Provider, "connection_id", c.ID, "err", err)
+			err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				// Under reconcile's lock, so no webhook it registers outlives the connection.
+				cur, err := s.lockConnection(ctx, tx, p.WorkspaceID, c.ID)
+				if err != nil {
+					return err
+				}
+				if a, ok := s.adapters[cur.Provider]; ok && cur.webhookID != "" {
+					if creds, err := s.credentials(cur); err == nil {
+						if err := a.DeleteWebhook(ctx, s.http, creds, cur.webhookID); err != nil {
+							// The webhook stays at the provider, which disables it once its events are refused.
+							s.d.Log.Warn("phone webhook not removed", "provider", cur.Provider, "connection_id", cur.ID, "err", err)
+						}
 					}
 				}
-			}
-			err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				tag, err := tx.Exec(ctx, `DELETE FROM phone_connections WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, c.ID)
 				if err != nil {
 					return err
@@ -500,35 +534,62 @@ func (s *Service) credentials(c PhoneConnection) (map[string]string, error) {
 	return out, s.d.Box.OpenJSON(c.credentialsEnc, &out)
 }
 
+// lockConnection serializes the work on one connection that talks to the provider
+// (reconcile, a credentials change, disconnecting) for the rest of tx, and reads the
+// connection afresh. It is an advisory lock rather than a row lock: incoming events
+// write the row (last_event_at) and must not wait on a provider round trip.
+func (s *Service) lockConnection(ctx context.Context, tx pgx.Tx, wid, id uuid.UUID) (PhoneConnection, error) {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "phone-connection:"+id.String()); err != nil {
+		return PhoneConnection{}, err
+	}
+	return scanConnection(tx.QueryRow(ctx, connectionSelect+` WHERE workspace_id = $1 AND id = $2`, wid, id))
+}
+
 // reconcile checks the credentials and the provider's webhook, registers the webhook when
-// the provider has none for this connection, and stores the outcome as the health.
-func (s *Service) reconcile(ctx context.Context, c PhoneConnection, creds map[string]string) PhoneConnection {
+// the provider has none for this connection, and stores the outcome as the health. One
+// reconcile runs at a time per connection, on what is stored when it starts, so two at
+// once never register two webhooks.
+func (s *Service) reconcile(ctx context.Context, wid, id uuid.UUID) (PhoneConnection, error) {
+	var out PhoneConnection
+	err := s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+		c, err := s.lockConnection(ctx, tx, wid, id)
+		if err != nil {
+			return err
+		}
+		out, err = s.reconcileLocked(ctx, tx, c)
+		return err
+	})
+	return out, err
+}
+
+func (s *Service) reconcileLocked(ctx context.Context, tx pgx.Tx, c PhoneConnection) (PhoneConnection, error) {
 	a, ok := s.adapters[c.Provider]
 	if !ok {
-		return s.storeHealth(ctx, c, "error", HealthUnreachable)
+		return s.storeHealth(ctx, tx, c, "error", HealthUnreachable)
+	}
+	creds, err := s.credentials(c)
+	if err != nil {
+		return c, err
 	}
 	account, err := a.Validate(ctx, s.http, creds)
 	if err != nil {
 		s.d.Log.Info("phone credentials check failed", "provider", c.Provider, "connection_id", c.ID, "err", err)
 		if provider.Refused(err) {
-			return s.storeHealth(ctx, c, "error", HealthRefused)
+			return s.storeHealth(ctx, tx, c, "error", HealthRefused)
 		}
-		return s.storeHealth(ctx, c, "error", HealthUnreachable)
+		return s.storeHealth(ctx, tx, c, "error", HealthUnreachable)
 	}
-	if name := displayname.CleanOr(account.Name, displayname.Workspace, ""); name != "" && name != c.AccountName {
+	if name := displayname.CleanOr(account.Name, displayname.Workspace, ""); name != "" {
 		c.AccountName = name
-		if _, err := s.d.DB.Pool.Exec(ctx, `UPDATE phone_connections SET account_name = $3 WHERE workspace_id = $1 AND id = $2`, c.WorkspaceID, c.ID, name); err != nil {
-			s.d.Log.Warn("phone account name not stored", "connection_id", c.ID, "err", err)
-		}
 	}
 	if c.webhookID != "" {
 		active, err := a.WebhookActive(ctx, s.http, creds, c.webhookID)
 		if err != nil {
 			s.d.Log.Info("phone webhook check failed", "provider", c.Provider, "connection_id", c.ID, "err", err)
-			return s.storeHealth(ctx, c, "error", HealthUnreachable)
+			return s.storeHealth(ctx, tx, c, "error", HealthUnreachable)
 		}
 		if active {
-			return s.storeHealth(ctx, c, "healthy", HealthReceiving)
+			return s.storeHealth(ctx, tx, c, "healthy", HealthReceiving)
 		}
 		// Gone or disabled by the provider: replace it.
 		if err := a.DeleteWebhook(ctx, s.http, creds, c.webhookID); err != nil {
@@ -538,41 +599,59 @@ func (s *Service) reconcile(ctx context.Context, c PhoneConnection, creds map[st
 	hook, err := a.RegisterWebhook(ctx, s.http, creds, s.webhookURL(c))
 	if err != nil {
 		s.d.Log.Warn("phone webhook not registered", "provider", c.Provider, "connection_id", c.ID, "err", err)
-		return s.storeHealth(ctx, c, "action_required", HealthNoWebhook)
+		return s.storeHealth(ctx, tx, c, "action_required", HealthNoWebhook)
 	}
 	secret, err := s.d.Box.Seal([]byte(hook.Secret))
 	if err != nil {
-		s.d.Log.Error("phone webhook secret not sealed", "connection_id", c.ID, "err", err)
-		return s.storeHealth(ctx, c, "error", HealthUnreachable)
+		return c, err
 	}
-	if _, err := s.d.DB.Pool.Exec(ctx, `UPDATE phone_connections SET webhook_id = $3, webhook_secret_enc = $4, updated_at = now()
+	if _, err := tx.Exec(ctx, `UPDATE phone_connections SET webhook_id = $3, webhook_secret_enc = $4, updated_at = now()
 		WHERE workspace_id = $1 AND id = $2`, c.WorkspaceID, c.ID, hook.ID, secret); err != nil {
-		s.d.Log.Error("phone webhook not stored", "connection_id", c.ID, "err", err)
-		return s.storeHealth(ctx, c, "error", HealthUnreachable)
+		return c, err
 	}
 	c.webhookID, c.webhookSecretEnc = hook.ID, secret
-	return s.storeHealth(ctx, c, "healthy", HealthReceiving)
+	return s.storeHealth(ctx, tx, c, "healthy", HealthReceiving)
 }
 
-func (s *Service) storeHealth(ctx context.Context, c PhoneConnection, status, code string) PhoneConnection {
+// leaveOldAccount runs when a connection's credentials are replaced. Credentials of another
+// provider account can't see opendesk's webhook in the old one: it is removed there with
+// the old credentials, while they are still at hand, so the old account stops sending
+// calls, and leaveOldAccount reports true for reconcile to register one in the new
+// account. On the same account the webhook stays. A provider that can't be reached leaves
+// it to reconcile.
+func (s *Service) leaveOldAccount(ctx context.Context, a provider.Adapter, c PhoneConnection, oldCreds, newCreds map[string]string) bool {
+	if c.webhookID == "" {
+		return false
+	}
+	ours, err := a.WebhookActive(ctx, s.http, newCreds, c.webhookID)
+	if err != nil {
+		s.d.Log.Info("phone webhook check failed", "provider", c.Provider, "connection_id", c.ID, "err", err)
+		return false
+	}
+	if ours {
+		return false
+	}
+	if err := a.DeleteWebhook(ctx, s.http, oldCreds, c.webhookID); err != nil {
+		// The old account disables it once its events are refused.
+		s.d.Log.Warn("phone webhook not removed from the old account", "provider", c.Provider, "connection_id", c.ID, "err", err)
+	}
+	return true
+}
+
+func (s *Service) storeHealth(ctx context.Context, tx pgx.Tx, c PhoneConnection, status, code string) (PhoneConnection, error) {
 	now := time.Now().UTC()
 	c.HealthStatus, c.HealthDetail, c.HealthCheckedAt = status, healthDetails[code], &now
 	c.Status, c.LastError = "connected", ""
 	if status == "error" {
 		c.Status = "error"
 	}
-	err := s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE phone_connections SET status = $3, last_error = '', health_status = $4, health_detail = $5,
-			health_checked_at = $6, updated_at = now() WHERE workspace_id = $1 AND id = $2`, c.WorkspaceID, c.ID, c.Status, status, c.HealthDetail, now)
-		if err != nil || tag.RowsAffected() == 0 {
-			return err
-		}
-		_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: c.WorkspaceID, Type: "phone_connection.updated", Admins: true,
-			Data: map[string]any{"phone_connection": s.view(c, true)}})
-		return err
-	})
-	if err != nil {
-		s.d.Log.Warn("phone health not stored", "connection_id", c.ID, "err", err)
+	tag, err := tx.Exec(ctx, `UPDATE phone_connections SET status = $3, last_error = '', health_status = $4, health_detail = $5,
+		health_checked_at = $6, account_name = $7, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
+		c.WorkspaceID, c.ID, c.Status, status, c.HealthDetail, now, c.AccountName)
+	if err != nil || tag.RowsAffected() == 0 {
+		return c, err
 	}
-	return c
+	_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: c.WorkspaceID, Type: "phone_connection.updated", Admins: true,
+		Data: map[string]any{"phone_connection": s.view(c, true)}})
+	return c, err
 }

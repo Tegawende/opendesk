@@ -16,13 +16,14 @@ import (
 	"time"
 )
 
-// Webhook is a webhook the fake holds.
+// Webhook is a webhook the fake holds, in the account (API ID) that made it.
 type Webhook struct {
-	ID     string
-	URL    string
-	Events []string
-	Token  string
-	Active bool
+	ID      string
+	Account string
+	URL     string
+	Events  []string
+	Token   string
+	Active  bool
 }
 
 // Aircall is the fake API. Set RefuseAIEvents to answer 400 to a webhook asking for
@@ -33,15 +34,19 @@ type Aircall struct {
 
 	mu       sync.Mutex
 	srv      *httptest.Server
-	id, tok  string
+	id       string
+	accounts map[string]account // by API ID
 	webhooks map[string]*Webhook
 	cards    map[string][]map[string]any
 	requests []string
 }
 
-// New starts a fake answering to the API ID and token.
+type account struct{ token, company string }
+
+// New starts a fake answering to the API ID and token, the company "LampTwist".
 func New(t testing.TB, apiID, apiToken string) *Aircall {
-	f := &Aircall{id: apiID, tok: apiToken, webhooks: map[string]*Webhook{}, cards: map[string][]map[string]any{}}
+	f := &Aircall{id: apiID, accounts: map[string]account{apiID: {apiToken, "LampTwist"}}, webhooks: map[string]*Webhook{},
+		cards: map[string][]map[string]any{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -50,11 +55,19 @@ func New(t testing.TB, apiID, apiToken string) *Aircall {
 // URL is the API base, the Adapter's BaseURL.
 func (f *Aircall) URL() string { return f.srv.URL + "/v1" }
 
-// AddWebhook adds a webhook another integration made.
+// AddAccount adds another Aircall company, with its own key and webhooks: a key of one
+// company never sees the other's webhooks.
+func (f *Aircall) AddAccount(apiID, apiToken, company string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.accounts[apiID] = account{apiToken, company}
+}
+
+// AddWebhook adds a webhook another integration made in the first account.
 func (f *Aircall) AddWebhook(id, url, token string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.webhooks[id] = &Webhook{ID: id, URL: url, Token: token, Active: true}
+	f.webhooks[id] = &Webhook{ID: id, Account: f.id, URL: url, Token: token, Active: true}
 }
 
 // Webhook returns a copy of a webhook, nil when there is none.
@@ -111,7 +124,8 @@ func (f *Aircall) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		return
 	}
-	if id, tok, ok := r.BasicAuth(); !ok || id != f.id || tok != f.tok {
+	caller, tok, ok := r.BasicAuth()
+	if acc, known := f.accounts[caller]; !ok || !known || tok != acc.token {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error":"Unauthorized"}`))
 		return
@@ -119,7 +133,7 @@ func (f *Aircall) serve(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/v1")
 	switch {
 	case r.Method == http.MethodGet && path == "/company":
-		reply(w, 200, map[string]any{"company": map[string]any{"name": "LampTwist", "users_count": 8, "numbers_count": 10}})
+		reply(w, 200, map[string]any{"company": map[string]any{"name": f.accounts[caller].company, "users_count": 8, "numbers_count": 10}})
 	case r.Method == http.MethodGet && path == "/numbers":
 		reply(w, 200, map[string]any{"numbers": []map[string]any{{"id": 501, "name": "FR - Support"}, {"id": 502, "name": "FR - B2B"}},
 			"meta": map[string]any{"next_page_link": nil}})
@@ -135,13 +149,13 @@ func (f *Aircall) serve(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		hook := &Webhook{ID: random(), URL: body.URL, Events: body.Events, Token: random(), Active: true}
+		hook := &Webhook{ID: random(), Account: caller, URL: body.URL, Events: body.Events, Token: random(), Active: true}
 		f.webhooks[hook.ID] = hook
 		reply(w, 201, map[string]any{"webhook": webhookJSON(hook)})
 	case strings.HasPrefix(path, "/webhooks/"):
 		id := strings.TrimPrefix(path, "/webhooks/")
 		hook, ok := f.webhooks[id]
-		if !ok {
+		if !ok || hook.Account != caller {
 			reply(w, 404, map[string]any{"error": "Not found"})
 			return
 		}

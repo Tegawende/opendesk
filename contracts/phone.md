@@ -215,6 +215,13 @@ Docs: [API reference](https://developers.aircall.io/api-references),
   the call events alone. The answer's `webhook_id` is stored, and its `token` sealed.
   opendesk only ever reads, replaces or deletes the webhook it created, by that id; it never
   lists the account's webhooks, so other integrations' webhooks stay untouched.
+- New credentials that can't see that webhook are another account's: the webhook is removed
+  from the old account with the old credentials before they are replaced, so the old account
+  stops sending calls, and one is registered in the new account. A new key of the same
+  account keeps the webhook. Everything that talks to the provider about one connection
+  (connect, test, a credentials change, disconnect) runs one at a time per connection, under
+  a transaction-scoped advisory lock, so two at once never register two webhooks; it is not a
+  row lock, so incoming events never wait on it.
 - Aircall puts the token in every webhook body; opendesk compares it in constant time.
   Aircall waits five seconds and retries a failed delivery up to 50 times before disabling
   the webhook, so opendesk answers 200 at once (also to events it ignores or doesn't

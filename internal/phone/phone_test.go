@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -736,5 +737,72 @@ func TestCallContentGoesWithItsTicket(t *testing.T) {
 	h.e.Scalar(`SELECT count(*) FROM activities WHERE workspace_id = $1 AND type = 'call'`, &entries, h.ws.ID)
 	if calls != 0 || entries != 0 {
 		t.Fatalf("after the ticket went: %d calls, %d entries", calls, entries)
+	}
+}
+
+// ours lists the webhooks pointing at the harness's connection.
+func (h *harness) ours() []fake.Webhook {
+	var out []fake.Webhook
+	for _, w := range h.f.Webhooks() {
+		if strings.Contains(w.URL, h.conn.ID.String()) {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// New credentials of the same account keep the webhook; credentials of another account
+// remove it from the old account, with the old credentials, and register one in the new.
+func TestNewCredentialsOfAnotherAccountMoveTheWebhook(t *testing.T) {
+	h := newHarness(t)
+	first := h.ours()
+	if len(first) != 1 || first[0].Account != "id-1" {
+		t.Fatalf("webhooks %+v", first)
+	}
+	h.f.AddAccount("id-1", "token-1b", "LampTwist")
+	var c phone.PhoneConnectionView
+	h.e.Do("PATCH", "/v1/phone/connections/"+h.conn.ID.String(), h.ws.Admin.As(h.ws),
+		map[string]any{"credentials": map[string]string{"api_id": "id-1", "api_token": "token-1b"}}).Want(t, 200).JSON(t, &c)
+	if now := h.ours(); len(now) != 1 || now[0].ID != first[0].ID || c.HealthStatus != "healthy" {
+		t.Fatalf("a new key of the same account replaced the webhook: %+v %+v", now, c)
+	}
+
+	h.f.AddAccount("id-2", "token-2", "Other company")
+	h.e.Do("PATCH", "/v1/phone/connections/"+h.conn.ID.String(), h.ws.Admin.As(h.ws),
+		map[string]any{"credentials": map[string]string{"api_id": "id-2", "api_token": "token-2"}}).Want(t, 200).JSON(t, &c)
+	now := h.ours()
+	if len(now) != 1 || now[0].Account != "id-2" || c.HealthStatus != "healthy" || c.AccountName != "Other company" {
+		t.Fatalf("after moving to another account: %+v %+v", now, c)
+	}
+	if !slices.Contains(h.f.Requests(), "DELETE /v1/webhooks/"+first[0].ID) {
+		t.Fatalf("the old account's webhook was not removed: %v", h.f.Requests())
+	}
+	// Events of the new webhook are verified with its token.
+	if got := h.send(t, h.recorded(t, "answered")[0]); got != 200 {
+		t.Fatalf("an event of the new webhook: %d", got)
+	}
+}
+
+// Tests at the same moment run one after the other: a disabled webhook is replaced once.
+func TestConcurrentTestsReplaceTheWebhookOnce(t *testing.T) {
+	h := newHarness(t)
+	h.f.Disable(h.ours()[0].ID)
+	var wg sync.WaitGroup
+	codes := make([]int, 4)
+	for i := range codes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			codes[i] = h.e.Do("POST", "/v1/phone/connections/"+h.conn.ID.String()+"/test", h.ws.Admin.As(h.ws), nil).Status
+		}()
+	}
+	wg.Wait()
+	for _, code := range codes {
+		if code != 200 {
+			t.Fatalf("tests answered %v", codes)
+		}
+	}
+	if now := h.ours(); len(now) != 1 || !now[0].Active {
+		t.Fatalf("webhooks after concurrent tests %+v", now)
 	}
 }
