@@ -161,6 +161,51 @@ func TestAutomationAssignsFirstReplyWhenUnassigned(t *testing.T) {
 	}
 }
 
+func TestAutomationAssignsTheAgentWhoReplied(t *testing.T) {
+	e, ws := newEnv(t)
+	mailbox := addMailbox(t, e, ws)
+	// Whoever answers an unowned ticket first takes it.
+	take := addAutomation(t, e, ws, jobs.TriggerAgentReplied, 0,
+		[]map[string]string{{"field": "assignee_id", "op": "equals", "value": "none"}},
+		[]map[string]string{{"type": "assign_replier", "value": ""}})
+	// A run about no message has nobody to assign: the action is skipped, the rest runs.
+	flag := addAutomation(t, e, ws, jobs.TriggerTicketUpdated, 1,
+		[]map[string]string{{"field": "priority", "op": "equals", "value": "high"}},
+		[]map[string]string{{"type": "assign_replier", "value": ""}, {"type": "add_tag", "value": "flagged"}})
+
+	tk := createTicket(t, e, ws, map[string]any{"channel": "email", "mailbox_id": mailbox.String(), "contact": map[string]string{"email": "customer@example.com"}})
+	runTriggers(t, e, ws.ID)
+	e.Do("POST", "/v1/tickets/"+tk.ID.String()+"/messages", ws.Admin.As(ws), map[string]any{"kind": "note", "body_html": "<p>Looking</p>"}).Want(t, 201)
+	runTriggers(t, e, ws.ID)
+	if assignee := getTicket(t, e, ws, tk.ID).Assignee; assignee != nil {
+		t.Fatalf("a note assigned %+v", assignee)
+	}
+	e.Do("POST", "/v1/tickets/"+tk.ID.String()+"/messages", ws.Admin.As(ws), map[string]any{"kind": "reply", "body_html": "<p>First reply</p>"}).Want(t, 201)
+	runTriggers(t, e, ws.ID)
+	if assignee := getTicket(t, e, ws, tk.ID).Assignee; assignee == nil || assignee.ID != ws.Admin.ID {
+		t.Fatalf("assignee after the first reply %+v, want the admin who replied", assignee)
+	}
+	// A later reply by someone else leaves the ticket with whoever took it.
+	e.Do("POST", "/v1/tickets/"+tk.ID.String()+"/messages", ws.Agent.As(ws), map[string]any{"kind": "reply", "body_html": "<p>Another reply</p>"}).Want(t, 201)
+	runTriggers(t, e, ws.ID)
+	if assignee := getTicket(t, e, ws, tk.ID).Assignee; assignee == nil || assignee.ID != ws.Admin.ID {
+		t.Fatalf("assignee after another reply %+v", assignee)
+	}
+
+	other := createTicket(t, e, ws, map[string]any{"channel": "email", "mailbox_id": mailbox.String(), "contact": map[string]string{"email": "customer@example.com"}})
+	runTriggers(t, e, ws.ID)
+	e.Do("PATCH", "/v1/tickets/"+other.ID.String(), ws.Agent.As(ws), map[string]any{"priority": "high"}).Want(t, 200)
+	runTriggers(t, e, ws.ID)
+	if got := getTicket(t, e, ws, other.ID); got.Assignee != nil || len(got.Tags) != 1 || got.Tags[0].Name != "flagged" {
+		t.Fatalf("updated ticket assignee %+v tags %+v", got.Assignee, got.Tags)
+	}
+	var runs []int64
+	e.Scalar(`SELECT array_agg(run_count ORDER BY position) FROM automations WHERE id = ANY($1)`, &runs, []uuid.UUID{take, flag})
+	if !slices.Equal(runs, []int64{1, 1}) {
+		t.Fatalf("run counts %v", runs)
+	}
+}
+
 func TestAutomationPhraseLists(t *testing.T) {
 	e, ws := newEnv(t)
 	// One automation for a list of notification phrases, as a rule brought from another helpdesk.

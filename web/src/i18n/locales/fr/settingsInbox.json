@@ -309,6 +309,7 @@
     "chooseTag": "Choisir une étiquette",
     "chooseTeammate": "Choisir un collègue",
     "chooseTeam": "Choisir une équipe",
+    "assignReplierHint": "Attribue le ticket à qui a écrit la réponse. Ajoutez la condition Responsable est Non attribué pour laisser les tickets déjà pris à leur responsable.",
     "markSpamHint": "Déplace le ticket dans les indésirables. Aucune réponse n’est envoyée.",
     "replyPlaceholder": "Merci de nous avoir écrit. Nous avons bien reçu votre message…",
     "notePlaceholder": "Note interne pour l’équipe",
@@ -350,7 +351,8 @@
     "received_at": "Adresse destinataire",
     "team_id": "Équipe",
     "brand_id": "Marque",
-    "widget_id": "Widget de chat"
+    "widget_id": "Widget de chat",
+    "assignee_id": "Responsable"
   },
   "ops": {
     "contains": "contient",
@@ -368,6 +370,7 @@
     "set_priority": "Définir la priorité sur",
     "set_severity": "Définir la gravité sur",
     "assign_user": "Attribuer à",
+    "assign_replier": "Attribuer à l’agent qui a répondu",
     "assign_team": "Attribuer à l’équipe",
     "add_tag": "Ajouter une étiquette",
     "remove_tag": "Retirer une étiquette",

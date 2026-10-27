@@ -686,6 +686,8 @@ export type ActionType =
   /** value: a Severity, or "" to clear. */
   | "set_severity"
   | "assign_user"
+  /** The agent who wrote the run's reply; skipped when there is none. */
+  | "assign_replier"
   | "assign_team"
   | "add_tag"
   | "remove_tag"
