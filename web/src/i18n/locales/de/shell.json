@@ -11,6 +11,8 @@
     "settings": "Einstellungen",
     "manageViews": "Ansichten verwalten",
     "createView": "Ansicht erstellen",
+    "viewSection": "Ansichten im Abschnitt {{name}}",
+    "viewSectionCurrent": "enthält die geöffnete Ansicht",
     "collapse": "Einklappen",
     "expand": "Seitenleiste ausklappen",
     "open": "Navigation öffnen",
@@ -156,8 +158,7 @@
     "openApi": "Über die API öffnen"
   },
   "connection": {
-    "lost": "Verbindung unterbrochen. Neue Verbindung wird aufgebaut, Änderungen werden danach synchronisiert.",
-    "back": "Wieder online"
+    "lost": "Verbindung unterbrochen. Neue Verbindung wird aufgebaut, Änderungen werden danach synchronisiert."
   },
   "desktop": {
     "switchServer": "Server wechseln",

@@ -566,7 +566,7 @@ export type TicketFilters = {
   /** Custom field filters, ANDed (max 20). */
   fields?: FieldFilter[];
 };
-export type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number; /** Shared with this team. */ team_id?: string | null; /** What the sidebar shows beside the name; none shows the layers icon. */ icon?: ViewIcon | null };
+export type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number; /** Shared with this team. */ team_id?: string | null; section?: string | null; /** What the sidebar shows beside the name; none shows the layers icon. */ icon?: ViewIcon | null };
 /** emoji: one emoji; icon: a name of the app's list (viewIcons.ts); text: one or two letters or digits. `color` tints an icon or text (a Tone), never an emoji. */
 export type ViewIcon = { kind: "emoji" | "icon" | "text"; value: string; color: string | null };
 export type SlaPolicy = {
@@ -1685,6 +1685,8 @@ export type AIConfig = {
   decisions?: DecisionEngine;
   /** LLM calls run on the workspace's own provider key and cost $0 (GET /v1/ai/provider). */
   own_key?: boolean;
+  /** Decisions run on the workspace's own TypeSafe or provider key and cost $0. */
+  decisions_own_key?: boolean;
 };
 
 // The workspace's AI provider (contracts/ai.md "Provider per workspace").
@@ -1711,6 +1713,23 @@ export type AIProvider = {
   /** Calls on the instance's provider are charged to the AI balance, in US dollars. */
   billing: boolean;
   key: AIProviderKey | null;
+  /** Where decisions run; missing on older servers. */
+  decisions?: AIDecisionsRoute;
+};
+/** Where the workspace's decisions (Jev) run, and its own TypeSafe key. */
+export type AIDecisionsRoute = {
+  runs_on: "instance" | "provider_key" | "typesafe_key" | "none";
+  engine: "jev" | "llm" | "none";
+  key: AIDecisionsKey | null;
+};
+/** A saved TypeSafe key, never the key itself. */
+export type AIDecisionsKey = {
+  last4: string;
+  status: AIKeyStatus;
+  status_at: string | null;
+  created_by: UserRef | null;
+  created_at: string;
+  updated_at: string;
 };
 export type AIProviderKeyInput = { kind: AIKeyKind; api_key: string; base_url?: string; model?: string; fast_model?: string };
 export type AIProviderTestReason = "invalid_key" | "no_funds" | "unreachable" | "busy" | "model_unavailable";
@@ -2262,7 +2281,46 @@ export type MailAccount = {
   oldest_message_at: string | null;
   /** IMAP: folders past the 30 the sync reads; 0 otherwise. */
   folders_left_out: number;
+  /** How its inbox is split into tabs (contracts/collab.md "Categories"). */
+  categories: MailAccountCategories;
 };
+
+/** One tab of an inbox (contracts/collab.md "Categories"). "primary" is always the first. */
+export type MailCategory = { key: string; name: string; description: string; color: MailColor };
+
+export type MailCategorySet = { enabled: boolean; categories: MailCategory[]; updated_at: string; updated_by: UserRef | null };
+
+/** GET /v1/collab/categories. */
+export type MailCategorySettings = {
+  /** The workspace's default; null when there is none. locked: members who are not admins cannot choose their own. */
+  workspace: (MailCategorySet & { locked: boolean }) | null;
+  /** Admins: every team with its own; others: their own teams'. The first in position order the owner is in decides. */
+  teams: (MailCategorySet & { team_id: string; team_name: string; position: number })[];
+  presets: MailCategory[];
+  /** ai: Ollie sorts new mail; rules: sender rules and headers only. */
+  sorting: "ai" | "rules";
+  /** Ollie can suggest categories. */
+  suggest: boolean;
+};
+
+export type MailAccountCategories = {
+  enabled: boolean;
+  /** What its inbox shows; [] when not split. */
+  categories: MailCategory[];
+  source: "account" | "team" | "workspace" | "none";
+  team: { id: string; name: string } | null;
+  /** The account's own choice. */
+  mode: "follow" | "custom" | "off";
+  /** Its own categories, kept while it follows. */
+  own: MailCategory[];
+  /** Ollie may sort its new mail. */
+  ai: boolean;
+  /** The caller cannot change mode or categories: the workspace locks them. */
+  locked: boolean;
+};
+
+/** A sender rule: mail from an address, or from "@domain", goes to a category. */
+export type MailCategoryRule = { id: string; sender: string; category: string; created_at: string };
 
 /** limited: at the workspace's Collab storage allowance (contracts/collab.md "Storage"). */
 export type MailHistoryStatus = "running" | "paused" | "limited" | "done" | "canceled" | "error";
@@ -2408,6 +2466,8 @@ export type MailThread = {
   comment_count: number;
   /** The account's address other than its own the conversation was written to or sent from (an alias); null when none. */
   to_address?: string | null;
+  /** Its category key (contracts/collab.md "Categories"); null when its account's inbox is not split. */
+  category?: string | null;
 };
 
 export type MailAttachment = {
@@ -2587,6 +2647,7 @@ export type MailThreadAction =
   | "spam"
   | "not_spam"
   | "move"
+  | "categorize"
   | "label"
   | "unlabel"
   | "done"
@@ -2601,6 +2662,8 @@ export type MailCounts = {
   addresses?: Record<string, Record<string, number>>;
   /** boxes.assigned by account; only accounts with some. */
   assigned: Record<string, number>;
+  /** By split account, then category key (primary included): unread conversations in its inbox; missing = 0. */
+  categories?: Record<string, Record<string, number>>;
 };
 
 /** `collab.changed` event data. */

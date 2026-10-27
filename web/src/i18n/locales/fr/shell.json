@@ -11,6 +11,8 @@
     "settings": "Paramètres",
     "manageViews": "Gérer les vues",
     "createView": "Créer une vue",
+    "viewSection": "Vues de la section {{name}}",
+    "viewSectionCurrent": "contient la vue ouverte",
     "collapse": "Réduire",
     "expand": "Développer la barre latérale",
     "open": "Ouvrir la navigation",
@@ -161,8 +163,7 @@
     "openApi": "Ouvrir sur l’API"
   },
   "connection": {
-    "lost": "Connexion perdue. Reconnexion en cours ; les modifications seront synchronisées au retour de la connexion.",
-    "back": "Connexion rétablie"
+    "lost": "Connexion perdue. Reconnexion en cours ; les modifications seront synchronisées au retour de la connexion."
   },
   "desktop": {
     "switchServer": "Changer de serveur",

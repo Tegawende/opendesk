@@ -20,6 +20,7 @@ type View = {
   name: string;
   shared: boolean;
   position: number;
+  section: string | null; // sidebar heading, at most 60 characters
   icon: {
     kind: "emoji" | "icon" | "text";
     value: string; // the emoji, the icon's name, or one or two letters or digits
@@ -50,6 +51,8 @@ curl https://api.opendesk.sh/v1/views \
   -H "Content-Type: application/json" \
   -d '{ "name": "Urgent, unassigned", "shared": true, "filters": { "status": ["open"], "priority": ["urgent"], "assignee": "none" } }'
 ```
+
+`section` groups views under a sidebar heading, matched without regard to case. Spaces collapse; `null` or blank removes the section. A `PATCH` without `section` keeps it.
 
 List tickets in a view with `GET /v1/tickets?view_id=<id>`.
 

@@ -11,6 +11,8 @@
     "settings": "Settings",
     "manageViews": "Manage views",
     "createView": "Create a view",
+    "viewSection": "Views in {{name}}",
+    "viewSectionCurrent": "contains the open view",
     "collapse": "Collapse",
     "expand": "Expand sidebar",
     "open": "Open navigation",
@@ -156,8 +158,7 @@
     "openApi": "Open it on the API"
   },
   "connection": {
-    "lost": "Connection lost. Reconnecting, changes will sync when it is back.",
-    "back": "Back online"
+    "lost": "Connection lost. Reconnecting, changes will sync when it is back."
   },
   "desktop": {
     "switchServer": "Switch server",

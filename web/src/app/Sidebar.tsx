@@ -3,12 +3,13 @@
 // icon-only rail (`b` or the Collapse row) that keeps every row reachable.
 
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, EyeOff, Inbox, Keyboard, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Fragment, lazy, Suspense, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { ChecklistMini } from "@/components/onboarding/Checklist";
+import { ChecklistMini, ProgressRing, stepsLeft } from "@/components/onboarding/Checklist";
 import { useUrgentChats, useWaitingFor } from "@/components/tickets/useUrgentChats";
 import { useNow } from "@/lib/useNow";
 import { formatWait, urgentWash } from "@/components/tickets/waiting";
@@ -21,7 +22,8 @@ import { Picker } from "@/components/ui/picker";
 import { sortTeams, TeamDot, useTeamsCtx } from "@/components/tickets/teams";
 import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { useHotkeys } from "@/lib/hotkeys";
-import type { Team, TicketCounts } from "@/lib/api/types";
+import { dur, ease } from "@/lib/motion";
+import type { Team, TicketCounts, View } from "@/lib/api/types";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 import { folders, type FolderId } from "@/lib/folders";
@@ -31,6 +33,7 @@ import { q } from "@/lib/queries";
 import { atLeast, loadAccounts, useRole, useSession, useWorkspace } from "@/lib/session";
 import { useTheme, type ThemePref } from "@/lib/theme";
 import { desktop } from "@/lib/desktop";
+import { groupViews, readFolded, writeFolded } from "@/lib/viewSections";
 import { shell, toggleNav, useNav } from "./shellStore";
 import { quickEntries, quickSwitchKeys, useAccountActions, useQuickSwitch, useSwitcherEntries } from "./useAccounts";
 import { Count, Label, NavTip, PillCtx, rowActive, rowBase, rowIdle, rowShape, Section, WaitDot, WaitingBadge, withPill } from "./sidebarParts";
@@ -295,6 +298,75 @@ function TeamsSection({ rail, drawer, first, counts, hidden = NONE, rp }: { rail
   );
 }
 
+/**
+ * The views, those of a section under a row that folds them (lib/viewSections). The fold is
+ * the member's, kept in this browser per workspace; folded, the row shows what its views
+ * would. The rail shows every view, a hairline above each section.
+ */
+function ViewList({ views, rail, row, count, waiting }: {
+  views: View[];
+  rail: boolean;
+  row: (v: View, nested: boolean) => ReactNode;
+  /** The number a view's row shows. */
+  count: (v: View) => number | undefined;
+  /** Visitors waiting in chat on a view's tickets. */
+  waiting: (v: View) => number;
+}) {
+  const { t } = useTranslation("shell");
+  const wid = useSession((s) => s.workspaceId) ?? "";
+  const uid = useSession((s) => s.user?.id) ?? "";
+  const owner = `${wid}:${uid}`;
+  const [folded, setFolded] = useState(() => readFolded(wid, uid));
+  const [foldedFor, setFoldedFor] = useState(owner);
+  if (foldedFor !== owner) {
+    setFoldedFor(owner);
+    setFolded(readFolded(wid, uid));
+  }
+  // The open view, so a folded section that holds it reads as current.
+  const openView = useRouterState({ select: (s) => { const p = s.location.pathname.split("/").filter(Boolean); return p[0] === "views" ? p[1] : undefined; } });
+  const idBase = useId();
+  const toggle = (key: string) => {
+    const next = new Set(folded);
+    if (!next.delete(key)) next.add(key);
+    setFolded(next);
+    writeFolded(wid, uid, next);
+  };
+  return groupViews(views).map((e, i) => {
+    if (e.kind === "view") return <Fragment key={e.view.id}>{row(e.view, false)}</Fragment>;
+    const shut = folded.has(e.key) && !rail;
+    const nums = e.views.map(count).filter((n): n is number => n !== undefined);
+    const sum = nums.length ? nums.reduce((a, b) => a + b, 0) : undefined;
+    const current = shut && e.views.some((v) => v.id === openView);
+    const listId = `${idBase}-section-${i}`;
+    return (
+      <div key={`section:${e.key}`} role="group" aria-label={t("nav.viewSection", { name: e.name })} className="flex flex-col gap-px">
+        {rail ? (
+          i > 0 && <div aria-hidden className="mx-4 my-1 h-px bg-chrome-line" />
+        ) : (
+          <button
+            type="button"
+            aria-expanded={!shut}
+            aria-controls={listId}
+            onClick={() => toggle(e.key)}
+            title={e.name}
+            className={cn(rowBase, rowShape(rail), rowIdle, current && "font-medium text-fg")}
+          >
+            <ChevronRight className={cn("transition-transform duration-150 motion-reduce:transition-none", !shut && "rotate-90")} />
+            <Label rail={rail}>{e.name}</Label>
+            {current && <span className="sr-only">{t("nav.viewSectionCurrent")}</span>}
+            {/* Folded away: what its views would show, here. */}
+            {shut && <WaitingBadge n={e.views.reduce((a, v) => a + waiting(v), 0)} rail={rail} />}
+            {shut && <Count n={sum} rail={rail} />}
+          </button>
+        )}
+        <div id={listId} className="flex flex-col gap-px">
+          {!shut && e.views.map((v) => <Fragment key={v.id}>{row(v, !rail)}</Fragment>)}
+        </div>
+      </div>
+    );
+  });
+}
+
 const NONE: ReadonlySet<string> = new Set();
 /** The ticket sections, top to bottom, as they read without Collab. */
 const CLASSIC: SidebarSectionId[] = ["inbox", "teams", "views", "workspace"];
@@ -380,13 +452,15 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
           }
         >
           {views?.length ? (
-            views
-              .filter((v) => !hidden.has(hid.view(v.id)))
-              .sort((a, b) => a.position - b.position)
-              .map((v) => {
+            <ViewList
+              views={views.filter((v) => !hidden.has(hid.view(v.id)))}
+              rail={rail}
+              count={(v) => shown(hid.view(v.id), "views", ticketRowNumbers(counts, hid.view(v.id)))}
+              waiting={(v) => waitingFor({ kind: "view", id: v.id })}
+              row={(v, nested) => {
                 const nums = ticketRowNumbers(counts, hid.view(v.id));
                 return (
-                <NavTip key={v.id} rail={rail} label={viewName(v)}>
+                <NavTip rail={rail} label={viewName(v)}>
                   <RowMenu
                     enabled={collab.enabled}
                     prefs={prefs}
@@ -399,7 +473,7 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                   <Link
                     to="/views/$viewId/{-$ticketId}"
                     params={{ viewId: v.id, ticketId: undefined }}
-                    className={cn(rowBase, rowShape(rail), rowIdle)}
+                    className={cn(rowBase, rowShape(rail), rowIdle, nested && "pl-[22px]")}
                     activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
                     aria-label={rail ? viewName(v) : undefined}
                   >{withPill(<>
@@ -411,7 +485,8 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                   </RowMenu>
                 </NavTip>
                 );
-              })
+              }}
+            />
           ) : (
             <NavTip rail={rail} label={t("nav.createView")}>
               <Link to="/settings/views" className={cn(rowBase, rowShape(rail), rowIdle, "text-fg-3")}>
@@ -482,6 +557,7 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
   const order = collab.enabled ? visibleSections(prefs) : CLASSIC;
   // Spaces (contracts/spaces.md): a picked Space is the sidebar; otherwise the workspace's own.
   const uid = useSession((s) => s.user?.id ?? "");
+  const wid = useSession((s) => s.workspaceId);
   const { spaces, fresh, isError } = useSpaces();
   const pickedId = usePickedSpaceId();
   const space = pickedSpace(spaces, pickedId);
@@ -504,7 +580,8 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
         )}
       </div>
       <div className="flex shrink-0 flex-col gap-px py-1.5">
-        <SetupChecklist rail={rail} />
+        {/* Per workspace: one finished elsewhere never celebrates on switching to it. */}
+        <SetupChecklist key={wid} rail={rail} />
         <NavTip rail={rail} label={t("nav.settings")}>
           <Link to="/settings" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.settings") : undefined}>{withPill(<>
             <Settings />
@@ -697,25 +774,68 @@ export function ThemeSwitch() {
   );
 }
 
-/** The onboarding checklist, above Settings until it is dismissed. */
+/** How long "You're all set" stays after the last step before the entry folds away. */
+const ALL_SET_MS = 3500;
+
+/**
+ * The onboarding checklist, above Settings while something is left that the viewer can do
+ * and until it is dismissed. Finishing the last step shows "You're all set" for a moment,
+ * then the entry folds away; once done, it is not shown again.
+ */
 function SetupChecklist({ rail }: { rail: boolean }) {
   const { t } = useTranslation("setup");
   const { data } = useQuery(q.onboarding());
   const dismiss = useDismissOnboarding();
   const ai = useAI();
-  const role = useRole();
-  if (!data || data.dismissed || !data.steps.length) return null;
+  const isAdmin = atLeast(useRole(), "admin");
+  const reduce = useReducedMotion();
+  const unavailable = ai.enabled ? undefined : { try_ollie: t("checklist.needs_ai"), setup_ai_agent: t("checklist.needs_ai") };
+  const left = data && !data.dismissed && data.steps.length ? stepsLeft(data, { isAdmin, unavailable }) : 0;
+  // Seen open in this session: finishing it now earns the moment; a checklist done before is simply gone.
+  const seenOpen = useRef(false);
+  const [allSet, setAllSet] = useState(false);
+  useEffect(() => {
+    if (left > 0) {
+      seenOpen.current = true;
+      return;
+    }
+    if (!seenOpen.current || !data || data.dismissed) return;
+    seenOpen.current = false;
+    setAllSet(true);
+    const id = window.setTimeout(() => setAllSet(false), ALL_SET_MS);
+    return () => window.clearTimeout(id);
+  }, [left, data]);
+
+  const show = !!data && (left > 0 || allSet);
   return (
-    <div className={rail ? "mx-3" : "mx-2.5"}>
-      <ChecklistMini
-        collapsed={rail}
-        data={data}
-        isAdmin={atLeast(role, "admin")}
-        unavailable={ai.enabled ? undefined : { try_ollie: t("checklist.needs_ai"), setup_ai_agent: t("checklist.needs_ai") }}
-        onDismiss={() => dismiss.mutateAsync()}
-        triggerClassName={cn("h-7 hover:bg-chrome-hover data-[state=open]:bg-chrome-hover", rail && "h-8")}
-      />
-    </div>
+    <AnimatePresence initial={false}>
+      {show && (
+        <motion.div
+          key="setup"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={reduce ? { duration: 0 } : { duration: dur.slow, ease: ease.out }}
+          className={cn("overflow-hidden", rail ? "mx-3" : "mx-2.5")}
+        >
+          {left > 0 ? (
+            <ChecklistMini
+              collapsed={rail}
+              data={data}
+              isAdmin={isAdmin}
+              unavailable={unavailable}
+              onDismiss={() => dismiss.mutateAsync()}
+              triggerClassName={cn("h-7 hover:bg-chrome-hover data-[state=open]:bg-chrome-hover", rail && "h-8")}
+            />
+          ) : (
+            <div role="status" aria-label={t("checklist.done_title")} className={cn("flex items-center gap-2 text-[12.5px] font-medium text-fg-2", rail ? "h-8 w-8 justify-center" : "h-7 px-2")}>
+              <ProgressRing value={1} />
+              {!rail && <span className="truncate">{t("checklist.done_title")}</span>}
+            </div>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
