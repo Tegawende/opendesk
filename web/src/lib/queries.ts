@@ -4,7 +4,7 @@
 
 import { infiniteQueryOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import { scopeWorkspace } from "./api/client";
-import { api, rows, type ChangelogListQuery, type CollabThreadQuery, type TicketListQuery } from "./api/endpoints";
+import { api, rows, type ChangelogListQuery, type CollabThreadQuery, type TicketListQuery, type TicketSummaryQuery } from "./api/endpoints";
 import type { Page, ReportsQuery, ReportsRange, SpacesResponse } from "./api/types";
 import { normalizeSpace, normalizeSpaces } from "./spaces/model";
 
@@ -68,6 +68,8 @@ export const qk = {
     return w(["tickets", "list"] as const);
   },
   tickets: (q: TicketListQuery) => w(["tickets", "list", q] as const),
+  /** Under counts: whatever refreshes the sidebar's numbers refreshes a list's summary too. */
+  ticketSummary: (q: TicketSummaryQuery) => w(["tickets", "counts", "summary", q] as const),
   ticket: (id: string) => w(["tickets", "detail", id] as const),
   messages: (id: string) => w(["tickets", "messages", id] as const),
   activities: (id: string) => w(["tickets", "activities", id] as const),
@@ -218,6 +220,7 @@ export const qk = {
   wikiRevision: (id: string, rid: string) => w(["wiki", "revision", id, rid] as const),
   wikiSearch: (q: string) => w(["wiki", "search", q] as const),
   reports: (r: ReportsQuery) => w(["reports", r] as const),
+  reportAgents: (r: ReportsQuery) => w(["reports", "agents", r] as const),
   get widgetSettings() {
     return w(["widget-settings"] as const);
   },
@@ -353,6 +356,7 @@ export const q = {
   workspace: () => queryOptions({ queryKey: qk.workspace, queryFn: api.workspaces.current }),
   sessions: () => list(qk.sessions, api.me.sessions),
   counts: () => queryOptions({ queryKey: qk.counts, queryFn: api.tickets.counts, staleTime: 30_000 }),
+  ticketSummary: (query: TicketSummaryQuery) => queryOptions({ queryKey: qk.ticketSummary(query), queryFn: () => api.tickets.summary(query), staleTime: 15_000 }),
   tickets: (query: TicketListQuery) =>
     infiniteQueryOptions({
       queryKey: qk.tickets(query),
@@ -466,6 +470,7 @@ export const q = {
   search: (term: string) =>
     queryOptions({ queryKey: qk.search(term), queryFn: () => api.search(term), enabled: term.trim().length > 1, staleTime: 10_000 }),
   reports: (r: ReportsQuery) => queryOptions({ queryKey: qk.reports(r), queryFn: () => api.reports.overview(r) }),
+  reportAgents: (r: ReportsQuery) => queryOptions({ queryKey: qk.reportAgents(r), queryFn: () => api.reports.agents(r) }),
   billing: () => queryOptions({ queryKey: qk.billing, queryFn: api.billing.get, staleTime: 60_000 }),
   billingUsage: (r: { from: string; to: string }) => queryOptions({ queryKey: qk.billingUsage(r), queryFn: () => api.billing.usage(r) }),
   billingInvoices: () => queryOptions({ queryKey: qk.billingInvoices, queryFn: async () => (await api.billing.invoices()).data, staleTime: 30_000 }),

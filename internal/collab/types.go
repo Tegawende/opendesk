@@ -263,6 +263,9 @@ type MailMessage struct {
 	SentBy      *domain.UserRef  `json:"sent_by"`
 	// DraftID is set on drafts: the id the /v1/collab/drafts routes take.
 	DraftID *uuid.UUID `json:"draft_id"`
+	// DraftedByAI is, on a draft an AI client saved, the client's name ("Draft by <name>");
+	// null on anything a person wrote or saved last.
+	DraftedByAI *string `json:"drafted_by_ai"`
 	// InReplyToID is the message of the conversation this one answers (its In-Reply-To), when stored.
 	InReplyToID *uuid.UUID `json:"in_reply_to_id"`
 	// OwnAddress is the account's address (its own or another) the message was sent from
@@ -367,4 +370,7 @@ type SidebarPrefs struct {
 	Badges map[string]string `json:"badges" required:"false" doc:"Left out: the saved value stays"`
 	// MailTabs is the mail page's folder bar, in order: box names and "folder:<id>".
 	MailTabs []string `json:"mail_tabs" required:"false" maxItems:"30" doc:"Left out: the saved value stays"`
+	// AutoPins are the pins the sidebar added once by itself ("box:inbox": All inboxes, when
+	// the member first sees two accounts), so one unpinned is not added again.
+	AutoPins []string `json:"auto_pins" required:"false" maxItems:"20" doc:"Left out: the saved value stays"`
 }

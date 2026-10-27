@@ -26,6 +26,8 @@ regexes = [
   # secret, and the placeholder key in a demo help article's curl example.
   '''JBSWY3DPEHPK3PXPMZXW6YTB''',
   '''mgn_live_\.\.\.''',
+  # A column of the agent work report sorted by its field name (web/src/components/reports/AgentWork.tsx).
+  '''handle_p50_minutes''',
 ]
 paths = [
   '''internal/auth/passwords/breached\.txt''',

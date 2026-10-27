@@ -630,6 +630,16 @@ func TestOAuthScopesFollowRoleAndGrant(t *testing.T) {
 	}
 }
 
+// collab:draft is an API key scope for now (contracts/collab.md "AI drafts"): an OAuth
+// client that asks for it is not granted it and gets no Collab tools.
+func TestOAuthNoCollabDraft(t *testing.T) {
+	e := newEnv(t)
+	_, ct := e.connectAs(e.WS.Agent, "collab:draft tickets:read")
+	if got := toolNames(t, e.session(ct.AccessToken)); slices.Contains(got, "list_collab_conversations") || strings.Contains(ct.Scope, "collab") {
+		t.Fatalf("collab:draft over OAuth: %q %v", ct.Scope, got)
+	}
+}
+
 // redirect_uri at the token endpoint is required exactly when the authorization request
 // named it (RFC 6749 section 4.1.3).
 func TestOAuthRedirectURIOptional(t *testing.T) {
