@@ -136,7 +136,7 @@ A `POST`, signed like webhook deliveries (`OD-Signature: t=<unix>,v1=<hex>`, the
                "emails": ["ada@example.com"], "phone": "+32 470 12 34 56" } }
 ```
 
-`references` holds at most ten numbers, `phone` is there when the contact has one, and `refresh` is true when an agent clicked the refresh button. A new or deleted message shows in them on the next open; a changed phone or an edited note within a minute, or at once on refresh. opendesk only ever adds fields, so ignore the ones you don't use.
+`references` holds at most ten numbers, `phone` is there when the contact has one, and `refresh` is true when an agent clicked the refresh button. A new or deleted message shows in them on the next open; a changed phone or an edited note within a minute, or at once on refresh. A workspace's panels read tickets at most 60 times a minute together; past that a panel says so until the minute ends, and a ticket it already read still shows. opendesk only ever adds fields, so ignore the ones you don't use.
 
 ### What it answers
 

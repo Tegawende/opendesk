@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
 	"github.com/useopendesk/opendesk/internal/netsafe"
 )
 
@@ -594,5 +595,117 @@ func TestTicketReadingIsKept(t *testing.T) {
 	after = ticket()
 	if got := shown(s.read(e.Ctx, x, after, false)); got != "#1001 #1003 #1002 | "+contactEmail+" ada.work@example.com" || !after.UpdatedAt.After(before.UpdatedAt) {
 		t.Fatalf("after an incoming message = %q, updated_at %v then %v", got, before.UpdatedAt, after.UpdatedAt)
+	}
+}
+
+// TestTicketReadingsShareTheWorkspaceBudget: a workspace's http panels read tickets
+// readingsPerMinute times a minute together, whichever panel reads and whether a refresh, a new
+// ticket or a new version of one asks. Past them a reading is refused before the database is
+// read; a kept reading still answers, and asks the URL again when its answer is not kept. Another
+// workspace reads on.
+func TestTicketReadingsShareTheWorkspaceBudget(t *testing.T) {
+	e, ws := apiEnv(t)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var req lookupRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		text := strings.Join(req.Ticket.References, " ")
+		_ = json.NewEncoder(w).Encode(map[string]any{"version": 2, "cache_seconds": 0, "blocks": []any{map[string]any{"type": "note", "text": text}}})
+	}))
+	defer srv.Close()
+	newPanel := func(ws hdtest.WS) *row {
+		var created struct {
+			Panel Panel `json:"panel"`
+		}
+		e.Do("POST", "/v1/ticket-panels", ws.Admin.As(ws), map[string]any{"kind": "http", "url": srv.URL + "/panel"}).Want(t, 201).JSON(t, &created)
+		x, err := loadRow(e.Ctx, e.D.DB.Pool, ws.ID, created.Panel.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return x
+	}
+	openTicket := func(ws hdtest.WS) func() *domain.Ticket {
+		var tk struct {
+			ID uuid.UUID `json:"id"`
+		}
+		e.Do("POST", "/v1/tickets", ws.Agent.As(ws), map[string]any{"subject": "Order #1001", "contact": map[string]any{"email": "ada@example.com"}, "body_html": "<p>Hi</p>"}).Want(t, 201).JSON(t, &tk)
+		return func() *domain.Ticket {
+			tt, err := domain.LoadTicket(e.Ctx, e.D.DB.Pool, ws.ID, tk.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return &tt
+		}
+	}
+	shown := func(d Data) string {
+		if d.State != "ok" || len(d.Blocks) != 1 {
+			return d.State + ": " + d.Message
+		}
+		return d.Blocks[0].Text
+	}
+	s := For(e.D)
+	cancelled, cancel := context.WithCancel(e.Ctx)
+	cancel()
+	const refused = "error: Too many lookups. Try again in a minute."
+
+	// Three panels, each far below its own lookups, spend the workspace's readings: a viewer's
+	// refreshes of one ticket through the API, after each panel's first reading.
+	panels := []*row{newPanel(ws), newPanel(ws), newPanel(ws)}
+	ticket := openTicket(ws)
+	viewer := ws.Viewer.As(ws)
+	path := func(x *row) string { return "/v1/tickets/" + ticket().ID.String() + "/panels/" + x.ID.String() }
+	for i := range readingsPerMinute {
+		x, q := panels[i%len(panels)], "?refresh=true"
+		if i < len(panels) {
+			q = ""
+		}
+		if got := shown(readPanel(t, e, path(x)+q, viewer)); got != "#1001" {
+			t.Fatalf("reading %d = %q", i+1, got)
+		}
+	}
+	if calls.Load() != readingsPerMinute {
+		t.Fatalf("%d calls for %d readings", calls.Load(), readingsPerMinute)
+	}
+
+	// None left: a refresh, another panel and a new ticket are refused before the database is
+	// read (a cancelled context would answer "Couldn't read the ticket."), on any panel.
+	if got := shown(readPanel(t, e, path(panels[0])+"?refresh=true", viewer)); got != refused {
+		t.Fatalf("a refresh past the workspace's readings = %q", got)
+	}
+	other := openTicket(ws)
+	for _, read := range []struct {
+		name string
+		x    *row
+		t    *domain.Ticket
+		r    bool
+	}{{"a refresh", panels[1], ticket(), true}, {"a new panel", newPanel(ws), ticket(), false}, {"a new ticket", panels[2], other(), false}} {
+		if got := shown(s.read(cancelled, read.x, read.t, read.r)); got != refused {
+			t.Fatalf("%s past the workspace's readings = %q", read.name, got)
+		}
+	}
+	// A kept reading still answers, and asks the URL again with the panel's lookup alone (the
+	// answer is not kept): a new reading would be refused.
+	before := calls.Load()
+	for _, x := range panels {
+		if got := shown(s.read(e.Ctx, x, ticket(), false)); got != "#1001" {
+			t.Fatalf("a kept reading = %q", got)
+		}
+	}
+	if calls.Load() != before+int32(len(panels)) {
+		t.Fatalf("kept readings made %d calls", calls.Load()-before)
+	}
+	// A new version of the ticket is refused before the database too.
+	e.Do("POST", "/v1/tickets/"+ticket().ID.String()+"/messages", ws.Agent.As(ws), map[string]any{"kind": "note", "body_html": "<p>See #1002</p>"}).Want(t, 201)
+	for _, ctx := range []context.Context{cancelled, e.Ctx} {
+		if got := shown(s.read(ctx, panels[0], ticket(), false)); got != refused {
+			t.Fatalf("a new version past the workspace's readings = %q", got)
+		}
+	}
+
+	// Another workspace's panels read on.
+	ws2 := e.NewWorkspace()
+	if got := shown(s.read(e.Ctx, newPanel(ws2), openTicket(ws2)(), true)); got != "#1001" {
+		t.Fatalf("another workspace = %q", got)
 	}
 }

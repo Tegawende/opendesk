@@ -125,7 +125,8 @@ func subjectOf(t *domain.Ticket) subject {
 // read answers the panel for the ticket: from the cache when it answered in the last
 // minute (a failure, the last 15 seconds; an http answer may choose its own time), else from
 // the product, within fetchTimeout. A panel makes lookupsPerMinute lookups at most, and an http
-// panel's reading of the ticket (kept per ticket version) counts as the lookup it leads to.
+// panel's reading of the ticket (kept per ticket version) counts as the lookup it leads to. A
+// workspace's http panels make readingsPerMinute readings at most, together.
 func (s *Service) read(ctx context.Context, x *row, t *domain.Ticket, refresh bool) Data {
 	sub := subjectOf(t)
 	sub.Refresh = refresh
@@ -145,14 +146,15 @@ func (s *Service) read(ctx context.Context, x *row, t *domain.Ticket, refresh bo
 	if x.Kind == KindHTTP {
 		// The URL is told the ticket too, so its answer may differ per ticket, and a new
 		// reference in it asks again. A reading of the ticket the cache does not keep takes the
-		// panel's lookup before it starts, so readings are bounded like lookups.
+		// panel's lookup and one of the workspace's readings before it starts, so a workspace's
+		// readings are bounded whatever its panels and credentials.
 		ck := contextKey{panel: x.ID, version: x.UpdatedAt.UnixNano(), ticket: t.ID, ticketVersion: t.UpdatedAt.UnixNano(), email: sub.Email}
 		if sub.ContactID != nil {
 			ck.contact = *sub.ContactID
 		}
 		c, ok := s.contexts.get(ck)
 		if refresh || !ok {
-			if !allow() {
+			if !allow() || !s.d.Limiter.Allow("ticket-panel:read:"+x.WorkspaceID.String(), readingsPerMinute, time.Minute) {
 				base.State, base.Message = "error", "Too many lookups. Try again in a minute."
 				return base
 			}

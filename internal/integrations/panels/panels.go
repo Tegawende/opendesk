@@ -56,6 +56,9 @@ const (
 	errTTL   = 15 * time.Second
 	// lookupsPerMinute bounds the lookups one panel makes that the cache did not answer.
 	lookupsPerMinute = 120
+	// readingsPerMinute bounds the readings of tickets a workspace's http panels make together
+	// that the cache did not keep, in each API process.
+	readingsPerMinute = 60
 )
 
 // Panel is a workspace's ticket panel as the API shows it. The token or signing secret
