@@ -694,12 +694,19 @@ export type ActionType =
   | "send_reply"
   | "add_note"
   | "mark_spam"
+  /** Soft-deletes the ticket; later steps and automations skip it. */
+  | "delete_ticket"
+  /** ticket_created only. value: the window in days, "1".."30"; same_subject (default true). */
+  | "merge_into_open_ticket"
   | "ai_triage"
   /** value: a mailbox id of the ticket's brand (contracts/api.md). */
   | "set_reply_address"
   | "set_field";
-/** set_field: `field` is the ticket field key, `value` its string form ("12.5", "true", "2026-10-11", "a,b"; "" clears). */
-export type Action = { type: ActionType; value: string; field?: string };
+/**
+ * set_field: `field` is the ticket field key, `value` its string form ("12.5", "true", "2026-10-11", "a,b"; "" clears).
+ * merge_into_open_ticket: `same_subject` merges only into a ticket with the same subject (contracts/api.md).
+ */
+export type Action = { type: ActionType; value: string; field?: string; same_subject?: boolean };
 export type Automation = {
   id: string;
   name: string;
@@ -1247,6 +1254,12 @@ export type TicketCounts = {
 /** A sidebar row's tickets awaiting a reply (the customer wrote last), urgent, and overdue. */
 export type TicketStats = { awaiting: number; urgent: number; overdue: number };
 
+/**
+ * A whole ticket list, every page of it (GET /v1/tickets/summary). `complete` is false, with
+ * every count 0, when the server did not count it: too many tickets match, or it is a search.
+ */
+export type TicketListSummary = TicketStats & { complete: boolean; total: number; due_soon: number };
+
 /** `wiki_pages` is left out by servers without the wiki and for callers without `wiki:read`. */
 export type SearchResults = { tickets: Ticket[]; contacts: Contact[]; articles: KbArticle[]; wiki_pages?: WikiSearchHit[] };
 
@@ -1326,6 +1339,29 @@ export type ReportsOverview = {
 };
 /** One team's or brand's row of the overview. */
 export type ReportsGroup = { created: number; solved: number; open_now: number; first_response_p50_minutes: number | null };
+
+/** One member's row of GET /v1/reports/agents (contracts/api.md "Agents report"). */
+export type ReportsAgentRow = {
+  user: UserRef;
+  /** Tickets assigned to them in the range, or created in it assigned to them. */
+  assigned: number;
+  /** Tickets solved in the range that are assigned to them. */
+  solved: number;
+  /** Public replies they sent in the range. */
+  replies: number;
+  /** Internal notes they wrote in the range. */
+  notes: number;
+  /** Their public replies on the tickets they solved, per ticket. */
+  replies_per_solved: number | null;
+  first_response_p50_minutes: number | null;
+  /** Median time from the last assignment to them until solved. */
+  handle_p50_minutes: number | null;
+  /** Time in the app with availability online; null when `online_time` is none. */
+  online_minutes: number | null;
+};
+/** Whose rows and online time the caller sees: everyone's (admins), their own row only, or every row without online time (API keys). */
+export type ReportsOnlineTime = "all" | "self" | "none";
+export type ReportsAgents = { data: ReportsAgentRow[]; online_time: ReportsOnlineTime };
 
 export type MailboxTestLeg = { ok: boolean; error: string; /** The server's reply, scrubbed. */ detail?: string };
 /** GET /v1/mailboxes/{id}/usage: the tickets that reply from a mailbox, before removing it. */
@@ -2516,6 +2552,8 @@ export type MailMessage = {
   sent_by: UserRef | null;
   /** Drafts: the id the /v1/collab/drafts routes take. */
   draft_id?: string | null;
+  /** Drafts an AI key saved and no person has saved since: the key's name, shown "AI draft by" (contracts/collab.md "AI drafts"). */
+  drafted_by_ai?: string | null;
   /** The message of the conversation it answers (its In-Reply-To), when stored. */
   in_reply_to_id?: string | null;
   /** The account's address (its own or an alias) it was sent from or written to; null when none. */

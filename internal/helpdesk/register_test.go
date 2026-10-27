@@ -24,6 +24,7 @@ func TestRegisterAll(t *testing.T) {
 	want := map[string][]string{
 		"/v1/tickets":                      {"get", "post"},
 		"/v1/tickets/counts":               {"get"},
+		"/v1/tickets/summary":              {"get"},
 		"/v1/tickets/{id}":                 {"get", "patch", "delete"},
 		"/v1/tickets/bulk":                 {"post"},
 		"/v1/tickets/{id}/merge":           {"post"},
@@ -56,6 +57,7 @@ func TestRegisterAll(t *testing.T) {
 		"/v1/wiki/search":                  {"get"},
 		"/v1/search":                       {"get"},
 		"/v1/reports/overview":             {"get"},
+		"/v1/reports/agents":               {"get"},
 		"/v1/attachments":                  {"post"},
 		"/v1/public/help/{workspace_slug}": {"get"},
 		"/v1/public/help/{workspace_slug}/collections/{slug}": {"get"},

@@ -7,7 +7,7 @@ mail from the address, with each change made at the provider too. An account is 
 (only the person who connected it sees it) or **shared** (with the whole workspace, or with teams
 and people). Any single conversation can be shared on its own, assigned and discussed in
 comments, so a teammate can help with one email without seeing the rest of the account. Each
-member arranges their own sidebar.
+member arranges their own sidebar, with or without Collab (`SidebarPrefs`).
 
 Collab is the `collab` plan's (contracts/billing.md "Collab"). It is not a ticket feature: a
 mail account is not a helpdesk mailbox (contracts/api.md "Mailboxes"), its mail never becomes
@@ -25,8 +25,8 @@ reading the inbox directly with its OAuth clients, or generic IMAP ("Providers a
 | billing off (self-hosted) | on for every workspace while the instance has `COLLAB` on (default on) |
 | billing on (opendesk Cloud) | on while the workspace is on the `collab` plan (a paid subscription), or has complimentary Collab access from an instance admin that has not ended (contracts/admin.md "Collab access") |
 
-Without it every `/v1/collab/*` route except `GET /v1/collab` answers `402 collab_required`
-("Collab is not on this workspace's plan."). Accounts connected while it was on are kept as they
+Without it every `/v1/collab/*` route except `GET /v1/collab` and the sidebar
+(`/v1/collab/sidebar`) answers `402 collab_required` ("Collab is not on this workspace's plan."). Accounts connected while it was on are kept as they
 are and stop syncing; nothing is deleted. Turning it back on resumes them.
 
 ## Providers and scopes
@@ -406,9 +406,9 @@ Ollie off for an account they manage (`ai: false`) whatever the workspace locks.
 - A member removed from the workspace, or a deleted user, loses their accounts: private accounts
   are deleted with their mail (the job `collab.cleanup`), shared ones are kept with `owner: null`
   for admins to manage or disconnect.
-- API keys and AI clients over MCP have no access to Collab: every route needs a user session.
-  Ollie has none either: every request it makes for a user carries `ViaAssistant` (reads
-  included), and Collab refuses it.
+- API keys have no access to Collab but "AI drafts" below, and OAuth clients over MCP none: every
+  other route needs a user session. Ollie has none either: every request it makes for a user
+  carries `ViaAssistant` (reads included), and Collab refuses it.
 - The one exception is the owner's own consent: a member may let teammates' Ollie ask theirs
   about their **own** accounts (contracts/ai.md "Asking a teammate"). It is off until the
   workspace allows it and the member opts in, account by account (verbatim, summaries only or
@@ -416,6 +416,34 @@ Ollie off for an account they manage (`ai: false`) whatever the workspace locks.
   owner's Ollie under the owner's rules, never mail, ids, addresses, links or attachments. Mail
   the owner sees only through someone else's share is never used. Admins cannot read or change
   anyone's choices.
+
+### AI drafts
+
+Any AI client, whatever model runs it (local or hosted), may draft replies for a person to send
+(GH#176). opendesk enforces the boundary; it never runs or meters the client's model.
+
+- **Credential**: an API key with `collab:draft` (no preset includes it; it is chosen by hand). The
+  key acts as the member who created it (`api_keys.created_by`), with their role and suspension
+  checked on every request: it sees exactly the conversations that member sees ("Who sees what"),
+  reads but cannot draft while they are a viewer, and stops working (`403`) the moment they leave
+  the workspace or are suspended. Revoking the key ends it at once. OAuth clients cannot hold
+  `collab:draft` yet; they may later, on the same rules.
+- **Routes it may call**: `GET /v1/collab/threads`, `GET /v1/collab/threads/{id}` (messages and the
+  team's internal comments), `POST /v1/collab/drafts` (mode `reply` or `reply_all`, no
+  `attachment_ids` or `forward_attachments`) and `PUT /v1/collab/drafts/{id}` for a draft it saved
+  that nobody has saved since (`403 ai_draft_not_own` otherwise; no `attachment_ids`). Every other
+  Collab route refuses it (`403`): it never sends, discards, marks read or unread, moves, labels,
+  assigns, shares or comments. Reading changes no state, so a conversation the key read stays
+  unread for the team.
+- **Attribution**: a draft it saves is the member's (`sent_by`) with `drafted_by_ai`, the key's name
+  as it was then (shown "AI draft by <name>"). A person who saves the draft takes it over:
+  `drafted_by_ai` goes and the key can no longer save it, even when the two save at the same
+  moment: changes to a draft take turns, and the key is checked when its turn comes, before the
+  provider is called, so its save never replaces a person's. Sending is a person's, from the composer,
+  as with any draft. Each save by a key is audit-logged (`collab.ai_draft_saved`, actor the member,
+  `actor: "ai"` with the key).
+- **MCP tools** (contracts/agent.md): `list_collab_conversations`, `get_collab_conversation` and
+  `draft_collab_reply`, offered to a key with `collab:draft`.
 
 ## Shapes
 
@@ -563,6 +591,7 @@ interface MailMessage {
   attachments: MailAttachment[]
   sent_by: UserRef | null      // the teammate who sent it from opendesk (for a draft, who saved it)
   draft_id: string | null      // drafts: the id the /v1/collab/drafts routes take (the message's id)
+  drafted_by_ai: string | null // drafts an AI key saved and no person has saved since: the key's name ("AI drafts")
   in_reply_to_id: string | null  // the message of the conversation it answers (its In-Reply-To), when stored
   own_address: string | null   // the account's address (its own or an alias) it was sent from, else the first in its To, Cc, then Delivered-To / X-Original-To
   outgoing: boolean            // mail the account wrote: sent from opendesk (sent_by), a draft, or filed by the provider in Sent or Drafts. Its From alone never makes mail outgoing, since a sender writes their own From. Mail that is not outgoing holds back its remote images until the reader loads them
@@ -628,10 +657,16 @@ interface SidebarPrefs {
 These arrange a workspace's own sidebar. A Space (contracts/spaces.md) picked in the switcher shows
 its own rows instead; a whole section in a Space follows these preferences.
 
-**All inboxes in Favorites.** When a member first sees two accounts, `GET /v1/collab/sidebar` pins
-All inboxes (`{kind: "box", id: "inbox"}`) to the top of Favorites, unless `unified_inbox` is off,
-`box:inbox` is hidden or it is pinned already, and records `"box:inbox"` in `auto_pins` either way:
-unpinned later, it stays unpinned.
+Every member has them, with or without Collab. Without Collab they arrange the ticket side: the
+order of Favorites, Inbox, Teams, Views and Workspace, hidden rows and sections, favorites of inbox
+folders, teams and views, and their numbers. The Mail section, mail rows and favorites, `unified_inbox`,
+`mark_read_on_open`, `mail_tabs` and `auto_pins` are Collab's: kept as saved, used once it is on.
+
+**All inboxes in Favorites.** When a member of a workspace with Collab first sees two accounts,
+`GET /v1/collab/sidebar` pins All inboxes (`{kind: "box", id: "inbox"}`) to the top of Favorites,
+unless `unified_inbox` is off, `box:inbox` is hidden or it is pinned already, and records `"box:inbox"`
+in `auto_pins` either way: unpinned later, it stays unpinned. Without Collab it neither counts
+accounts nor pins or records anything.
 
 `badges` keys are a row (`box:inbox` for All inboxes, `box:shared`, `box:assigned`, `account:<id>`,
 `folder:<id>`, `ticket_folder:<id>`, `view:<id>`, `team:<id>`) or a section's default (`section:mail`,
@@ -716,7 +751,7 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 
 | method | path | who | notes |
 | --- | --- | --- | --- |
-| GET | `/v1/collab` | member | `CollabStatus`; the only route without Collab |
+| GET | `/v1/collab` | member | `CollabStatus`; with or without Collab |
 | GET | `/v1/collab/accounts` | member | `MailAccount[]` the caller sees, theirs first. `?manage=true`: an admin also gets the shared accounts of people who left (`owner: null`), to manage or disconnect |
 | POST | `/v1/collab/accounts/oauth/{provider}/start` | agent+ | `{visibility, shared_with? (at most 40 teams and people: it travels in the signed state; add more afterwards), name?, email? (login hint), account_id? (reconnect, manage), history?: {since: string \| null} (older mail to import once connected, as `PUT …/history`; left out, none; kept when the account already has an import)}` → `{url}`; sets the flow cookie (send with credentials). `422 provider_not_configured` |
 | GET | `/v1/collab/accounts/oauth/{provider}/callback` | provider | redirects to `APP_URL/settings/mail-accounts?connected=<id>` or `?error=<code>`: `oauth_state`, `access_denied`, `provider_error`, `account_conflict` (the address is already connected in this workspace by someone else), `collab_required`, `forbidden`, `internal` |
@@ -765,13 +800,13 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | DELETE | `/v1/collab/comments/{id}` | its author, or an admin | → 204 |
 | POST | `/v1/collab/messages` | act on the account | Send: `{account_id, mode: "new" \| "reply" \| "reply_all" \| "forward", message_id? (the `MailMessage.id` replied to or forwarded; required unless new), to: string[], cc?: string[], bcc?: string[], subject, body_html, attachment_ids?: string[] (POST /v1/attachments uploads of the caller), forward_attachments?: boolean, from_email?}` → `MailMessage`. `from_email` is the address it goes out from and must be one of the account's addresses that can send (`422 validation_failed`); left out, a reply or forward goes from the address the original was written to, new mail from the default ("Addresses"). At most 100 recipients, 25 MB of files. Sent through the provider within the request (`502 send_failed` with the provider's reason, nothing stored); then stored in the conversation (a reply stays in its conversation) and in Sent. The server sends `body_html` as written: the composer adds the signature and, for a forward, the original. Someone who sees only one conversation (shared or assigned) may reply to it or forward it; new mail needs sight of the account. At most 60 a minute per person (`429 rate_limited`) |
 | POST | `/v1/collab/drafts` | act on the account | Save a new draft ("Drafts"): the body of `POST /v1/collab/messages`, recipients optional → `MailMessage` (`draft: true`, `draft_id`). Saved at the provider first (`502 provider_error` with detail, nothing stored). At most 120 saves a minute per person (`429 rate_limited`) |
-| PUT | `/v1/collab/drafts/{id}` | act on its conversation | Save again: `{to, cc?, bcc?, subject, body_html, attachment_ids?, keep_attachments?: string[], from_email?}` (left out keeps the draft's From when it can still send) → `MailMessage`, the same id. `keep_attachments`: the draft's own files to keep (`MailAttachment.id`s); left out keeps every file that is not an inline image, and inline images stay while `body_html` shows them. `404` for a message that is not a draft. Counts toward the 120 a minute |
+| PUT | `/v1/collab/drafts/{id}` | act on its conversation | Save again: `{to, cc?, bcc?, subject, body_html, attachment_ids?, keep_attachments?: string[], from_email?}` (left out keeps the draft's From when it can still send) → `MailMessage`, the same id. `keep_attachments`: the draft's own files to keep (`MailAttachment.id`s); left out keeps every file that is not an inline image, and inline images stay while `body_html` shows them. `404` for a message that is not a draft. Counts toward the 120 a minute. Saves, sends and discards of one draft run one at a time (on every server), each checking the draft as it is once its turn comes; one that waits too long for its turn is `409 draft_busy` |
 | DELETE | `/v1/collab/drafts/{id}` | act on its conversation | Discard → 204: deleted at the provider, then here (a new-mail draft's conversation with it) |
 | POST | `/v1/collab/drafts/{id}/send` | act on its conversation | Send it; the body (as for `PUT`) is optional: when given the draft is saved with it first, else it goes as saved (composed again from what was saved when its From name names the sender, so it goes out with the sender's name). Needs a recipient. → `MailMessage`, the sent message, stored like `POST /v1/collab/messages` does (in the draft's conversation and in Sent) with the draft removed. `502 send_failed`; counts toward the 60 sends a minute |
 | GET | `/v1/collab/messages/{id}/details` | see | `MessageDetails` ("Message details"), read from the message's source (stored, else the provider: `502 provider_error`) |
 | GET | `/v1/collab/attachments/{message_id}/{index}` | signed (`exp`, `sig`) | the file, `Content-Disposition: attachment` unless an image; `?inline=1` for images. `404` when the signature is wrong or expired |
-| GET | `/v1/collab/sidebar` | member | `SidebarPrefs` (defaults when never saved); pins All inboxes once at a second account ("All inboxes in Favorites") |
-| PUT | `/v1/collab/sidebar` | member | `SidebarPrefs` → `SidebarPrefs`; at most 16 KB; unknown ids are kept (an id of something gone is ignored by the app). `badges`: at most 300, keys of at most 100 characters with the prefixes above, values `unread`, `total`, `count`, `awaiting`, `urgent`, `overdue`, `open` or `none`; `mail_tabs`: at most 30, each a box above or `folder:<uuid>`, once. Leaving out `badges`, `mail_tabs` or `auto_pins` keeps the saved value; `422` otherwise |
+| GET | `/v1/collab/sidebar` | member | `SidebarPrefs` (defaults when never saved); with or without Collab; with Collab, pins All inboxes once at a second account ("All inboxes in Favorites") |
+| PUT | `/v1/collab/sidebar` | member | `SidebarPrefs` → `SidebarPrefs`; with or without Collab; at most 16 KB; unknown ids are kept (an id of something gone is ignored by the app). `badges`: at most 300, keys of at most 100 characters with the prefixes above, values `unread`, `total`, `count`, `awaiting`, `urgent`, `overdue`, `open` or `none`; `mail_tabs`: at most 30, each a box above or `folder:<uuid>`, once. Leaving out `badges`, `mail_tabs` or `auto_pins` keeps the saved value; `422` otherwise |
 
 Errors: `402 collab_required`, `404 not_found`, `422 labels_unsupported`, `422 connection_failed`,
 `409 account_conflict`, `502 provider_error`, `502 send_failed`, `422 provider_not_configured`,
@@ -998,7 +1033,8 @@ with its `identity_id` and `added`, `removed` or the changed `identity_fields`),
 account's own choice is `collab.account_updated` with `fields: ["categories"]`), `collab.category_rule`
 (`{account_id, action: "added" | "removed", category}`, never the sender), `collab.history_import` (`{action: "started" | "paused" | "resumed" | "canceled",
 since, include_spam_trash}`), `collab.thread_shared` (`{thread_id, everyone, team_ids,
-user_ids}`), `collab.thread_assigned` (`{thread_id, user_ids}`). Never an address book entry,
+user_ids}`), `collab.thread_assigned` (`{thread_id, user_ids}`), `collab.ai_draft_saved` (the
+draft; `{actor: "ai", client, api_key_id, account_id, again}`, "AI drafts"). Never an address book entry,
 subject, body or credential.
 
 ## Notifications

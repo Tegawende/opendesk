@@ -28,7 +28,9 @@ it exists, and this file is the contract the parts are built against.
 - Roles: `owner` > `admin` > `agent` > `viewer`. Viewers read only. Settings routes
   (mailboxes, members, api keys, webhooks, automations, sla, business hours, assignment, triage, widget settings, labels, label groups, custom fields, workspace images) need `admin`.
 - API key scopes: `tickets:read`, `tickets:write`, `contacts:read`, `contacts:write`,
-  `kb:read`, `kb:write`, `changelog:read`, `changelog:write`, `wiki:read`, `wiki:write`, `settings:read`, `settings:write`, `realtime`.
+  `kb:read`, `kb:write`, `changelog:read`, `changelog:write`, `wiki:read`, `wiki:write`, `settings:read`, `settings:write`, `realtime`, `collab:draft`. A key
+  with `collab:draft` acts in Collab as the member who created it, while they are a member
+  (contracts/collab.md "AI drafts").
 
 ## Resource shapes
 
@@ -173,7 +175,7 @@ type Condition = {
   value: string; // up to 500 characters; any/none on a text field: a phrase list (below)
   question?: string; // ai_decide only: a yes/no question, 3..300 characters of plain text
 }; // subject, body, from_email, received_at, tag also take any ("contains any of") and none ("contains none of"): value holds phrases, one per line, each trimmed, empty lines dropped, stored that way; 1..100 phrases of up to 500 characters, 5000 characters in all; case-insensitive like contains; tag any holds when a label contains a phrase, tag none when no label does; other built-in fields refuse them. severity: equals/not_equals with a Severity or "none"; ai_decide: gt/lt with value a probability 0.01..0.99 (contracts/ai.md "Automations"); sentiment: equals/not_equals only; assignee_id, team_id, widget_id: equals/not_equals with an id of the workspace or "none"; brand_id: equals/not_equals with a brand id; received_at (the address the first email was written to): equals/not_equals/contains/any/none, case-insensitive; eq = equals, ne = not_equals. field.<key>: a ticket custom field, contact.field.<key>: the ticket contact's; ops per field type (below)
-type Action = { type: "set_status" | "set_priority" | "set_severity" /* value Severity, or "" to clear */ | "assign_user" | "assign_replier" /* the agent who wrote the run's reply (an agent's new ticket starts with theirs); skipped when there is none: customer messages, notes, automation, API and AI replies, a run about no message */ | "assign_team" | "add_tag" | "remove_tag" | "send_reply" | "add_note" | "mark_spam" | "ai_triage" | "set_field" | "set_reply_address" /* value a mailbox id of the ticket's brand; skipped when removed or of another brand */; value: string; field?: string /* set_field: the ticket field key */ }; // assign_team records routed {via: "automation"}
+type Action = { type: "set_status" | "set_priority" | "set_severity" /* value Severity, or "" to clear */ | "assign_user" | "assign_replier" /* the agent who wrote the run's reply (an agent's new ticket starts with theirs); skipped when there is none: customer messages, notes, automation, API and AI replies, a run about no message */ | "assign_team" | "add_tag" | "remove_tag" | "send_reply" | "add_note" | "mark_spam" | "delete_ticket" /* soft-deletes the ticket; the run's later steps, automations and notifications skip it */ | "merge_into_open_ticket" /* ticket_created only; value the window in days, "1".."30", "" stores "7"; below */ | "ai_triage" | "set_field" | "set_reply_address" /* value a mailbox id of the ticket's brand; skipped when removed or of another brand */; value: string; field?: string /* set_field: the ticket field key */; same_subject?: boolean /* merge_into_open_ticket only, stored; default true */ }; // assign_team records routed {via: "automation"}
 type Mailbox = {
   id: string; name: string; email: string; display_name: string;
   inbound_kind: "forwarding" | "imap" | "google" | "microsoft"; outbound_kind: "smtp" | "google" | "microsoft" | "system";
@@ -276,7 +278,7 @@ type NotificationPreferences = {
 | PATCH | `/v1/me` | `{name?, avatar_url?, time_format?}` → `User`. `time_format` is account-wide, across workspaces; another value is `422`. `avatar_url` is a picture to copy: an https URL fetched and processed server-side (asynchronously; `member.updated` follows), `""` removes the picture |
 | PUT | `/v1/me/avatar` | multipart `file` (PNG, JPEG, GIF or WebP, at most 5 MB) → `User` with `avatar_source: "upload"`. Audit `user.avatar_updated` |
 | DELETE | `/v1/me/avatar` | → `User` with no picture; the next Google or GitHub sign-in brings the provider picture back. Audit `user.avatar_removed` |
-| POST | `/v1/me/heartbeat` | → 204. Marks the user seen (auto-away). The app sends it every 5 minutes while a tab is visible |
+| POST | `/v1/me/heartbeat` | → 204. Marks the user seen (auto-away). The web app sends it every 2 minutes while a tab is visible, the iPhone app every 5 while open. With `OD-Workspace` it also counts toward the member's online time there ("Agents report") |
 | POST | `/v1/me/password` | `{current_password, new_password}` → 204 |
 | GET | `/v1/me/sessions` / DELETE `/v1/me/sessions/{id}` | paginated `[{id, user_agent, ip, created_at, last_used_at, current, client: "web"\|"desktop"\|"ios"}]` / revoke (deletes the session's push devices) |
 | POST | `/v1/me/devices` | `{platform: "ios", token?, relay_token?, environment: "production"\|"sandbox", app_version, name}` → `Device`. Exactly one of `token` (hex APNs token, `push: "direct"`) or `relay_token` (`push: "relay"`); the other mode answers `422 push_unavailable`. Upserts by token and binds the device to the calling session, which keeps one device (a new token replaces the old). Audit `push_device.registered` |
@@ -497,6 +499,7 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 | --- | --- | --- |
 | GET | `/v1/tickets` | filters: `status` (csv), `priority` (csv), `severity` (csv of `sev1`..`sev4` and `none`), `assignee` (`me`/`none`/uuid), `team_id` (csv of uuids, `mine` for the caller's teams, `none`: tickets of any of them), `team_not` (same values: tickets of none of them), `brand_id`, `widget_id`, `mailbox_id`, `mailbox_not` (csv of uuids), `received_at` (the address a ticket was first written to: a mailbox's address or an alias, case-insensitive), `tag` (csv of label names: any of them), `tag_not` (csv of label names: none of them), `untagged` (`true`: no label), `channel`, `channel_not` (csv), `contact_id`, `contact_not` (csv of contact ids: tickets whose contact is none of them), `company_not` (csv of company ids: tickets whose contact belongs to none of them), `view_id` (an explicit filter replaces the view's own for the same key; `field.*` filters and `untagged=true` add to it), `q`, `spam`, `field.<key>` / `field.<key>[<op>]` (custom fields, below), `sort` (`last_message_at`/`created_at`/`priority`/`severity` (sev1 first, none last)/`due`/`field.<key>`), `order` |
 | GET | `/v1/tickets/counts` | → `{ unassigned, mine, open, pending, on_hold, solved, spam, views: {<view_id>: n}, teams: {<team_id>: {open, unassigned}}, my_teams: {open, unassigned}, stats: {<row id>: {awaiting, urgent, overdue}} }`. `teams` lists every team the caller can see (open and pending, spam excluded); `my_teams` sums the caller's teams; Every count, the folders and `views` included, covers only tickets the caller can see (contracts/teams.md "Visibility"): a private team's tickets count for its members and for their assignee. `stats` breaks a sidebar row's tickets down, over the same tickets as its count: `ticket_folder:unassigned`, `ticket_folder:mine`, `ticket_folder:open`, `ticket_folder:pending` (pending and on hold), `team:<id>` for each team in `teams`, `team:mine` (as `my_teams`) and `view:<id>` for each view in `views`. `awaiting`: open or pending, and the customer's last message is the last message (within a second); `urgent`: urgent priority; `overdue`: not solved or closed, and the due time that applies has passed (first response while unanswered, else resolution) or an SLA breach is recorded |
+| GET | `/v1/tickets/summary` | the list `GET /v1/tickets` pages through, counted whole for the same filters (`view_id`, `q` and the rest; `sort`, `order`, `limit` and `cursor` are ignored) and the same visibility → `{ complete, total, awaiting, urgent, overdue, due_soon }`. `awaiting`, `urgent` and `overdue` follow `stats` in `/v1/tickets/counts`; `due_soon`: not solved, closed or overdue, and the due time that applies is within the hour. The tickets are read through the list's own filter, at most 10 000 of them: past that, or for a full-text search (`q`), nothing is counted and `complete` is `false` with every count 0. The inbox's summary strip shows these numbers, and the loaded rows' (labelled as the first ones shown) while they load or when `complete` is `false` |
 | POST | `/v1/tickets` | `{subject, contact_id? , contact?: {email,name}, channel?: "email"\|"api", mailbox_id?, brand_id?, body_html, kind?: "reply"\|"note", priority?, severity?, assignee_id?, team_id?, tags?: string[], fields?: FieldValues, status?}`; an email ticket with a reply is sent to the contact (`422 mailbox_cannot_send` when its mailbox has `sending: "system_off"`; nothing is created). Without `team_id` the team comes from routing (contracts/teams.md "Routing"); `brand_id` defaults to the mailbox's brand, else the default brand (`mailbox_id` of another brand: `422`; an address the caller may not send from: `403 forbidden`). An assignee who is not on a private team is `422 not_on_team` |
 | GET | `/v1/tickets/{id}` | id is uuid, or `#<number>` / numeric number |
 | PATCH | `/v1/tickets/{id}` | `{subject?, status?, priority?, severity? /* null clears */, contact_id? /* a contact in this workspace */, assignee_id?, team_id?, mailbox_id? /* the reply address */, brand_id?, snoozed_until?, spam?, tags?: string[] /* replaces */, add_tags?: string[], remove_tags?: string[], custom?, fields?: Record<string, FieldValue \| null> /* merged; null clears */}`. Changing `contact_id` changes the recipient of future replies; existing messages stay as sent. It logs `contact_changed` and publishes `ticket.updated` with `contact_id` in `changes`. A live chat stays with the visitor who started it (the widget lists their chats by contact): changing its contact is `422`, and so is `contact_id` in a bulk patch. A status of `solved` or `closed` with an empty `required_on_solve` field is `422 field_required`. Setting `snoozed_until` without a `status` moves the ticket to `on_hold`; a status change that is not `on_hold` clears the snooze. Changing `priority`, `severity`, `team_id`, `spam` or labels removes Ollie's pending suggestion for that field (`custom.ai_suggestions`, contracts/ai.md). `team_id`, `mailbox_id` and `brand_id` follow contracts/teams.md "Reply address": an address of another brand is `422`, one the caller may not send from `403 forbidden`, an assignee not on the ticket's private team `422 not_on_team` (a team change alone unassigns them) |
@@ -564,8 +567,41 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 | GET | `/v1/wiki/search?q=&limit=` | viewer (`wiki:read`) → `{data: WikiSearchHit[]}` (default 20, at most 50) |
 | GET | `/v1/search?q=&brand_id=` | → `{tickets: Ticket[], contacts: Contact[], articles: KbArticle[], wiki_pages: WikiSearchHit[]}` (5 each; each kind only with its read scope). `brand_id` (optional) narrows the articles to what that brand shows: its own and those of every brand |
 | GET | `/v1/reports/overview?from=&to=&team_id=&brand_id=` | → `{created, solved, open_now, first_response_p50_minutes, resolution_p50_minutes, csat_avg, csat_count, sla_breached, by_day: [{date, created, solved}], by_channel: {...}, by_severity: Record<Severity \| "none", number> /* tickets created in the range */, by_agent: [{user, solved, first_response_p50_minutes}], by_team: [{team_id: string \| null, created, solved, open_now, first_response_p50_minutes}], by_brand: [{brand_id, created, solved, open_now, first_response_p50_minutes}]}`. `team_id` (a team, or `none`) and `brand_id` narrow every figure. Private teams' tickets are counted, with no subjects or contacts |
+| GET | `/v1/reports/agents?from=&to=&team_id=&brand_id=` | → `{data: ReportAgent[], online_time: "all" \| "self" \| "none"}`, one row per member, most solved first; a member who is not an admin gets their own row only ("Agents report"). Same range, roles, scope and filters as the overview |
 | POST | `/v1/attachments` | multipart `file` → `Attachment` (unattached, linked when sent). Only whoever uploaded it (that user, or that API key) may send it in `attachment_ids` (`422` otherwise) |
 | GET | `/v1/attachments/{id}` | → 302 to signed URL or streamed. For img tags, the links messages carry are signed (`?exp=&sig=`) and work for one to two hours. A file on a ticket the caller may not see is `404` (contracts/teams.md "Visibility"); an upload not sent yet is its uploader's alone (`404` for anyone else) |
+
+#### Agents report
+
+`GET /v1/reports/agents` answers one row per member for the range: the owners, admins and agents
+(with a `team_id`, that team's leads and members, not its observers), and any other member with
+work on the filtered tickets. Removed members are left out. Spam and deleted tickets count
+nowhere; `team_id` and `brand_id` narrow the ticket figures, never online time.
+
+```ts
+type ReportAgent = { user: UserRef;
+  assigned: number;   // tickets with an assigned activity to them in the range, or created in the range with them as first assignee
+  solved: number;     // tickets solved in the range whose assignee they are (the overview's by_agent.solved)
+  replies: number;    // public replies they sent in the range (kind reply, outbound, not deleted)
+  notes: number;      // internal notes they wrote in the range (kind note, not in a third-party thread, not deleted)
+  replies_per_solved: number | null;          // their public replies on the tickets of `solved` since each was created (also before the range), divided by solved; null when 0
+  first_response_p50_minutes: number | null;  // the overview's by_agent figure: their tickets created in the range
+  handle_p50_minutes: number | null;          // over `solved`: from the last assigned activity to them before the solve (else the ticket's creation) to solved_at
+  online_minutes: number | null;              // time in the app with availability online, inside the range; null when online_time is none
+};
+```
+
+A member's work and online time are personal, and `online_time` says what the caller gets: `all`
+for owners and admins (and API keys with `settings:read`), every row with online time; `self` for
+other members, their own row alone, with its online time (an empty `data` when they have no row,
+as a viewer or off the filtered team); `none` for other API keys, every row without online time
+(`online_minutes` null), as `tickets:read` already reads every ticket. Online time comes from
+`agent_presence`: each `POST /v1/me/heartbeat` with `OD-Workspace` from an owner, admin or agent
+whose `availability` is `online` extends their open stretch, or closes it at its last heartbeat
+and starts a new one when the last came more than 10 minutes ago.
+Setting your own availability to `online` starts a stretch; leaving `online` ends it (now when
+you change it yourself, at the last heartbeat when someone else does). Stretches are kept 400 days
+and removed with the member.
 
 #### Threads
 
@@ -675,6 +711,20 @@ Automations: conditions take `field.<key>` (ticket field) and `contact.field.<ke
 (`equals`/`not_equals` are `eq`/`ne`); `set`/`not_set` ignore `value`. The `set_field` action sets ticket field `field` to `value`
 written as a string (`"12.5"`, `"true"`, `"2026-10-11"`, comma separated option ids; `""` clears); it is validated when the
 automation is saved and skipped at run time if the field was archived or deleted since.
+
+`merge_into_open_ticket` (trigger `ticket_created` only; another trigger is `422`) merges a new email ticket the customer opened into
+their earlier ticket, for a customer who writes again without replying in the thread. It merges into the most recent other
+ticket (by its last reply, else its creation) that is of the same contact, brand and channel, created before it, `open`,
+`pending` or `on_hold`, not spam, deleted or merged, created or replied on within `value` days, and, with `same_subject`, about
+the same subject: equal once reply prefixes (`Re:`, `Fwd:`, `AW:`, `TR:`...), ticket tags (`[#123]`), extra spaces and case are
+dropped (an empty subject or `(no subject)` matches none). A merge never changes who sees a message: both tickets are of one
+team, or neither is of a private team. It is skipped for a ticket without a contact, one the team started (no customer message),
+mail that failed sender checks, and a ticket solved, closed or marked spam earlier in the run. The merge is the
+`POST /v1/tickets/{id}/merge` one, by actor `automation` (`merged` activities on both tickets carry `automation_id` and
+`automation_name`); then the ticket merged into is set `open` when it was `pending` or `on_hold`, and its assignee (else whoever
+hears of an unassigned ticket) gets a `customer_replied` notification. When it merges, the automation's other actions are skipped
+and nothing else runs on the merged ticket: no later automation, `ticket_updated` chain, auto-assignment or new ticket
+notification. With nothing to merge into, the other actions run as usual.
 
 #### Profile pictures and logos
 

@@ -311,6 +311,12 @@
     "chooseTeam": "Choisir une équipe",
     "assignReplierHint": "Attribue le ticket à qui a écrit la réponse. Ajoutez la condition Responsable est Non attribué pour laisser les tickets déjà pris à leur responsable.",
     "markSpamHint": "Déplace le ticket dans les indésirables. Aucune réponse n’est envoyée.",
+    "deleteTicketHint": "Supprime le ticket : il quitte toutes les vues et plus rien ne s’exécute dessus.",
+    "mergeHint": "Fusionne un nouveau ticket dans le dernier ticket ouvert, en attente ou en pause du même contact. Plus rien ne s’exécute ensuite dessus.",
+    "mergeWindow_one": "Dans un délai de {{count}} jour",
+    "mergeWindow_many": "Dans un délai de {{count}} jours",
+    "mergeWindow_other": "Dans un délai de {{count}} jours",
+    "mergeSameSubject": "Même objet uniquement",
     "replyPlaceholder": "Merci de nous avoir écrit. Nous avons bien reçu votre message…",
     "notePlaceholder": "Note interne pour l’équipe",
     "replyText": "Texte de la réponse",
@@ -320,7 +326,8 @@
       "action": "Ajoutez au moins une action.",
       "condition": "Renseignez une valeur pour chaque condition, ou supprimez-la.",
       "actionValue": "Chaque action doit avoir une valeur.",
-      "phrases": "Une liste compte de 1 à 100 expressions, une par ligne, de 500 caractères au plus chacune."
+      "phrases": "Une liste compte de 1 à 100 expressions, une par ligne, de 500 caractères au plus chacune.",
+      "mergeTrigger": "La fusion dans le ticket ouvert du contact ne s’exécute qu’à la création d’un ticket."
     },
     "chooseSeverity": "Choisir une gravité",
     "noSeverity": "Aucune gravité",
@@ -377,6 +384,8 @@
     "send_reply": "Envoyer une réponse",
     "add_note": "Ajouter une note interne",
     "mark_spam": "Marquer comme spam",
+    "delete_ticket": "Supprimer le ticket",
+    "merge_into_open_ticket": "Fusionner dans le ticket ouvert du contact",
     "set_field": "Définir un champ",
     "set_reply_address": "Définir l’adresse de réponse"
   },
