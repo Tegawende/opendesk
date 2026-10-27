@@ -67,45 +67,54 @@ func upsertContactByEmail(ctx context.Context, tx pgx.Tx, wid uuid.UUID, email, 
 	return id, created, nil
 }
 
+// PhoneContact is the contact a phone number belongs to.
+type PhoneContact struct {
+	ID uuid.UUID
+	// Created: the number was new, and the contact was made for it.
+	Created bool
+	// Blocked: the team blocked the contact; nothing they send reaches a ticket.
+	Blocked bool
+}
+
 // ContactByPhone finds the contact a phone number belongs to, or creates one named name
 // (else the number), and announces it (contracts/phone.md "Contacts"). number is E.164
 // ("+3247...") or national digits; contacts match on the number's digits, written with or
 // without a 00 prefix. Callers of one number are serialized for the transaction, so two
 // calls from a new number make one contact.
-func ContactByPhone(ctx context.Context, tx pgx.Tx, wid uuid.UUID, number, name string) (uuid.UUID, bool, error) {
+func ContactByPhone(ctx context.Context, tx pgx.Tx, wid uuid.UUID, number, name string) (PhoneContact, error) {
 	digits := strings.TrimPrefix(number, "+")
 	if digits == "" || strings.Trim(digits, "0123456789") != "" {
-		return uuid.Nil, false, fmt.Errorf("contact by phone: not a number")
+		return PhoneContact{}, fmt.Errorf("contact by phone: not a number")
 	}
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "contact-phone:"+wid.String()+":"+digits); err != nil {
-		return uuid.Nil, false, err
+		return PhoneContact{}, err
 	}
-	var id uuid.UUID
-	err := tx.QueryRow(ctx, `SELECT id FROM contacts WHERE workspace_id = $1 AND phone <> ''
+	var found PhoneContact
+	err := tx.QueryRow(ctx, `SELECT id, blocked FROM contacts WHERE workspace_id = $1 AND phone <> ''
 		AND regexp_replace(phone, '[^0-9]', '', 'g') = ANY($2) ORDER BY updated_at DESC, id LIMIT 1`,
-		wid, []string{digits, "00" + digits}).Scan(&id)
+		wid, []string{digits, "00" + digits}).Scan(&found.ID, &found.Blocked)
 	if err == nil {
-		return id, false, nil
+		return found, nil
 	}
 	if !db.IsNotFound(err) {
-		return uuid.Nil, false, fmt.Errorf("contact by phone: %w", err)
+		return PhoneContact{}, fmt.Errorf("contact by phone: %w", err)
 	}
 	if name = displayname.Clean(name, displayname.Person); name == "" {
 		name = number
 	}
-	id = ids.New()
+	id := ids.New()
 	if _, err := tx.Exec(ctx, `INSERT INTO contacts (id, workspace_id, name, phone) VALUES ($1, $2, $3, $4)`,
 		id, wid, name, truncateRunes(number, 40)); err != nil {
-		return uuid.Nil, false, fmt.Errorf("create contact: %w", err)
+		return PhoneContact{}, fmt.Errorf("create contact: %w", err)
 	}
 	c, err := LoadContact(ctx, tx, wid, id)
 	if err != nil {
-		return uuid.Nil, false, err
+		return PhoneContact{}, err
 	}
 	if _, err := events.Publish(ctx, tx, events.Event{WorkspaceID: wid, Type: "contact.created", Data: map[string]any{"contact": c}}); err != nil {
-		return uuid.Nil, false, err
+		return PhoneContact{}, err
 	}
-	return id, true, nil
+	return PhoneContact{ID: id, Created: true}, nil
 }
 
 type NewTicket struct {

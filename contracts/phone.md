@@ -102,6 +102,12 @@ A new number creates a contact named after the provider's contact for it, else t
 and publishes `contact.created`. Calls from one new number are serialized, so they make one
 contact. A withheld number has no contact.
 
+A blocked contact's calls reach no ticket, as their email doesn't (`internal/email` ignores a
+blocked sender): the call's row is kept, with its contact, stage and times but without its
+number, names, links, tags, comments, summary or transcript, so its later events are known;
+it writes no timeline entry, sends no insight card and runs no automation. A call already on
+a ticket when its contact is blocked stays there.
+
 ### Placement
 
 A call goes on the contact's open ticket (open, pending or on hold, most recently updated);

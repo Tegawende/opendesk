@@ -302,7 +302,9 @@ func (s *Service) applyCall(ctx context.Context, tx pgx.Tx, c PhoneConnection, e
 		}
 	}
 	if call.TicketID == nil {
-		return s.saveCall(ctx, tx, call)
+		// A blocked contact's call goes on no ticket, writes no entry and runs nothing. Its
+		// row is kept, without what was said or who said it, so its later events are known.
+		return s.saveCall(ctx, tx, withoutContent(call))
 	}
 	if call.OutsideHours, err = s.outsideHours(ctx, tx, call); err != nil {
 		return err
@@ -362,6 +364,9 @@ func (s *Service) applyIntelligence(ctx context.Context, tx pgx.Tx, c PhoneConne
 	if err != nil {
 		return err
 	}
+	if call.TicketID == nil {
+		return nil // a blocked contact's call keeps no content
+	}
 	if ev.Summary != "" {
 		call.Summary = ev.Summary
 	}
@@ -389,6 +394,15 @@ func (s *Service) saveCall(ctx context.Context, tx pgx.Tx, c phoneCall) error {
 		return fmt.Errorf("save call: %w", err)
 	}
 	return nil
+}
+
+// withoutContent is a call with only its facts: no number, names, links, labels, comments
+// or AI text.
+func withoutContent(c phoneCall) phoneCall {
+	c.Number, c.CallerName, c.AgentName, c.Summary, c.Transcript = "", "", "", "", ""
+	c.AssetURL, c.RecordingURL, c.VoicemailURL, c.Link, c.LinksExpireAt = "", "", "", "", nil
+	c.Tags, c.Comments = []string{}, []provider.Comment{}
+	return c
 }
 
 func nonNil(s []string) []string {
@@ -423,16 +437,21 @@ func (s *Service) memberByEmail(ctx context.Context, tx pgx.Tx, wid uuid.UUID, e
 // place finds the call's contact by its number (creating one for a new number) and its
 // ticket: the contact's open ticket, else their latest solved one updated within the
 // connection's reuse_days, else a new ticket on the phone channel. A withheld number
-// always opens a new ticket without a contact.
+// always opens a new ticket without a contact. A blocked contact's call gets no ticket,
+// like their email (internal/email).
 func (s *Service) place(ctx context.Context, tx pgx.Tx, c PhoneConnection, call *phoneCall) error {
 	wid := c.WorkspaceID
 	contactName := ""
 	if call.Number != "" {
-		cid, _, err := domain.ContactByPhone(ctx, tx, wid, call.Number, call.CallerName)
+		pc, err := domain.ContactByPhone(ctx, tx, wid, call.Number, call.CallerName)
 		if err != nil {
 			return err
 		}
+		cid := pc.ID
 		call.ContactID = &cid
+		if pc.Blocked {
+			return nil
+		}
 		var tid uuid.UUID
 		err = tx.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id = $1 AND contact_id = $2 AND deleted_at IS NULL
 			AND merged_into_id IS NULL AND NOT spam

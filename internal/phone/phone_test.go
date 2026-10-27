@@ -525,3 +525,53 @@ func TestInsightCardLeavesOutPrivateSpamAndDeletedTickets(t *testing.T) {
 		t.Fatalf("card lines %v (visible ticket %s)", lines, visible)
 	}
 }
+
+// A blocked contact's calls are recorded, without their content, but reach no ticket and
+// run nothing, like their email.
+func TestBlockedContactsCallsReachNoTicket(t *testing.T) {
+	h := newHarness(t)
+	cid := uuid.New()
+	h.e.Exec(`INSERT INTO contacts (id, workspace_id, name, phone, blocked) VALUES ($1, $2, 'Spam Caller', '+32 470 12 34 56', true)`, cid, h.ws.ID)
+	h.e.Do("POST", "/v1/automations", h.ws.Admin.As(h.ws), map[string]any{"name": "Every call", "trigger": "call_ended",
+		"conditions": []map[string]any{{"field": "call_direction", "op": "equals", "value": "inbound"}},
+		"actions":    []map[string]any{{"type": "set_priority", "value": "high"}}}).Want(t, 201)
+
+	for _, b := range append(h.recorded(t, "answered"), h.recorded(t, "intelligence")...) {
+		if got := h.send(t, b); got != 200 {
+			t.Fatalf("webhook answered %d", got)
+		}
+	}
+	var triggers int
+	for _, raw := range h.e.Jobs(jobs.PhoneInboundArgs{}.Kind(), h.ws.ID) {
+		var a jobs.PhoneInboundArgs
+		_ = json.Unmarshal(raw, &a)
+		if err := h.s.ProcessInbound(h.e.Ctx, a); err != nil {
+			t.Fatalf("inbound: %v", err)
+		}
+	}
+	triggers += len(h.e.Jobs(jobs.TicketTriggerArgs{}.Kind(), h.ws.ID))
+	if cards := len(h.e.Jobs(jobs.PhoneInsightCardArgs{}.Kind(), h.ws.ID)); triggers != 0 || cards != 0 {
+		t.Fatalf("a blocked contact's call queued %d triggers and %d cards", triggers, cards)
+	}
+	var ticket, activity *uuid.UUID
+	var contact uuid.UUID
+	var number, summary, transcript string
+	h.e.Scalar(`SELECT ticket_id FROM phone_calls WHERE workspace_id = $1 AND external_call_id = '1290001'`, &ticket, h.ws.ID)
+	h.e.Scalar(`SELECT activity_id FROM phone_calls WHERE workspace_id = $1 AND external_call_id = '1290001'`, &activity, h.ws.ID)
+	h.e.Scalar(`SELECT contact_id FROM phone_calls WHERE workspace_id = $1 AND external_call_id = '1290001'`, &contact, h.ws.ID)
+	h.e.Scalar(`SELECT number || '|' || caller_name || '|' || stage FROM phone_calls WHERE workspace_id = $1 AND external_call_id = '1290001'`, &number, h.ws.ID)
+	h.e.Scalar(`SELECT summary FROM phone_calls WHERE workspace_id = $1 AND external_call_id = '1290001'`, &summary, h.ws.ID)
+	h.e.Scalar(`SELECT transcript FROM phone_calls WHERE workspace_id = $1 AND external_call_id = '1290001'`, &transcript, h.ws.ID)
+	if ticket != nil || activity != nil || contact != cid {
+		t.Fatalf("blocked call on ticket %v, entry %v, contact %s", ticket, activity, contact)
+	}
+	if number != "||ended" || summary != "" || transcript != "" {
+		t.Fatalf("a blocked contact's call kept its content: %q %q %q", number, summary, transcript)
+	}
+	var tickets, contacts int
+	h.e.Scalar(`SELECT count(*) FROM tickets WHERE workspace_id = $1`, &tickets, h.ws.ID)
+	h.e.Scalar(`SELECT count(*) FROM contacts WHERE workspace_id = $1`, &contacts, h.ws.ID)
+	if tickets != 0 || contacts != 1 {
+		t.Fatalf("tickets %d, contacts %d", tickets, contacts)
+	}
+}
