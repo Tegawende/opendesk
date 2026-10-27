@@ -39,13 +39,19 @@ if (typeof window !== "undefined") {
   });
 }
 
+// Stable across renders, so each row subscribes once.
+function subscribe(cb: () => void) {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
+
+function snapshot() {
+  return current;
+}
+
 /** The list's assignee display, kept in sync across tabs. */
 export function useAssigneeDisplay(): AssigneeDisplay {
-  return useSyncExternalStore(
-    (cb) => {
-      listeners.add(cb);
-      return () => listeners.delete(cb);
-    },
-    () => current,
-  );
+  return useSyncExternalStore(subscribe, snapshot);
 }
