@@ -16,15 +16,15 @@ import (
 // Orders, the same shape whatever the store, so another commerce source plugs into the
 // same section; http panels fill Blocks (an answer of version 2) or Sections (version 1).
 type Data struct {
-	PanelID   uuid.UUID `json:"panel_id"`
-	Kind      string    `json:"kind" enum:"shopify,http"`
-	State     string    `json:"state" enum:"ok,empty,no_contact,error" doc:"empty: the product knows nothing about this contact; no_contact: the ticket's contact has no email"`
-	Message   string    `json:"message,omitempty" doc:"error: what went wrong, in a few words"`
-	Customer  *Customer `json:"customer,omitempty"`
-	Orders    []Order   `json:"orders,omitempty"`
-	Sections  []Section `json:"sections,omitempty" doc:"http: a version 1 answer's sections"`
-	Blocks    []Block   `json:"blocks,omitempty" doc:"http: a version 2 answer's blocks, cleaned"`
-	FetchedAt time.Time `json:"fetched_at"`
+	PanelID   uuid.UUID    `json:"panel_id"`
+	Kind      string       `json:"kind" enum:"shopify,http"`
+	State     string       `json:"state" enum:"ok,empty,no_contact,error" doc:"empty: the product knows nothing about this contact; no_contact: the ticket's contact has no email"`
+	Message   string       `json:"message,omitempty" doc:"error: what went wrong, in a few words"`
+	Customer  *Customer    `json:"customer,omitempty"`
+	Orders    []Order      `json:"orders,omitempty"`
+	Sections  []Section    `json:"sections,omitempty" doc:"http: a version 1 answer's sections"`
+	Blocks    []PanelBlock `json:"blocks,omitempty" doc:"http: a version 2 answer's blocks, cleaned"`
+	FetchedAt time.Time    `json:"fetched_at"`
 }
 
 // Customer is the store's own record of the contact. Amounts are decimal strings. A field the

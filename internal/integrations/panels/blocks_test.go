@@ -27,7 +27,7 @@ func rawOf(t *testing.T, s string) json.RawMessage {
 }
 
 func TestCleanValue(t *testing.T) {
-	for in, want := range map[string]*Value{
+	for in, want := range map[string]*PanelValue{
 		`"Flos S.p.A."`:                        {Type: "text", Text: "Flos S.p.A."},
 		`"a\u0000b\nc"`:                        {Type: "text", Text: "a b c"},
 		`"   "`:                                nil,
@@ -100,17 +100,17 @@ func TestCleanBlocks(t *testing.T) {
 	}
 	got := s.cleanBlocks(a.Blocks)
 	q := func(f float64) *float64 { return &f }
-	want := []Block{
+	want := []PanelBlock{
 		{Type: "card", Title: "Sales order S00042", URL: "https://erp.example/so/42", Subtitle: "Confirmed on Oct 2",
-			Badges: []Badge{{"Late", "warning"}, {"Paid", "success"}, {"c", "neutral"}, {"d", "neutral"}},
-			Fields: []Item{{Label: "Supplier date", Value: &Value{Type: "date", Value: "2026-11-12", Relative: true}},
-				{Label: "Link", Value: &Value{Type: "text", Text: "x"}}},
-			Lines: []Item{{Quantity: q(2), Title: "Arco floor lamp", Subtitle: "Marble", Value: &Value{Type: "money", Amount: "1890.00", Currency: "EUR"}, URL: "https://erp.example/p/1"},
+			Badges: []PanelBadge{{"Late", "warning"}, {"Paid", "success"}, {"c", "neutral"}, {"d", "neutral"}},
+			Fields: []PanelItem{{Label: "Supplier date", Value: &PanelValue{Type: "date", Value: "2026-11-12", Relative: true}},
+				{Label: "Link", Value: &PanelValue{Type: "text", Text: "x"}}},
+			Lines: []PanelItem{{Quantity: q(2), Title: "Arco floor lamp", Subtitle: "Marble", Value: &PanelValue{Type: "money", Amount: "1890.00", Currency: "EUR"}, URL: "https://erp.example/p/1"},
 				{Quantity: q(1.5), Title: "Cable, m"}, {Title: "Bulbs"}},
-			Footer: []Item{{Label: "Total", Value: &Value{Type: "money", Amount: "3780", Currency: "EUR"}}}},
-		{Type: "fields", Title: "Account", Items: []Item{{Label: "Plan", Value: &Value{Type: "text", Text: "Pro"}}, {Label: "Seats", Value: &Value{Type: "text", Text: "12"}}}},
-		{Type: "list", Title: "Invoices", Items: []Item{{Title: "INV/2026/0012", URL: "https://erp.example/inv/12", Subtitle: "Due Nov 1",
-			Value: &Value{Type: "money", Amount: "120", Currency: "EUR"}, Badge: &Badge{"Overdue", "danger"}}}},
+			Footer: []PanelItem{{Label: "Total", Value: &PanelValue{Type: "money", Amount: "3780", Currency: "EUR"}}}},
+		{Type: "fields", Title: "Account", Items: []PanelItem{{Label: "Plan", Value: &PanelValue{Type: "text", Text: "Pro"}}, {Label: "Seats", Value: &PanelValue{Type: "text", Text: "12"}}}},
+		{Type: "list", Title: "Invoices", Items: []PanelItem{{Title: "INV/2026/0012", URL: "https://erp.example/inv/12", Subtitle: "Due Nov 1",
+			Value: &PanelValue{Type: "money", Amount: "120", Currency: "EUR"}, Badge: &PanelBadge{"Overdue", "danger"}}}},
 		{Type: "note", Text: "No subscription.", Tone: "info"},
 		{Type: "note", Text: "Toned down", Tone: "neutral"},
 	}

@@ -28,43 +28,47 @@ const (
 	maxCacheSeconds = 600
 )
 
-// Block is one block of an http panel's answer, cleaned: a card (an order, an invoice, a
+// The cleaned types carry a Panel prefix because huma names each API schema after its Go type,
+// and a name is one schema across the whole API: a bare Block, Item, Badge or Value would clash
+// with another package's (the assistant has an Item) and stop the API at startup.
+
+// PanelBlock is one block of an http panel's answer, cleaned: a card (an order, an invoice, a
 // subscription, a deal), a list of labelled values, a list of rows or a short note.
-type Block struct {
-	Type     string  `json:"type" enum:"card,fields,list,note"`
-	Title    string  `json:"title,omitempty" doc:"card: required; fields and list: optional"`
-	URL      string  `json:"url,omitempty" doc:"card: https only"`
-	Subtitle string  `json:"subtitle,omitempty" doc:"card"`
-	Badges   []Badge `json:"badges,omitempty" doc:"card: at most 4"`
-	Fields   []Item  `json:"fields,omitempty" doc:"card: labelled values, at most 30"`
-	Lines    []Item  `json:"lines,omitempty" doc:"card: rows such as an order's lines, at most 20"`
-	Footer   []Item  `json:"footer,omitempty" doc:"card: labelled values under the lines, such as a total, at most 6"`
-	Items    []Item  `json:"items,omitempty" doc:"fields: labelled values, at most 30; list: rows, at most 20"`
-	Text     string  `json:"text,omitempty" doc:"note"`
-	Tone     string  `json:"tone,omitempty" enum:"neutral,info,success,warning,danger" doc:"note"`
+type PanelBlock struct {
+	Type     string       `json:"type" enum:"card,fields,list,note"`
+	Title    string       `json:"title,omitempty" doc:"card: required; fields and list: optional"`
+	URL      string       `json:"url,omitempty" doc:"card: https only"`
+	Subtitle string       `json:"subtitle,omitempty" doc:"card"`
+	Badges   []PanelBadge `json:"badges,omitempty" doc:"card: at most 4"`
+	Fields   []PanelItem  `json:"fields,omitempty" doc:"card: labelled values, at most 30"`
+	Lines    []PanelItem  `json:"lines,omitempty" doc:"card: rows such as an order's lines, at most 20"`
+	Footer   []PanelItem  `json:"footer,omitempty" doc:"card: labelled values under the lines, such as a total, at most 6"`
+	Items    []PanelItem  `json:"items,omitempty" doc:"fields: labelled values, at most 30; list: rows, at most 20"`
+	Text     string       `json:"text,omitempty" doc:"note"`
+	Tone     string       `json:"tone,omitempty" enum:"neutral,info,success,warning,danger" doc:"note"`
 }
 
-// Item is a field (label, value, url), a card's line (quantity, title, subtitle, value, url) or
+// PanelItem is a field (label, value, url), a card's line (quantity, title, subtitle, value, url) or
 // a list's row (title, subtitle, value, badge, url).
-type Item struct {
-	Label    string   `json:"label,omitempty"`
-	Quantity *float64 `json:"quantity,omitempty"`
-	Title    string   `json:"title,omitempty"`
-	Subtitle string   `json:"subtitle,omitempty"`
-	Value    *Value   `json:"value,omitempty"`
-	Badge    *Badge   `json:"badge,omitempty"`
-	URL      string   `json:"url,omitempty" doc:"https only"`
+type PanelItem struct {
+	Label    string      `json:"label,omitempty"`
+	Quantity *float64    `json:"quantity,omitempty"`
+	Title    string      `json:"title,omitempty"`
+	Subtitle string      `json:"subtitle,omitempty"`
+	Value    *PanelValue `json:"value,omitempty"`
+	Badge    *PanelBadge `json:"badge,omitempty"`
+	URL      string      `json:"url,omitempty" doc:"https only"`
 }
 
-// Badge is a short word in a tone.
-type Badge struct {
+// PanelBadge is a short word in a tone.
+type PanelBadge struct {
 	Text string `json:"text"`
 	Tone string `json:"tone" enum:"neutral,info,success,warning,danger"`
 }
 
-// Value is a cleaned value: text (a string, number or boolean as written), a date the app
+// PanelValue is a cleaned value: text (a string, number or boolean as written), a date the app
 // formats in the reader's locale and timezone, an amount of money or a badge.
-type Value struct {
+type PanelValue struct {
 	Type     string `json:"type" enum:"text,date,money,badge"`
 	Text     string `json:"text,omitempty" doc:"text and badge"`
 	Value    string `json:"value,omitempty" doc:"date: YYYY-MM-DD for a day, else an RFC 3339 time in UTC"`
@@ -115,8 +119,8 @@ type itemIn struct {
 }
 
 // cleanBlocks reads an answer's blocks: at most maxBlocks that have something to show, in order.
-func (s *Service) cleanBlocks(raw []json.RawMessage) []Block {
-	out := []Block{}
+func (s *Service) cleanBlocks(raw []json.RawMessage) []PanelBlock {
+	out := []PanelBlock{}
 	for _, r := range raw {
 		if len(out) == maxBlocks {
 			break
@@ -132,12 +136,12 @@ func (s *Service) cleanBlocks(raw []json.RawMessage) []Block {
 	return out
 }
 
-func (s *Service) cleanBlock(in blockIn) (Block, bool) {
-	b := Block{Type: strings.ToLower(strings.TrimSpace(in.Type)), Title: cleanText(in.Title, maxTitle)}
+func (s *Service) cleanBlock(in blockIn) (PanelBlock, bool) {
+	b := PanelBlock{Type: strings.ToLower(strings.TrimSpace(in.Type)), Title: cleanText(in.Title, maxTitle)}
 	switch b.Type {
 	case "card":
 		if b.Title == "" {
-			return Block{}, false
+			return PanelBlock{}, false
 		}
 		b.URL, b.Subtitle = s.cleanLink(in.URL), cleanText(in.Subtitle, maxSubtitle)
 		for _, r := range in.Badges {
@@ -163,12 +167,12 @@ func (s *Service) cleanBlock(in blockIn) (Block, bool) {
 		b.Text, b.Tone = cleanText(in.Text, maxNote), toneOf(in.Tone)
 		return b, b.Text != ""
 	}
-	return Block{}, false // a type this version does not know
+	return PanelBlock{}, false // a type this version does not know
 }
 
 // cleanFields reads labelled values: a field without a value is left out.
-func (s *Service) cleanFields(raw []json.RawMessage, max int) []Item {
-	var out []Item
+func (s *Service) cleanFields(raw []json.RawMessage, max int) []PanelItem {
+	var out []PanelItem
 	for _, r := range raw {
 		if len(out) == max {
 			break
@@ -181,15 +185,15 @@ func (s *Service) cleanFields(raw []json.RawMessage, max int) []Item {
 		if v == nil {
 			continue
 		}
-		out = append(out, Item{Label: cleanText(in.Label, maxLabel), Value: v, URL: s.cleanLink(in.URL)})
+		out = append(out, PanelItem{Label: cleanText(in.Label, maxLabel), Value: v, URL: s.cleanLink(in.URL)})
 	}
 	return out
 }
 
 // cleanRows reads a card's lines (with a quantity) or a list's rows (with a badge): a row
 // without a title is left out.
-func (s *Service) cleanRows(raw []json.RawMessage, max int, lines bool) []Item {
-	var out []Item
+func (s *Service) cleanRows(raw []json.RawMessage, max int, lines bool) []PanelItem {
+	var out []PanelItem
 	for _, r := range raw {
 		if len(out) == max {
 			break
@@ -198,7 +202,7 @@ func (s *Service) cleanRows(raw []json.RawMessage, max int, lines bool) []Item {
 		if json.Unmarshal(r, &in) != nil {
 			continue
 		}
-		it := Item{Title: cleanText(in.Title, maxLineTitle), Subtitle: cleanText(in.Subtitle, maxSubtitle), Value: cleanValue(in.Value), URL: s.cleanLink(in.URL)}
+		it := PanelItem{Title: cleanText(in.Title, maxLineTitle), Subtitle: cleanText(in.Subtitle, maxSubtitle), Value: cleanValue(in.Value), URL: s.cleanLink(in.URL)}
 		if it.Title == "" {
 			continue
 		}
@@ -227,7 +231,7 @@ func cleanQuantity(raw json.RawMessage) *float64 {
 	return &q
 }
 
-func cleanBadge(raw json.RawMessage) *Badge {
+func cleanBadge(raw json.RawMessage) *PanelBadge {
 	var in struct {
 		Text string `json:"text"`
 		Tone string `json:"tone"`
@@ -235,7 +239,7 @@ func cleanBadge(raw json.RawMessage) *Badge {
 	if len(raw) == 0 || json.Unmarshal(raw, &in) != nil {
 		return nil
 	}
-	b := Badge{Text: cleanText(in.Text, maxBadgeText), Tone: toneOf(in.Tone)}
+	b := PanelBadge{Text: cleanText(in.Text, maxBadgeText), Tone: toneOf(in.Tone)}
 	if b.Text == "" {
 		return nil
 	}
@@ -244,16 +248,16 @@ func cleanBadge(raw json.RawMessage) *Badge {
 
 // cleanValue reads a value: a string, a number or a boolean is text as written; an object is
 // typed (text, date, money, badge). Anything else, or a typed value that does not read, is nil.
-func cleanValue(raw json.RawMessage) *Value {
+func cleanValue(raw json.RawMessage) *PanelValue {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 {
 		return nil
 	}
-	text := func(s string) *Value {
+	text := func(s string) *PanelValue {
 		if s = cleanText(s, maxValue); s == "" {
 			return nil
 		}
-		return &Value{Type: "text", Text: s}
+		return &PanelValue{Type: "text", Text: s}
 	}
 	switch raw[0] {
 	case '"':
@@ -296,20 +300,20 @@ func cleanValue(raw json.RawMessage) *Value {
 		if !ok {
 			return nil
 		}
-		return &Value{Type: "date", Value: d, Relative: in.Relative}
+		return &PanelValue{Type: "date", Value: d, Relative: in.Relative}
 	case "money":
 		amount, ok := cleanAmount(in.Amount)
 		currency := strings.ToUpper(strings.TrimSpace(in.Currency))
 		if !ok || !currencyRe.MatchString(currency) {
 			return nil
 		}
-		return &Value{Type: "money", Amount: amount, Currency: currency}
+		return &PanelValue{Type: "money", Amount: amount, Currency: currency}
 	case "badge":
 		b := cleanBadge(raw)
 		if b == nil {
 			return nil
 		}
-		return &Value{Type: "badge", Text: b.Text, Tone: b.Tone}
+		return &PanelValue{Type: "badge", Text: b.Text, Tone: b.Tone}
 	}
 	return nil
 }
