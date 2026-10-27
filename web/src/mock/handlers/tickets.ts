@@ -697,8 +697,8 @@ const OPENISH_REPORT: TicketStatus[] = ["open", "pending", "on_hold"];
 
 /**
  * GET /v1/reports/agents: owners, admins and agents (with a team, its leads and members),
- * sharing the overview's volume. Online time is the member's own, whatever the filter, and
- * only admins see everyone's.
+ * sharing the overview's volume. Online time is the member's own, whatever the filter. Only
+ * admins see everyone's rows; other members get their own.
  */
 function agentReports(ctx: Ctx): ReportsAgents {
   const o = reports(ctx);
@@ -715,7 +715,7 @@ function agentReports(ctx: Ctx): ReportsAgents {
   const all = isAdmin(ws, db.meId);
   const data = roster.flatMap((m) => {
     const user = userRef(m.user_id);
-    if (!user) return [];
+    if (!user || (!all && m.user_id !== db.meId)) return [];
     const h = (k: string) => hash(key + m.user_id + k);
     const share = weight.get(m.user_id) ?? 0;
     const solved = Math.round(o.solved * share);
@@ -734,7 +734,7 @@ function agentReports(ctx: Ctx): ReportsAgents {
         replies_per_solved: solved ? perSolved : null,
         first_response_p50_minutes: assigned ? Math.round(18 + h("f") * 50) : null,
         handle_p50_minutes: solved ? Math.round(90 + h("h") * 420) : null,
-        online_minutes: all || m.user_id === db.meId ? online : null,
+        online_minutes: online,
       },
     ];
   });

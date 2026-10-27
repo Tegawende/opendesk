@@ -60,7 +60,7 @@ describe("mock backend", () => {
     expect((await call("GET", `/v1/reports/overview?${range}&team_id=nope`)).status).toBe(422);
   });
 
-  it("reports each agent's work, with online time for admins and for yourself", async () => {
+  it("reports each agent's work to admins, and only your own to other members", async () => {
     const range = "from=2026-09-12&to=2026-10-11";
     const all = (await call("GET", `/v1/reports/agents?${range}`)).body;
     const ws = db.workspaces[0];
@@ -75,14 +75,15 @@ describe("mock backend", () => {
     expect(one.data.length).toBeLessThanOrEqual(team.members.length);
     expect(one.data.every((r: { user: { id: string } }) => team.members.some((m) => m.user_id === r.user.id && m.role !== "observer"))).toBe(true);
     expect((await call("GET", `/v1/reports/agents?${range}&team_id=nope`)).status).toBe(422);
-    // An agent sees only their own online time.
+    // An agent sees only their own row, with the figures an admin sees on it.
     const me = db.meId;
     const agent = ws.members.find((m) => m.role === "agent")!.user_id;
     db.meId = agent;
     try {
       const mine = (await call("GET", `/v1/reports/agents?${range}`)).body;
       expect(mine.online_time).toBe("self");
-      for (const r of mine.data as { user: { id: string }; online_minutes: number | null }[]) expect(r.online_minutes === null, r.user.id).toBe(r.user.id !== agent);
+      expect(mine.data).toEqual(all.data.filter((r: { user: { id: string } }) => r.user.id === agent));
+      expect(mine.data[0].online_minutes).not.toBeNull();
     } finally {
       db.meId = me;
     }

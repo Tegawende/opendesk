@@ -133,6 +133,7 @@
   "work": {
     "title": "Agenten",
     "subtitle": "Die Arbeit jedes Teammitglieds im Zeitraum",
+    "subtitleSelf": "Deine Arbeit im Zeitraum",
     "caption": "Zugewiesene und gelöste Tickets, Antworten, Notizen, Antwort- und Bearbeitungszeiten und Online-Zeit nach Agent",
     "agent": "Agent",
     "assigned": "Zugewiesen",
@@ -152,9 +153,10 @@
     "online": "Online",
     "onlineHint": "Zeit in opendesk mit dem Status Online",
     "onlineNote": "Online zählt die Zeit, in der jedes Teammitglied opendesk mit dem Status Online geöffnet hatte, unabhängig vom Team- oder Markenfilter.",
-    "onlineSelf": "Du siehst deine eigene Online-Zeit. Admins sehen die von allen.",
+    "onlineSelf": "Du siehst deine eigene Arbeit und Online-Zeit. Admins sehen die von allen.",
     "emptyTitle": "Keine Agenten",
     "emptyDescription": "Agenten erscheinen hier, sobald sie in diesem Zeitraum Tickets bearbeiten.",
+    "emptySelf": "Deine Arbeit erscheint hier, sobald du in diesem Zeitraum Tickets bearbeitest. Admins sehen die von allen.",
     "errorTitle": "Agenten konnten nicht geladen werden"
   }
 }

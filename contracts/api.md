@@ -545,7 +545,7 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 | CRUD | `/v1/kb/collections`, `/v1/kb/articles` | articles list supports `collection_id`, `status`, `q` and `for_brand_id` (what that brand shows: its own articles and those of every brand; the composer's and assistant's scope for a ticket's brand); both lists `brand_id` (a brand id, or `none` for what every brand shows; an article's brand is its collection's when that has one). Create and PATCH take `brand_id` (a brand of the workspace, or null) |
 | GET | `/v1/search?q=&brand_id=` | → `{tickets: Ticket[], contacts: Contact[], articles: KbArticle[]}` (5 each). `brand_id` (optional) narrows the articles to what that brand shows: its own and those of every brand |
 | GET | `/v1/reports/overview?from=&to=&team_id=&brand_id=` | → `{created, solved, open_now, first_response_p50_minutes, resolution_p50_minutes, csat_avg, csat_count, sla_breached, by_day: [{date, created, solved}], by_channel: {...}, by_severity: Record<Severity \| "none", number> /* tickets created in the range */, by_agent: [{user, solved, first_response_p50_minutes}], by_team: [{team_id: string \| null, created, solved, open_now, first_response_p50_minutes}], by_brand: [{brand_id, created, solved, open_now, first_response_p50_minutes}]}`. `team_id` (a team, or `none`) and `brand_id` narrow every figure. Private teams' tickets are counted, with no subjects or contacts |
-| GET | `/v1/reports/agents?from=&to=&team_id=&brand_id=` | → `{data: ReportAgent[], online_time: "all" \| "self" \| "none"}`, one row per member, most solved first ("Agents report"). Same range, roles, scope and filters as the overview |
+| GET | `/v1/reports/agents?from=&to=&team_id=&brand_id=` | → `{data: ReportAgent[], online_time: "all" \| "self" \| "none"}`, one row per member, most solved first; a member who is not an admin gets their own row only ("Agents report"). Same range, roles, scope and filters as the overview |
 | POST | `/v1/attachments` | multipart `file` → `Attachment` (unattached, linked when sent). Only whoever uploaded it (that user, or that API key) may send it in `attachment_ids` (`422` otherwise) |
 | GET | `/v1/attachments/{id}` | → 302 to signed URL or streamed. For img tags, the links messages carry are signed (`?exp=&sig=`) and work for one to two hours. A file on a ticket the caller may not see is `404` (contracts/teams.md "Visibility"); an upload not sent yet is its uploader's alone (`404` for anyone else) |
 
@@ -565,15 +565,18 @@ type ReportAgent = { user: UserRef;
   replies_per_solved: number | null;          // their public replies on the tickets of `solved` since each was created (also before the range), divided by solved; null when 0
   first_response_p50_minutes: number | null;  // the overview's by_agent figure: their tickets created in the range
   handle_p50_minutes: number | null;          // over `solved`: from the last assigned activity to them before the solve (else the ticket's creation) to solved_at
-  online_minutes: number | null;              // time in the app with availability online, inside the range; null when online_time does not cover them
+  online_minutes: number | null;              // time in the app with availability online, inside the range; null when online_time is none
 };
 ```
 
-Online time is personal: `online_time` is `all` for owners and admins (and API keys with
-`settings:read`), `self` for other members, who get their own row's figure only, and `none` for
-other API keys. It comes from `agent_presence`: each `POST /v1/me/heartbeat` with `OD-Workspace`
-from an owner, admin or agent whose `availability` is `online` extends their open stretch, or
-closes it at its last heartbeat and starts a new one when the last came more than 10 minutes ago.
+A member's work and online time are personal, and `online_time` says what the caller gets: `all`
+for owners and admins (and API keys with `settings:read`), every row with online time; `self` for
+other members, their own row alone, with its online time (an empty `data` when they have no row,
+as a viewer or off the filtered team); `none` for other API keys, every row without online time
+(`online_minutes` null), as `tickets:read` already reads every ticket. Online time comes from
+`agent_presence`: each `POST /v1/me/heartbeat` with `OD-Workspace` from an owner, admin or agent
+whose `availability` is `online` extends their open stretch, or closes it at its last heartbeat
+and starts a new one when the last came more than 10 minutes ago.
 Setting your own availability to `online` starts a stretch; leaving `online` ends it (now when
 you change it yourself, at the last heartbeat when someone else does). Stretches are kept 400 days
 and removed with the member.

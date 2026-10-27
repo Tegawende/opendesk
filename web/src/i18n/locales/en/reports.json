@@ -133,6 +133,7 @@
   "work": {
     "title": "Agents",
     "subtitle": "Each teammate's work in the period",
+    "subtitleSelf": "Your work in the period",
     "caption": "Tickets assigned and solved, replies, notes, response and handle times, and online time by agent",
     "agent": "Agent",
     "assigned": "Assigned",
@@ -152,9 +153,10 @@
     "online": "Online",
     "onlineHint": "Time in opendesk with their status set to Online",
     "onlineNote": "Online counts the time each teammate had opendesk open with their status set to Online, whatever the team or brand filter.",
-    "onlineSelf": "You see your own online time. Admins see everyone's.",
+    "onlineSelf": "You see your own work and online time. Admins see everyone's.",
     "emptyTitle": "No agents to show",
     "emptyDescription": "Agents appear here once they work tickets in this period.",
+    "emptySelf": "Your work appears here once you work tickets in this period. Admins see everyone's.",
     "errorTitle": "Agents couldn't load"
   }
 }

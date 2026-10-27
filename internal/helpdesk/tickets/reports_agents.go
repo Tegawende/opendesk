@@ -26,17 +26,18 @@ type ReportAgentRow struct {
 	RepliesPerSolved        *float64       `json:"replies_per_solved" doc:"Their public replies on the tickets they solved, per ticket; null without solved tickets"`
 	FirstResponseP50Minutes *float64       `json:"first_response_p50_minutes" doc:"Median first response of their tickets created in the range"`
 	HandleP50Minutes        *float64       `json:"handle_p50_minutes" doc:"Median time from the last assignment to them until solved, over their solved tickets"`
-	OnlineMinutes           *float64       `json:"online_minutes" doc:"Time in the app with availability online in the range; null when online_time does not cover this member"`
+	OnlineMinutes           *float64       `json:"online_minutes" doc:"Time in the app with availability online in the range; null when online_time is none"`
 }
 
 // ReportAgents is GET /v1/reports/agents.
 type ReportAgents struct {
 	Data       []ReportAgentRow `json:"data"`
-	OnlineTime string           `json:"online_time" enum:"all,self,none" doc:"Whose online time the caller sees: everyone's (admins), their own, or none (API keys without settings:read)"`
+	OnlineTime string           `json:"online_time" enum:"all,self,none" doc:"Whose rows and online time the caller sees: everyone's (admins), their own row only, or every row without online time (API keys without settings:read)"`
 }
 
-// Online time is personal: admins (and API keys with settings:read) see everyone's,
-// other members their own.
+// A member's work and online time are personal: admins (and API keys with settings:read) see
+// everyone's rows, other members their own row only, and other API keys every row without
+// online time.
 const (
 	onlineAll  = "all"
 	onlineSelf = "self"
@@ -56,9 +57,14 @@ func onlineScope(ctx context.Context, p *auth.Principal) (string, *uuid.UUID) {
 // agentsReport answers one row per member: the owners, admins and agents (with a team
 // filter, that team's leads and members), and anyone else with work on the filtered
 // tickets in the range. Ticket figures follow the team and brand filter; online time is
-// the member's whole time in the app. onlineFor nil reads everyone's online time.
+// the member's whole time in the app. onlineFor nil reads everyone's online time; with
+// scope self only onlineFor's row is answered.
 func agentsReport(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS string, rf reportFilter, scope string, onlineFor *uuid.UUID) (ReportAgents, error) {
 	out := ReportAgents{Data: []ReportAgentRow{}, OnlineTime: scope}
+	var rowsFor *uuid.UUID
+	if scope == onlineSelf {
+		rowsFor = onlineFor
+	}
 	rf, err := rf.validate()
 	if err != nil {
 		return out, err
@@ -149,7 +155,8 @@ func agentsReport(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS s
 			OR (m.role IN ('owner', 'admin', 'agent') AND ($4 = '' OR EXISTS (
 				SELECT 1 FROM team_members tm JOIN teams tt ON tt.id = tm.team_id
 				WHERE tt.workspace_id = $1 AND tt.id::text = $4 AND tm.user_id = m.user_id AND tm.role <> 'observer'))))
-		ORDER BY 6 DESC, 7 DESC, u.name, u.id LIMIT 500`, wid, from, to, rf.Team, rf.Brand, onlineFor)
+			AND ($7::uuid IS NULL OR m.user_id = $7)
+		ORDER BY 6 DESC, 7 DESC, u.name, u.id LIMIT 500`, wid, from, to, rf.Team, rf.Brand, onlineFor, rowsFor)
 	if err != nil {
 		return out, err
 	}
@@ -182,8 +189,8 @@ func registerAgentsReport(d *deps.Deps, api huma.API) {
 		Summary: "Agents report", Tags: []string{"Reports"},
 		Description: "One row per member for the range: tickets assigned and solved, replies and notes, replies per solved ticket, " +
 			"median first response and handle time, and online time. from, to, team_id and brand_id as in /v1/reports/overview; " +
-			"online time is not narrowed by team or brand. Admins (and API keys with settings:read) see everyone's online time, " +
-			"other members only their own."},
+			"online time is not narrowed by team or brand. Admins (and API keys with settings:read) see every member's row with online time, " +
+			"other members only their own row, other API keys every row without online time."},
 		func(ctx context.Context, in *struct {
 			From    string `query:"from"`
 			To      string `query:"to"`

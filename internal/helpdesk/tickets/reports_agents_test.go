@@ -229,15 +229,12 @@ func TestAgentsReportOnlineTime(t *testing.T) {
 		t.Fatalf("owner %+v", r)
 	}
 	r = agentsReport(t, e, ws.Agent.As(ws), march)
-	if r.OnlineTime != "self" || !eq(rowOf(t, r, ws.Agent.ID).OnlineMinutes, 180) || rowOf(t, r, ws.Admin.ID).OnlineMinutes != nil {
+	if r.OnlineTime != "self" || len(r.Data) != 1 || !eq(rowOf(t, r, ws.Agent.ID).OnlineMinutes, 180) {
 		t.Fatalf("agent %+v", r)
 	}
-	// Everyone else's ticket figures stay visible, as in the overview.
-	if rowOf(t, r, ws.Admin.ID).Assigned != 1 {
-		t.Fatalf("agent sees adam %+v", rowOf(t, r, ws.Admin.ID))
-	}
+	// A viewer has no row of their own, so sees none.
 	r = agentsReport(t, e, ws.Viewer.As(ws), march)
-	if r.OnlineTime != "self" || rowOf(t, r, ws.Agent.ID).OnlineMinutes != nil || rowOf(t, r, ws.Admin.ID).OnlineMinutes != nil {
+	if r.OnlineTime != "self" || len(r.Data) != 0 {
 		t.Fatalf("viewer %+v", r)
 	}
 	r = agentsReport(t, e, hdtest.Auth{Bearer: e.APIKey(ws, auth.ScopeTicketsRead)}, march)
@@ -249,4 +246,36 @@ func TestAgentsReportOnlineTime(t *testing.T) {
 		t.Fatalf("settings key %+v", r)
 	}
 	e.Do("GET", "/v1/reports/agents?"+march, hdtest.Auth{Bearer: e.APIKey(ws, auth.ScopeSettingsRead)}, nil).Want(t, 403)
+}
+
+// A member's work is personal too: other members get their own row alone, with the figures an
+// admin sees on it; admins get everyone's.
+func TestAgentsReportOwnRow(t *testing.T) {
+	e, _ := newEnv(t)
+	f := seedAgents(t, e)
+	ws := f.ws
+	all := agentsReport(t, e, ws.Admin.As(ws), march)
+	if len(all.Data) != 5 || rowOf(t, all, f.bea.ID) == nil || rowOf(t, all, ws.Agent.ID) == nil {
+		t.Fatalf("admin rows %+v", all.Data)
+	}
+	r := agentsReport(t, e, f.bea.As(ws), march)
+	if r.OnlineTime != "self" || len(r.Data) != 1 || r.Data[0].User.ID != f.bea.ID {
+		t.Fatalf("bea rows %+v", r.Data)
+	}
+	if b, want := r.Data[0], rowOf(t, all, f.bea.ID); b.Assigned != want.Assigned || b.Replies != want.Replies || b.Notes != want.Notes ||
+		!eq(b.FirstResponseP50Minutes, 20) || !eq(b.OnlineMinutes, 0) {
+		t.Fatalf("bea row %+v, admin sees %+v", b, want)
+	}
+	// Filters still apply: off the team, a member has no row there.
+	if r := agentsReport(t, e, f.bea.As(ws), march+"&team_id="+f.team.String()); len(r.Data) != 1 || r.Data[0].User.ID != f.bea.ID {
+		t.Fatalf("bea team rows %+v", r.Data)
+	}
+	if r := agentsReport(t, e, ws.Agent.As(ws), march+"&team_id="+f.team.String()); len(r.Data) != 0 {
+		t.Fatalf("anna team rows %+v", r.Data)
+	}
+	// API keys without settings:read keep every row, without online time.
+	r = agentsReport(t, e, hdtest.Auth{Bearer: e.APIKey(ws, auth.ScopeTicketsRead)}, march)
+	if r.OnlineTime != "none" || len(r.Data) != 5 {
+		t.Fatalf("key rows %+v", r.Data)
+	}
 }

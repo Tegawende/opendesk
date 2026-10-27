@@ -1256,10 +1256,10 @@ export type ReportsAgentRow = {
   first_response_p50_minutes: number | null;
   /** Median time from the last assignment to them until solved. */
   handle_p50_minutes: number | null;
-  /** Time in the app with availability online; null when `online_time` does not cover them. */
+  /** Time in the app with availability online; null when `online_time` is none. */
   online_minutes: number | null;
 };
-/** Whose online time the caller sees: everyone's (admins), their own, or none (API keys). */
+/** Whose rows and online time the caller sees: everyone's (admins), their own row only, or every row without online time (API keys). */
 export type ReportsOnlineTime = "all" | "self" | "none";
 export type ReportsAgents = { data: ReportsAgentRow[]; online_time: ReportsOnlineTime };
 

@@ -472,14 +472,15 @@ function OpenWorkCards({ filter }: { filter: ReportsQuery }) {
   );
 }
 
-/** Each member's work in the period, from its own report: online time is personal. */
+/** Each member's work in the period, from its own report: a member who is not an admin gets their own row. */
 function AgentWorkCard({ filter }: { filter: ReportsQuery }) {
   const { t } = useTranslation("reports");
   const report = useQuery({ ...q.reportAgents(filter), placeholderData: keepPreviousData });
   const d = report.data;
-  const note = d?.online_time === "all" ? t("work.onlineNote") : d?.online_time === "self" ? t("work.onlineSelf") : null;
+  const self = d?.online_time === "self";
+  const note = d?.online_time === "all" ? t("work.onlineNote") : self ? t("work.onlineSelf") : null;
   return (
-    <Card title={t("work.title")} subtitle={t("work.subtitle")} flush className={cn("transition-opacity duration-150", report.isFetching && report.isPlaceholderData && "opacity-60")}>
+    <Card title={t("work.title")} subtitle={self ? t("work.subtitleSelf") : t("work.subtitle")} flush className={cn("transition-opacity duration-150", report.isFetching && report.isPlaceholderData && "opacity-60")}>
       {report.isLoading ? (
         <TableSkeleton />
       ) : report.error ? (
@@ -491,7 +492,7 @@ function AgentWorkCard({ filter }: { filter: ReportsQuery }) {
           action={<Button onClick={() => void report.refetch()}>{t("error.retry")}</Button>}
         />
       ) : !d?.data.length ? (
-        <EmptyState compact lit={0} title={t("work.emptyTitle")} description={t("work.emptyDescription")} />
+        <EmptyState compact lit={0} title={t("work.emptyTitle")} description={self ? t("work.emptySelf") : t("work.emptyDescription")} />
       ) : (
         <>
           <AgentWorkTable report={d} />
