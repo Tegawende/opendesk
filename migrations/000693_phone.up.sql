@@ -57,7 +57,9 @@ CREATE TABLE phone_calls (
     connection_id    uuid REFERENCES phone_connections(id) ON DELETE SET NULL,
     provider         text NOT NULL,
     external_call_id text NOT NULL,
-    ticket_id        uuid REFERENCES tickets(id) ON DELETE SET NULL,
+    -- A call is part of its ticket and goes with it, like the ticket's messages and its
+    -- timeline. A call without a ticket (a blocked contact's) keeps no content.
+    ticket_id        uuid REFERENCES tickets(id) ON DELETE CASCADE,
     activity_id      uuid REFERENCES activities(id) ON DELETE SET NULL,
     contact_id       uuid REFERENCES contacts(id) ON DELETE SET NULL,
     direction        text NOT NULL CHECK (direction IN ('inbound', 'outbound')),

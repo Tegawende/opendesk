@@ -88,6 +88,13 @@ with its latest state and the ticket, contact and timeline entry it is documente
 `phone_inbound_events` holds verified events, normalized, until a week after they were
 applied (30 days at most); the raw payload is never stored.
 
+A call's content (number, names, links, tags, comments, summary, transcript) lives on its
+ticket, in the call's row and its timeline entry, and goes when the ticket's content goes:
+the row cascades with the ticket (`ON DELETE CASCADE`, like `messages` and `activities`),
+and a deleted ticket keeps its calls as it keeps its messages. A deleted contact's calls stay
+on their tickets, as their messages do (`contact_id` is cleared). The only rows without a
+ticket are a blocked contact's, which keep no content (Contacts).
+
 Every verified event is applied by the `phone.inbound` job in one transaction that locks
 its event row and its call row, so events of one call apply one at a time and each once.
 Providers deliver late, twice and out of order, so a call only moves forward: its stage

@@ -723,3 +723,18 @@ func TestContactNumberWithTrunkZeroMatches(t *testing.T) {
 		t.Fatalf("the lookup does not use the digits index:\n%s", plan.String())
 	}
 }
+
+// A call's content goes with its ticket: removing the ticket removes the call's row and
+// its entry, as it removes the ticket's messages.
+func TestCallContentGoesWithItsTicket(t *testing.T) {
+	h := newHarness(t)
+	h.sendAll(t, append(h.recorded(t, "answered"), h.recorded(t, "intelligence")...))
+	tk := h.ticketOfCall(t, "1290001")
+	h.e.Exec(`DELETE FROM tickets WHERE workspace_id = $1 AND id = $2`, h.ws.ID, tk.ID)
+	var calls, entries int
+	h.e.Scalar(`SELECT count(*) FROM phone_calls WHERE workspace_id = $1`, &calls, h.ws.ID)
+	h.e.Scalar(`SELECT count(*) FROM activities WHERE workspace_id = $1 AND type = 'call'`, &entries, h.ws.ID)
+	if calls != 0 || entries != 0 {
+		t.Fatalf("after the ticket went: %d calls, %d entries", calls, entries)
+	}
+}
