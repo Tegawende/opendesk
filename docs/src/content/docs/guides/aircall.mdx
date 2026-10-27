@@ -64,6 +64,12 @@ Each call is one entry in the timeline. It shows:
 
 Teammates are matched by email: an Aircall user with the same email as a member is shown as that member. Turn on **Assign answered calls** and an answered call gives a ticket nobody has to the teammate who took it.
 
+<Callout type="note" title="Assign answered calls and auto-assignment">
+
+A call opens its ticket at the first ring, and the answer is only known when the call ends. If auto-assignment (or an automation on **A ticket is created**) gives the new ticket to someone while the phone rings, the ticket already has an owner when the call ends, and **Assign answered calls** leaves it with them. For the teammate who answered to own phone tickets, keep auto-assignment off for those tickets, for instance for the team your Phone routing rule sends them to.
+
+</Callout>
+
 ## Missed calls: an automation
 
 What a missed call should do is yours to decide, with an automation on the trigger **A call ends**. This one reopens the caller's ticket, notes the missed call and raises its priority, for calls that came outside your business hours:

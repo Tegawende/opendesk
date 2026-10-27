@@ -162,6 +162,13 @@ the same email; the entry shows them (`agent`), else the provider's name for the
 `assign_answered`, an answered call assigns a ticket nobody has, isn't solved or closed and
 whose team the member is on, as the system (`assigned` with `via: "phone"`).
 
+The assignment waits for the call's end, while a new phone ticket is made at the first ring
+and runs `ticket_created` like any other: when auto-assignment (round robin, a team's rule) or
+a `ticket_created` automation assigns it then, the ticket is no longer unassigned when the
+call ends, and `assign_answered` leaves it to whoever got it. A workspace that wants the
+person who answered to own phone tickets turns auto-assignment off for them (or for the team
+phone tickets are routed to).
+
 ### Automations
 
 When a call ends (the provider's final event, once per call) the `call_ended` automations
