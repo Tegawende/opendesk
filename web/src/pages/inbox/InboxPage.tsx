@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CircleCheck, CircleDashed, Clock, Inbox, Layers, ShieldAlert, User, Users } from "lucide-react";
+import { CircleCheck, CircleDashed, Clock, Inbox, ShieldAlert, User, Users } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { Ticket } from "@/lib/api/types";
@@ -29,6 +29,7 @@ import { focusField, missingForSolve, useTicketFields } from "@/components/ticke
 import { atLeast, useRole, useSession } from "@/lib/session";
 import { useDocumentTitle } from "@/app/RootLayout";
 import { TeamDot, useTeamsCtx } from "@/components/tickets/teams";
+import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { TeamTabs } from "./TeamTabs";
 
 const TicketDetail = lazy(() => import("@/components/tickets/detail/TicketDetail"));
@@ -145,7 +146,7 @@ export default function InboxPage() {
   const query = useMemo(() => listQuery(base, search), [JSON.stringify(base), JSON.stringify(search)]); // eslint-disable-line react-hooks/exhaustive-deps
   const listKey = JSON.stringify(query);
   const teamCounts = teamId ? (teamId === "mine" ? counts?.my_teams : counts?.teams?.[teamId]) : undefined;
-  const title = (folder ? tNav(folder.labelKey) : undefined) ?? view?.name ?? (teamId ? (teamId === "mine" ? tr("teams.myTeams") : (team?.name ?? tr("teams.team"))) : tr("list.view"));
+  const title = (folder ? tNav(folder.labelKey) : undefined) ?? (view && viewName(view)) ?? (teamId ? (teamId === "mine" ? tr("teams.myTeams") : (team?.name ?? tr("teams.team"))) : tr("list.view"));
   const count = folder
     ? counts
       ? folder.count(counts)
@@ -446,7 +447,7 @@ export default function InboxPage() {
       >
         <ListToolbar
           title={title}
-          icon={folder ? folderIcon[folder.id] : team ? <TeamDot team={team} className="size-2.5" /> : teamId ? <Users /> : <Layers />}
+          icon={folder ? folderIcon[folder.id] : team ? <TeamDot team={team} className="size-2.5" /> : teamId ? <Users /> : <ViewIcon icon={view?.icon} size={16} />}
           count={count}
           inTeam={!!teamId}
           below={

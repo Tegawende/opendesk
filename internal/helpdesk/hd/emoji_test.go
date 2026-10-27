@@ -1,9 +1,11 @@
-package wiki
+package hd_test
 
 import (
 	"os"
 	"regexp"
 	"testing"
+
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 )
 
 func TestIsEmoji(t *testing.T) {
@@ -30,13 +32,13 @@ func TestIsEmoji(t *testing.T) {
 		"\u20E3":               false,
 		"\U0001F3F4\U000E0065": false, // tags without the cancel tag
 	} {
-		if got := isEmoji(s); got != want {
-			t.Errorf("isEmoji(%+q) = %v", s, got)
+		if got := hd.IsEmoji(s); got != want {
+			t.Errorf("IsEmoji(%+q) = %v", s, got)
 		}
 	}
 }
 
-// Every icon the web app's picker offers is one the API takes.
+// Every emoji the web app's picker offers (wiki pages, views) is one the API takes.
 func TestPickerEmoji(t *testing.T) {
 	src, err := os.ReadFile("../../../web/src/components/wiki/emoji.ts")
 	if err != nil {
@@ -47,7 +49,7 @@ func TestPickerEmoji(t *testing.T) {
 		t.Fatalf("read %d emoji", len(found))
 	}
 	for _, m := range found {
-		if !isEmoji(m[1]) {
+		if !hd.IsEmoji(m[1]) {
 			t.Errorf("the picker offers %+q, which the API refuses", m[1])
 		}
 	}

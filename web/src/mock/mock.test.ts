@@ -120,6 +120,19 @@ describe("mock backend", () => {
     expect((await call("POST", "/v1/public/csat/survey", { token: "demo" })).status).toBe(200);
   });
 
+  it("serves views in sections and keeps a view's section as the API does", async () => {
+    const seeded = (await call("GET", "/v1/views")).body.data as { section: string | null }[];
+    expect(new Set(seeded.map((v) => v.section).filter(Boolean))).toEqual(new Set(["Escalations"]));
+    const v = (await call("POST", "/v1/views", { name: "Refunds", shared: true, section: "  Billing   and plans " })).body;
+    expect(v.section).toBe("Billing and plans");
+    expect((await call("PATCH", `/v1/views/${v.id}`, { name: "Refunds due" })).body.section).toBe("Billing and plans");
+    expect((await call("PATCH", `/v1/views/${v.id}`, { section: "x".repeat(61) })).status).toBe(422);
+    expect((await call("PATCH", `/v1/views/${v.id}`, { section: "<b>x</b>" })).status).toBe(422);
+    expect((await call("PATCH", `/v1/views/${v.id}`, { section: "  " })).body.section).toBeNull();
+    expect((await call("PATCH", `/v1/views/${v.id}`, { section: "Delivery" })).body.section).toBe("Delivery");
+    expect((await call("PATCH", `/v1/views/${v.id}`, { section: null })).body.section).toBeNull();
+  });
+
   it("keeps an automation's phrase list one trimmed phrase per line", async () => {
     const action = [{ type: "set_status", value: "closed" }];
     const made = await call("POST", "/v1/automations", {
@@ -134,6 +147,31 @@ describe("mock backend", () => {
     expect(empty.status).toBe(422);
     const status = await call("POST", "/v1/automations", { name: "x", trigger: "ticket_created", conditions: [{ field: "status", op: "any", value: "open" }], actions: action });
     expect(status.status).toBe(422);
+  });
+
+  it("gives views an emoji, an icon or one or two characters, with a colour", async () => {
+    const seeded = (await call("GET", "/v1/views")).body.data as { icon?: { kind: string } | null }[];
+    expect(new Set(seeded.map((v) => v.icon?.kind).filter(Boolean))).toEqual(new Set(["emoji", "icon", "text"]));
+    const v = (await call("POST", "/v1/views", { name: "Refunds", icon: { kind: "emoji", value: " \u{1F4B8} ", color: "red" } })).body;
+    expect(v.icon).toEqual({ kind: "emoji", value: "\u{1F4B8}", color: null });
+    const patch = async (icon: unknown) => call("PATCH", `/v1/views/${v.id}`, { icon });
+    expect((await patch({ kind: "icon", value: "truck", color: "teal" })).body.icon).toEqual({ kind: "icon", value: "truck", color: "teal" });
+    expect((await call("PATCH", `/v1/views/${v.id}`, { name: "Refunds due" })).body.icon).toEqual({ kind: "icon", value: "truck", color: "teal" });
+    expect((await patch({ kind: "text", value: "PO", color: null })).body.icon).toEqual({ kind: "text", value: "PO", color: null });
+    expect((await patch({ kind: "emoji", value: "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}" })).body.icon.value).toBe("\u{1F468}\u200D\u{1F469}\u200D\u{1F467}");
+    const bad = [
+      "\u{1F4B8}",
+      { kind: "emoji", value: "a" },
+      { kind: "emoji", value: "\u{1F4B8}\u{1F4B8}" },
+      { kind: "icon", value: "rocket" },
+      { kind: "icon", value: "truck", color: "Teal" },
+      { kind: "text", value: "POS" },
+      { kind: "text", value: "<" },
+      { kind: "picture", value: "x" },
+    ];
+    for (const icon of bad) expect((await patch(icon)).status, JSON.stringify(icon)).toBe(422);
+    expect((await patch(null)).body.icon).toBeNull();
+    await call("DELETE", `/v1/views/${v.id}`);
   });
 
   it("publishes contiguous events for mutations", async () => {
