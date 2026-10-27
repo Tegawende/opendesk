@@ -152,7 +152,7 @@ type TriageField = "priority" | "severity" | "labels" | "team";
 type DecisionEngine = { provider: "typesafe" /* Jev, direct or through OpenRouter */ | "llm" | "none"; model: string /* "jev-latest", "~typesafe/jev-latest", or the LLM fast model */; connected: boolean };
 type TriageSettings = { auto_triage: boolean; fields: TriageField[]; assign_after_triage: boolean;
   threshold: number /* 0.5..0.99, default 0.7: confidence at or above it applies a decision, below it leaves a suggestion */;
-  engine: DecisionEngine; available: boolean /* triage can run: AI or a decision engine is configured and AI is on for the workspace */ };
+  engine: DecisionEngine /* the workspace's: Jev on its own TypeSafe or OpenRouter key when it has one (contracts/ai.md "Provider per workspace"), else the instance's */; available: boolean /* triage can run: AI or a decision engine is configured and AI is on for the workspace */ };
 type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 type BusinessHours = { enabled: boolean; timezone: string /* the workspace timezone */; schedule: Record<Weekday, { start: string; end: string }[]> /* "HH:MM", 24h */; holidays: { date: string /* YYYY-MM-DD */; name: string }[] };
 type OnboardingStepId = "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_ollie" | "setup_ai_agent";
