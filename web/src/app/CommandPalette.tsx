@@ -416,6 +416,11 @@ export function CommandPalette() {
                   {tNav("command.newTicket")}
                 </Item>
                 {atLeast(role, "agent") && (
+                  <Item value="new ticket full page compose create" keywords={[tNav("command.newTicketPage")]} icon={<SquarePen />} onSelect={() => go(() => void navigate({ to: "/tickets/new" }))}>
+                    {tNav("command.newTicketPage")}
+                  </Item>
+                )}
+                {atLeast(role, "agent") && (
                   <Item value="new wiki page doc create write" keywords={[tNav("command.newWikiPage")]} icon={<FilePlus2 />} onSelect={() => go(() => void newWikiPage())}>
                     {tNav("command.newWikiPage")}
                   </Item>

@@ -307,7 +307,10 @@ export function registerTickets() {
     const body = s(ctx, "body_html");
     if (body) {
       const kind = s(ctx, "kind") === "note" ? "note" : "reply";
-      const msg = addMessage(ws, t, { kind, direction: "outbound", html: body, user: userRef(db.meId), delivery: "pending" }, { status: p.status, actor: userRef(db.meId) });
+      // Copies go with an emailed reply only, like the API's.
+      const copies = kind === "reply" && channel === "email" ? { cc: strArr(ctx.body.cc), bcc: strArr(ctx.body.bcc) } : {};
+      const attachments = attachmentsFor(strArr(ctx.body.attachment_ids));
+      const msg = addMessage(ws, t, { kind, direction: "outbound", html: body, user: userRef(db.meId), ...copies, attachments, delivery: "pending" }, { status: p.status, actor: userRef(db.meId) });
       if (msg.delivery_status === "pending") simulateDelivery(ws, t, msg.id);
     } else if (p.status && p.status !== t.status) {
       applyPatch(ws, t, { status: p.status }, userRef(db.meId));

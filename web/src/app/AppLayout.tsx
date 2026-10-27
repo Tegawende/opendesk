@@ -249,12 +249,20 @@ export function AppLayout() {
   const spaceEditor = useSpaceUi((s) => !!s.editor);
   // On the mail pages, c writes new mail and g i goes to the mail inbox.
   const onMail = collab.enabled && section === "mail";
+  // The new ticket page is the dialog's draft on a full page: New ticket there opens nothing more.
+  const onNewTicket = section === "tickets";
+  useEffect(() => {
+    if (onNewTicket && newTicketOpen) shell.newTicket(false);
+  }, [onNewTicket, newTicketOpen]);
 
   useHotkeys({
     "mod+k": () => shell.palette(!useShell.getState().paletteOpen),
     "?": () => shell.shortcuts(),
     "shift+?": () => shell.shortcuts(),
-    c: () => (onMail ? compose.open() : shell.newTicket()),
+    c: () => {
+      if (onMail) compose.open();
+      else if (!onNewTicket) shell.newTicket();
+    },
     b: () => toggleNav(),
     "g i": () =>
       onMail
@@ -318,7 +326,7 @@ export function AppLayout() {
           <UpgradeDialog />
         </Suspense>
       )}
-      {newTicketOpen && (
+      {newTicketOpen && !onNewTicket && (
         <Suspense fallback={null}>
           <NewTicketDialog />
         </Suspense>

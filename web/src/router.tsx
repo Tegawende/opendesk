@@ -360,6 +360,21 @@ function prefetchTicket(qc: QueryClient, id: string) {
   void qc.prefetchQuery(q.slaPolicies());
 }
 
+// A new ticket on a full page (the dialog's "Open full page"), with the ticket page's details column.
+const newTicketRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: "/tickets/new",
+  loader: ({ context }) => {
+    const qc = context.queryClient;
+    prefetchInboxShared(qc);
+    void qc.prefetchQuery(q.savedReplies());
+    void qc.prefetchQuery(q.customFields());
+    void qc.prefetchQuery(q.templateVariables());
+  },
+  component: page(() => import("./pages/inbox/NewTicketPage")),
+  staticData: { title: "newTicket" },
+});
+
 const contactsRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/contacts/{-$contactId}",
@@ -908,6 +923,7 @@ const routeTree = rootRoute.addChildren([
     everywhereRoute,
     viewRoute,
     teamRoute,
+    newTicketRoute,
     mailIndexRoute,
     mailRoute,
     contactsRoute,
