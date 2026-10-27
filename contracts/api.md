@@ -657,7 +657,7 @@ Automations: conditions take `field.<key>` (ticket field) and `contact.field.<ke
 written as a string (`"12.5"`, `"true"`, `"2026-10-11"`, comma separated option ids; `""` clears); it is validated when the
 automation is saved and skipped at run time if the field was archived or deleted since.
 
-`merge_into_open_ticket` (trigger `ticket_created` only; another trigger is `422`) merges a new ticket the customer opened into
+`merge_into_open_ticket` (trigger `ticket_created` only; another trigger is `422`) merges a new email ticket the customer opened into
 their earlier ticket, for a customer who writes again without replying in the thread. It merges into the most recent other
 ticket (by its last reply, else its creation) that is of the same contact, brand and channel, created before it, `open`,
 `pending` or `on_hold`, not spam, deleted or merged, created or replied on within `value` days, and, with `same_subject`, about

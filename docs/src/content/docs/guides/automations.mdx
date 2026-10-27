@@ -130,7 +130,7 @@ A **Send a reply** action is careful not to start mail loops or answer machines:
 
 A customer who writes again in a new email, rather than replying in the thread, opens a second ticket. **Merge into the contact's open ticket** joins it to the one already being worked on, as [Merge into another ticket](/guides/inbox-and-tickets/#snooze-merge-spam-and-delete) does: its messages and side conversations move, its labels are added, and both timelines say which automation merged them.
 
-- It merges into the contact's most recent other ticket that is open, pending or on hold, of the same brand and channel, created or replied on within the days you choose (1 to 30, 7 by default).
+- It applies to email tickets, and merges into the contact's most recent other email ticket that is open, pending or on hold, of the same brand, created or replied on within the days you choose (1 to 30, 7 by default).
 - With **Same subject only** (on by default), the subjects must match once `Re:`, `Fwd:`, `AW:`, `TR:` and ticket numbers like `[#123]` are left out, ignoring case. A ticket without a subject matches none.
 - A merge never changes who sees a message: both tickets are of the same team, or neither is in a private team.
 - Tickets without a contact, tickets your team started and mail that failed sender checks are never merged.

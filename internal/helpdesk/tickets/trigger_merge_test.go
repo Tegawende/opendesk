@@ -184,6 +184,20 @@ func TestAutomationMergeSkips(t *testing.T) {
 				nt.Channel, nt.MailboxID, nm.MailboxID = domain.ChannelAPI, nil, nil
 			})
 		}},
+		{name: "chat conversations stay separate", earlier: func(from string) uuid.UUID {
+			return customerMail(t, e, ws, mb, from, subject, "x", func(nt *domain.NewTicket, nm *domain.NewMessage) {
+				nt.Channel, nt.MailboxID, nm.MailboxID = domain.ChannelChat, nil, nil
+			})
+		}, later: func(nt *domain.NewTicket, nm *domain.NewMessage) {
+			nt.Channel, nt.MailboxID, nm.MailboxID = domain.ChannelChat, nil, nil
+		}},
+		{name: "API tickets stay separate", earlier: func(from string) uuid.UUID {
+			return customerMail(t, e, ws, mb, from, subject, "x", func(nt *domain.NewTicket, nm *domain.NewMessage) {
+				nt.Channel, nt.MailboxID, nm.MailboxID = domain.ChannelAPI, nil, nil
+			})
+		}, later: func(nt *domain.NewTicket, nm *domain.NewMessage) {
+			nt.Channel, nt.MailboxID, nm.MailboxID = domain.ChannelAPI, nil, nil
+		}},
 		{name: "a private team's ticket", earlier: func(from string) uuid.UUID {
 			return customerMail(t, e, ws, mb, from, subject, "x", func(nt *domain.NewTicket, _ *domain.NewMessage) { nt.TeamID = &private })
 		}},

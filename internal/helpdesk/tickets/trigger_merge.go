@@ -44,8 +44,8 @@ func (r *triggerRun) mergeIntoOpenTicket(ctx context.Context, actor Actor, act h
 	if err != nil {
 		return false, err
 	}
-	// A ticket the team started (an outbound email, a note) is not a customer writing again.
-	if contact == nil || !fromCustomer || unverified {
+	// Follow-up merging applies to customer email conversations.
+	if channel != domain.ChannelEmail || contact == nil || !fromCustomer || unverified {
 		return false, nil
 	}
 	private, err := hd.TeamPrivate(ctx, r.tx, r.wid, team)
