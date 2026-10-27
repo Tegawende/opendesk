@@ -22,6 +22,8 @@ import { CallEntry } from "./CallEntry";
 import { BotFace } from "@/components/bots/BotFace";
 import { isAIActor, OllieAvatar, useAssistantName } from "../ollie";
 import { fieldText, useDisplay, useTicketFields, type CustomField } from "../fields";
+import { messageSide, sideClass } from "./messageFrame";
+import { useConversationLayout } from "@/lib/conversationLayout";
 
 type Item = { kind: "message"; at: string; m: Message } | { kind: "activity"; at: string; a: Activity };
 
@@ -398,6 +400,8 @@ export function Timeline({
   threadActions?: ThreadActions;
 }) {
   const { t } = useTranslation("indicators");
+  // Messages to the customer's side and the team's (Settings → Profile → Appearance); activity stays full width.
+  const conversation = useConversationLayout();
   const threadById = useMemo(() => new Map((threads ?? []).map((th) => [th.id, th])), [threads]);
   // Each thread's latest message carries its actions; its first says what went along.
   const [firstInThread, lastInThread] = useMemo(() => {
@@ -464,7 +468,7 @@ export function Timeline({
   let lastDay = "";
   return (
     <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto" aria-label={t("tickets.conversation")} role="log">
-      <div className="mx-auto flex w-full max-w-[820px] flex-col gap-2 px-5 py-5">
+      <div className={cn("mx-auto flex w-full max-w-[820px] flex-col gap-2 px-5 py-5", conversation && "@container")}>
         {loading ? (
           <div className="flex flex-col gap-3">
             {[0, 1].map((i) => (
@@ -503,7 +507,10 @@ export function Timeline({
                   </div>
                 )}
                 <div
-                  className={cn((fresh || intro < 6) && "animate-rise-in motion-reduce:animate-none [animation-fill-mode:both]")}
+                  className={cn(
+                    (fresh || intro < 6) && "animate-rise-in motion-reduce:animate-none [animation-fill-mode:both]",
+                    it.kind === "message" && sideClass(messageSide(it.m), conversation),
+                  )}
                   style={intro < 6 && !fresh ? { animationDelay: `${Math.max(0, Math.min(5, items.length - 1) - intro) * 35}ms` } : undefined}
                 >
                   {it.kind === "message" ? (
@@ -528,7 +535,7 @@ export function Timeline({
             );
           })
         )}
-        {!loading && <LiveAgentReply ticketId={ticketId} messages={messages} />}
+        {!loading && <LiveAgentReply ticketId={ticketId} messages={messages} className={sideClass("team", conversation)} />}
         <TypingIndicator ticketId={ticketId} contactName={contactName} />
       </div>
     </div>

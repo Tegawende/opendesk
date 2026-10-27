@@ -33,6 +33,7 @@ import {
 import { rowSpring } from "@/components/settings2/motion";
 import {
   MAX_PHRASES,
+  actionFitsTrigger,
   actionLabel,
   actionNeedsValue,
   aiActions,
@@ -45,11 +46,14 @@ import {
   callTimes,
   fieldLabel,
   isPhraseOp,
+  mergeWindows,
+  newAction,
   offered,
   opLabel,
   opsFor,
   phrases,
   teamFields,
+  validMergeWindow,
   validPhrases,
   validProbability,
   validQuestion,
@@ -123,13 +127,14 @@ function useFieldItems(current: string, trigger: AutomationTrigger) {
   }));
   return [...builtIn, ...custom];
 }
-function useActionItems(current: ActionType) {
+function useActionItems(current: ActionType, trigger: AutomationTrigger) {
   const { enabled, cost } = useAI();
   const costText = useCostText();
   const { all } = useAutomationFields();
   const hasTicketFields = all.some((f) => f.entity === "ticket" && !f.archived);
   return offered(allActions, aiActions, enabled, current)
     .filter((a) => a !== "set_field" || hasTicketFields || current === "set_field")
+    .filter((a) => actionFitsTrigger(a, trigger) || a === current)
     .map((a) => {
       const n = aiActions.has(a) ? cost("triage") : null;
       return {
@@ -275,16 +280,22 @@ export default function AutomationEdit() {
           : !c.value.trim();
   /** A phrase list past the API's bounds; an empty one is a missing value. */
   const overPhrases = (c: Rule) => !isFieldRule(c) && isPhraseOp(c.op) && phrases(c.value).length > 0 && !validPhrases(c.value);
+  /** An action that cannot run on the chosen trigger (a merge runs only when a ticket is created). */
+  const offTrigger = (a: Action) => !actionFitsTrigger(a.type, draft.trigger);
   const actInvalid = (a: Action) =>
-    a.type === "set_field"
+    offTrigger(a) ||
+    (a.type === "set_field"
       ? !a.field
-      : actionNeedsValue(a.type) && (a.type === "send_reply" || a.type === "add_note" ? isEmptyHtml(a.value) : !a.value.trim());
+      : a.type === "merge_into_open_ticket"
+        ? !validMergeWindow(a.value)
+        : actionNeedsValue(a.type) && (a.type === "send_reply" || a.type === "add_note" ? isEmptyHtml(a.value) : !a.value.trim()));
   const problems: string[] = [];
   if (!draft.name.trim()) problems.push(t("edit.problems.name"));
   if (!draft.actions.length) problems.push(t("edit.problems.action"));
   if (draft.conditions.some((c) => condInvalid(c) && !overPhrases(c))) problems.push(t("edit.problems.condition"));
   if (draft.conditions.some(overPhrases)) problems.push(t("edit.problems.phrases"));
-  if (draft.actions.some(actInvalid)) problems.push(t("edit.problems.actionValue"));
+  if (draft.actions.some((a) => actInvalid(a) && !offTrigger(a))) problems.push(t("edit.problems.actionValue"));
+  if (draft.actions.some(offTrigger)) problems.push(t("edit.problems.mergeTrigger"));
   if (draft.trigger !== "call_ended" && draft.conditions.some((c) => callFields.has(c.field as ConditionField))) problems.push(t("edit.problems.callTrigger"));
 
   const rowMotion = {
@@ -446,6 +457,7 @@ export default function AutomationEdit() {
               <motion.div key={actKeys[i] ?? `a${i}`} {...rowMotion} className="border-b border-line-soft">
                 <ActionRow
                   a={a}
+                  trigger={draft.trigger}
                   invalid={showErrors && actInvalid(a)}
                   onChange={(na) =>
                     set({
@@ -811,12 +823,24 @@ function LinePick({ value, invalid, onChange }: { value: string; invalid: boolea
   );
 }
 
-function ActionRow({ a, invalid, onChange, onRemove }: { a: Action; invalid: boolean; onChange: (a: Action) => void; onRemove: () => void }) {
+function ActionRow({
+  a,
+  trigger,
+  invalid,
+  onChange,
+  onRemove,
+}: {
+  a: Action;
+  trigger: AutomationTrigger;
+  invalid: boolean;
+  onChange: (a: Action) => void;
+  onRemove: () => void;
+}) {
   const { t } = useTranslation("ai");
   useTranslation("indicators");
   const { t: ts } = useTranslation("settingsInbox");
   const { cost } = useAI();
-  const actionItems = useActionItems(a.type);
+  const actionItems = useActionItems(a.type, trigger);
   const members = useMemberItems();
   const teams = useTeamItems();
   const mailboxes = useMailboxItems();
@@ -880,6 +904,12 @@ function ActionRow({ a, invalid, onChange, onRemove }: { a: Action; invalid: boo
     case "mark_spam":
       control = <span className="text-[12px] text-fg-3">{ts("edit.markSpamHint")}</span>;
       break;
+    case "delete_ticket":
+      control = <span className="text-[12px] text-fg-3">{ts("edit.deleteTicketHint")}</span>;
+      break;
+    case "merge_into_open_ticket":
+      control = <MergeControl a={a} onChange={onChange} />;
+      break;
     case "set_field":
       control = <SetFieldControl a={a} invalid={invalid} onChange={onChange} />;
       break;
@@ -902,7 +932,7 @@ function ActionRow({ a, invalid, onChange, onRemove }: { a: Action; invalid: boo
         <SinglePick
           items={actionItems}
           value={a.type}
-          onChange={(v) => onChange({ type: v as ActionType, value: "" })}
+          onChange={(v) => onChange(newAction(v as ActionType))}
           placeholder={ts("edit.action")}
           className="w-[190px]"
           width={240}
@@ -926,6 +956,30 @@ function ActionRow({ a, invalid, onChange, onRemove }: { a: Action; invalid: boo
         </div>
       )}
       {a.type === "send_reply" && <p className="ml-11 mt-1.5 text-[11.5px] leading-4 text-fg-4">{ts("edit.replyVariablesHint")}</p>}
+    </div>
+  );
+}
+
+/** merge_into_open_ticket: how recent the ticket it joins must be, and whether it needs the same subject. */
+function MergeControl({ a, onChange }: { a: Action; onChange: (a: Action) => void }) {
+  const { t } = useTranslation("settingsInbox");
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-3">
+        <Select
+          size="sm"
+          value={a.value}
+          onChange={(value) => onChange({ ...a, value })}
+          options={mergeWindows(a.value).map((n) => ({ value: String(n), label: t("edit.mergeWindow", { count: n }) }))}
+          className="w-[170px]"
+          aria-label={actionLabel.merge_into_open_ticket}
+        />
+        <label className="flex items-center gap-2 text-[12.5px] text-fg-2">
+          <Switch checked={a.same_subject !== false} onCheckedChange={(same_subject) => onChange({ ...a, same_subject })} />
+          {t("edit.mergeSameSubject")}
+        </label>
+      </div>
+      <span className="text-[11.5px] text-fg-4">{t("edit.mergeHint")}</span>
     </div>
   );
 }

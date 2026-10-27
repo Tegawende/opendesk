@@ -589,6 +589,10 @@ export type TicketFilters = {
   mailbox_id?: string;
   /** Mailbox ids, comma separated: tickets whose reply address is none of them. */
   mailbox_not?: string;
+  /** Contact ids, comma separated: tickets whose contact is none of them. */
+  contact_not?: string;
+  /** Company ids, comma separated: tickets whose contact belongs to none of them. */
+  company_not?: string;
   /** The address a ticket was first written to: a mailbox's address or an alias. */
   received_at?: string;
   brand_id?: string;
@@ -731,12 +735,19 @@ export type ActionType =
   | "send_reply"
   | "add_note"
   | "mark_spam"
+  /** Soft-deletes the ticket; later steps and automations skip it. */
+  | "delete_ticket"
+  /** ticket_created only. value: the window in days, "1".."30"; same_subject (default true). */
+  | "merge_into_open_ticket"
   | "ai_triage"
   /** value: a mailbox id of the ticket's brand (contracts/api.md). */
   | "set_reply_address"
   | "set_field";
-/** set_field: `field` is the ticket field key, `value` its string form ("12.5", "true", "2026-10-11", "a,b"; "" clears). */
-export type Action = { type: ActionType; value: string; field?: string };
+/**
+ * set_field: `field` is the ticket field key, `value` its string form ("12.5", "true", "2026-10-11", "a,b"; "" clears).
+ * merge_into_open_ticket: `same_subject` merges only into a ticket with the same subject (contracts/api.md).
+ */
+export type Action = { type: ActionType; value: string; field?: string; same_subject?: boolean };
 export type Automation = {
   id: string;
   name: string;
@@ -1308,6 +1319,12 @@ export type TicketCounts = {
 
 /** A sidebar row's tickets awaiting a reply (the customer wrote last), urgent, and overdue. */
 export type TicketStats = { awaiting: number; urgent: number; overdue: number };
+
+/**
+ * A whole ticket list, every page of it (GET /v1/tickets/summary). `complete` is false, with
+ * every count 0, when the server did not count it: too many tickets match, or it is a search.
+ */
+export type TicketListSummary = TicketStats & { complete: boolean; total: number; due_soon: number };
 
 /** `wiki_pages` is left out by servers without the wiki and for callers without `wiki:read`. */
 export type SearchResults = { tickets: Ticket[]; contacts: Contact[]; articles: KbArticle[]; wiki_pages?: WikiSearchHit[] };
@@ -2392,6 +2409,9 @@ export type MailCategoryRule = { id: string; sender: string; category: string; c
 export type MailHistoryStatus = "running" | "paused" | "limited" | "done" | "canceled" | "error";
 
 /** A history import: older mail brought into opendesk (contracts/collab.md "History"). */
+/** The older mail a new account imports once connected: from since on, or all of it (null). */
+export type ConnectHistory = { since: string | null };
+
 export type MailHistory = {
   status: MailHistoryStatus;
   /** Mail received from then on; null = all mail. */
@@ -2695,6 +2715,8 @@ export type SidebarPrefs = {
   badges: Record<string, SidebarBadge>;
   /** The mail page's folder bar, in order: box names and "folder:<id>". */
   mail_tabs: string[];
+  /** Pins the sidebar added once by itself ("box:inbox": All inboxes, at a second account), so one unpinned stays so. */
+  auto_pins: string[];
 };
 
 /** unread / total / none for mail rows; count / awaiting / urgent / overdue / none for ticket rows, and open for team rows. */

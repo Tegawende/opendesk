@@ -79,6 +79,7 @@
     "changelogEntry": "Mise à jour",
     "newUpdate": "Nouvelle mise à jour",
     "myTeams": "Mes équipes",
+    "newTicket": "Nouveau ticket",
     "phone": "Téléphone"
   },
   "folders": {
@@ -155,6 +156,7 @@
     "goTo": "Aller à",
     "actions": "Actions",
     "newTicket": "Nouveau ticket",
+    "newTicketPage": "Nouveau ticket en pleine page",
     "switchLight": "Passer au thème clair",
     "switchDark": "Passer au thème sombre",
     "shortcuts": "Raccourcis clavier",
