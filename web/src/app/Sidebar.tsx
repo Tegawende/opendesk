@@ -112,8 +112,8 @@ function WaitingChats({ rail }: { rail: boolean }) {
 
 const OTHER_TEAMS_KEY = "od-nav-other-teams";
 
-/** With Collab, a row's own menu and its number by the member's choice; without it, the classic row. */
-type RowPrefs = { collab: boolean; prefs: SidebarPrefs };
+/** The member's sidebar prefs, for a row's own menu and its number by their choice (with or without Collab). */
+type RowPrefs = { prefs: SidebarPrefs };
 
 /** One team inbox row: its colour dot, a lock when private, and what waits unassigned. */
 function TeamRow({
@@ -148,7 +148,7 @@ function TeamRow({
   return (
     <NavTip rail={rail} label={label}>
       <RowMenu
-        enabled={rp.collab}
+        enabled
         prefs={rp.prefs}
         badge={{ key, kind: "team", sections: ["teams"], numbers: nums }}
         pin={own ? { kind: "team", id: teamId } : undefined}
@@ -368,8 +368,6 @@ function ViewList({ views, rail, row, count, waiting }: {
 }
 
 const NONE: ReadonlySet<string> = new Set();
-/** The ticket sections, top to bottom, as they read without Collab. */
-const CLASSIC: SidebarSectionId[] = ["inbox", "teams", "views", "workspace"];
 
 /** One built-in section of the open workspace: the sidebar's own rows, live counts and menus. */
 function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; first: boolean; rail: boolean; drawer?: boolean }) {
@@ -379,12 +377,12 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
   const role = useRole();
   const navigate = useNavigate();
   const { t } = useTranslation("shell");
-  // With Collab the member's hidden rows, numbers and menus apply; without it the rows are the classic ones.
+  // The member's hidden rows, numbers, favorites and menus apply with or without Collab;
+  // Collab adds the Mail section (contracts/collab.md SidebarPrefs).
   const collab = useCollab();
-  const prefs = useSidebarPrefs(collab.enabled);
-  const hidden: ReadonlySet<string> = collab.enabled ? new Set(prefs.hidden) : NONE;
-  const rp: RowPrefs = { collab: collab.enabled, prefs };
-  // Without Collab the prefs are the defaults, so every row shows its usual number.
+  const prefs = useSidebarPrefs();
+  const hidden: ReadonlySet<string> = new Set(prefs.hidden);
+  const rp: RowPrefs = { prefs };
   const shown = (key: string, section: SidebarSectionId, nums: BadgeNumbers) => pickCount(badgeFor(prefs, key, section, "ticket"), nums);
   const waitingFor = useWaitingFor();
   switch (id) {
@@ -400,7 +398,7 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
             return (
             <NavTip key={f.id} rail={rail} label={tNav(f.labelKey)}>
               <RowMenu
-                enabled={collab.enabled}
+                enabled
                 prefs={prefs}
                 badge={counted ? { key, kind: "ticket", sections: ["inbox"], numbers: nums } : undefined}
                 pin={{ kind: "ticket_folder", id: f.id }}
@@ -463,7 +461,7 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                 return (
                 <NavTip rail={rail} label={viewName(v)}>
                   <RowMenu
-                    enabled={collab.enabled}
+                    enabled
                     prefs={prefs}
                     badge={{ key: hid.view(v.id), kind: "ticket", sections: ["views"], numbers: nums }}
                     pin={{ kind: "view", id: v.id }}
@@ -539,11 +537,12 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
         </Section>
       );
     case "favorites":
-      return collab.enabled ? (
+      // Without Collab, favorites are the ticket rows: inbox folders, teams and views.
+      return (
         <Suspense fallback={null}>
           <LazyFavorites prefs={prefs} rail={rail} first={first} />
         </Suspense>
-      ) : null;
+      );
     case "mail":
       return collab.enabled ? (
         <Suspense fallback={null}>
@@ -557,10 +556,10 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
   const collapsed = useNav((s) => s.collapsed);
   const rail = collapsed && !drawer;
   const { t } = useTranslation("shell");
-  // With Collab the member's own order and hidden sections apply; without it the classic order.
+  // The member's own order and hidden sections, with or without Collab; Mail only with it.
   const collab = useCollab();
-  const prefs = useSidebarPrefs(collab.enabled);
-  const order = collab.enabled ? visibleSections(prefs) : CLASSIC;
+  const prefs = useSidebarPrefs();
+  const order = visibleSections(prefs, collab.enabled);
   // Spaces (contracts/spaces.md): a picked Space is the sidebar; otherwise the workspace's own.
   const uid = useSession((s) => s.user?.id ?? "");
   const wid = useSession((s) => s.workspaceId);
@@ -853,7 +852,6 @@ function UserMenu({ rail }: { rail: boolean }) {
   const { t } = useTranslation("shell");
   const { data: members } = useQuery(q.members());
   const setAvailability = useSetAvailability();
-  const collab = useCollab();
   const { t: tc } = useTranslation("collab");
   if (!user) return null;
   const name = user.name || user.email;
@@ -906,11 +904,9 @@ function UserMenu({ rail }: { rail: boolean }) {
         <MenuItem icon={<Settings />} onSelect={() => void navigate({ to: "/settings" })}>
           {t("nav.settings")}
         </MenuItem>
-        {collab.enabled && (
-          <MenuItem icon={<SlidersHorizontal />} onSelect={() => collabUi.customize(true)}>
-            {tc("nav.customize")}
-          </MenuItem>
-        )}
+        <MenuItem icon={<SlidersHorizontal />} onSelect={() => collabUi.customize(true)}>
+          {tc("nav.customize")}
+        </MenuItem>
         <MenuItem icon={<Keyboard />} onSelect={() => shell.shortcuts()}>
           <span className="flex items-center justify-between">
             {t("account.shortcuts")} <Kbd>?</Kbd>

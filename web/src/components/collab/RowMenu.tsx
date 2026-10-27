@@ -1,9 +1,9 @@
 // The sidebar row's own menu: the row's actions (a view's Duplicate), which number it shows
 // (with what each would show), pin it to Favorites, hide it, and an account's settings. It
 // opens on right-click, long-press or the Menu key, and from the row's ⋯ button, which takes
-// the number's place on hover and keyboard focus (not in the rail). The prefs are Collab's,
-// where the sidebar prefs exist, saved at once with PUT /v1/collab/sidebar; without Collab the
-// menu holds the row's actions alone, and a row without any is left as it is.
+// the number's place on hover and keyboard focus (not in the rail). Every member has it, with
+// or without Collab; with `enabled` false it holds the row's actions alone, and a row without
+// any is left as it is. Saved at once with PUT /v1/collab/sidebar.
 
 import { Ellipsis, EyeOff, Pin, PinOff, Settings, SlidersHorizontal } from "lucide-react";
 import { forwardRef, useRef, type ReactElement, type ReactNode } from "react";
@@ -55,7 +55,7 @@ export type RowMenuProps = {
   labelColor?: { folder: MailFolder; provider: string };
   /** What the row needs done first (an account to reconnect), on top of the menu. */
   action?: RowAction;
-  /** The row's own actions (a view's Duplicate), next in the menu; they show without Collab too. */
+  /** The row's own actions (a view's Duplicate), next in the menu; they show with `enabled` false too. */
   items?: RowAction[];
   /** Opens what the row is set up in (an account's settings), beside Customize sidebar. */
   settings?: { label: string; onSelect: () => void };

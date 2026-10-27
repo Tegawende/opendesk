@@ -114,6 +114,11 @@ export type CreateTicketBody = {
   tags?: string[];
   fields?: T.FieldValues;
   status?: T.TicketStatus;
+  /** An email reply's copies. */
+  cc?: string[];
+  bcc?: string[];
+  /** Files on the first message (POST /v1/attachments). */
+  attachment_ids?: string[];
 };
 
 export type SendMessageBody = {
