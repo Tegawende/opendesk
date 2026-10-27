@@ -41,13 +41,18 @@ if (typeof window !== "undefined") {
   });
 }
 
+// Stable across renders, so a reader subscribes once.
+function subscribe(cb: () => void) {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
+
+function snapshot() {
+  return enabled;
+}
+
 export function useConversationLayout(): boolean {
-  return useSyncExternalStore(
-    (cb) => {
-      listeners.add(cb);
-      return () => listeners.delete(cb);
-    },
-    () => enabled,
-    () => enabled,
-  );
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
