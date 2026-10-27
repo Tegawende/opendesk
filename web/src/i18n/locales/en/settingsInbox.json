@@ -78,6 +78,13 @@
     "editTitle": "Edit view",
     "nameLabel": "Name",
     "namePlaceholder": "Billing queue",
+    "sectionLabel": "Section",
+    "sectionHint": "Views of one section show together in the sidebar, under a heading that folds.",
+    "noSection": "No section",
+    "newSection": "New section",
+    "sectionSearch": "Find or name a section",
+    "sectionEmpty": "No section matches",
+    "inSection": "In section {{name}}",
     "needName": "Give the view a name.",
     "visibleTitle": "Visible to everyone",
     "audience": {

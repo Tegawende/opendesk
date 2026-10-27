@@ -78,6 +78,13 @@
     "editTitle": "Ansicht bearbeiten",
     "nameLabel": "Name",
     "namePlaceholder": "Abrechnungs-Warteschlange",
+    "sectionLabel": "Abschnitt",
+    "sectionHint": "Ansichten eines Abschnitts stehen in der Seitenleiste zusammen, unter einer Überschrift, die sich einklappen lässt.",
+    "noSection": "Kein Abschnitt",
+    "newSection": "Neuer Abschnitt",
+    "sectionSearch": "Abschnitt suchen oder benennen",
+    "sectionEmpty": "Kein Abschnitt passt",
+    "inSection": "Im Abschnitt {{name}}",
     "needName": "Gib der Ansicht einen Namen.",
     "visibleTitle": "Für alle sichtbar",
     "audience": {

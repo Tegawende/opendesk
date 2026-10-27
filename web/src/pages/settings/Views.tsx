@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowUpRight, AtSign, Globe, Inbox, Layers, Lock, MoreHorizontal, Pencil, Plus, Search, Tag, Trash2, UserRound, Users, UsersRound, X } from "lucide-react";
+import { ArrowUpRight, AtSign, FolderClosed, Globe, Inbox, Layers, Lock, MoreHorizontal, Pencil, Plus, Search, Tag, Trash2, UserRound, Users, UsersRound, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsPage, Section, ListRow } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/dialog";
 import { Field, TextInput } from "@/components/ui/input";
+import { Picker } from "@/components/ui/picker";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
@@ -26,6 +27,7 @@ import { cleanFilters, clearField, fieldOps, filterOp, hasFilter, joinList, spli
 import {
   MultiPick,
   SinglePick,
+  ValueButton,
   channelItems,
   priorityItems,
   severityFilterItems,
@@ -42,6 +44,7 @@ import type { Channel, Priority, Severity, TicketFilters, TicketStatus, View } f
 import { q, qk, upsertInList } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { cn } from "@/lib/cn";
+import { cleanSection, matchSection, MAX_VIEW_SECTION, orderViews, sectionKey, viewSections } from "@/lib/viewSections";
 
 const chip =
   "inline-flex h-5 max-w-[220px] shrink-0 items-center gap-1 rounded-sm bg-sunken px-1.5 text-[11px] text-fg-2 ring-1 ring-inset ring-line-soft [&_svg]:size-3 [&_svg]:shrink-0";
@@ -197,7 +200,8 @@ export default function Views() {
   const [editing, setEditing] = useState<View | "new" | null>(null);
   const navigate = useNavigate();
 
-  const sorted = useMemo(() => [...(views ?? [])].sort((a, b) => a.position - b.position), [views]);
+  // In the sidebar's order: a section's views together, at its first view's place.
+  const sorted = useMemo(() => orderViews(views ?? []), [views]);
   const { teams } = useTeams();
   const teamById = new Map(teams.map((x) => [x.id, x]));
 
@@ -273,6 +277,12 @@ export default function Views() {
                             {v.shared ? t("views.shared") : t("views.personal")}
                           </span>
                         </Tooltip>
+                      )}
+                      {cleanSection(v.section) && (
+                        <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-fg-4" title={t("views.inSection", { name: cleanSection(v.section) })}>
+                          <FolderClosed className="size-3 shrink-0" />
+                          <span className="truncate">{cleanSection(v.section)}</span>
+                        </span>
                       )}
                     </div>
                     <FilterChips f={v.filters} />
@@ -358,6 +368,10 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
   const [name, setName] = useState(view?.name ?? "");
   const [shared, setShared] = useState(view?.shared ?? true);
   const [teamId, setTeamId] = useState<string | null>(view?.team_id ?? null);
+  const [section, setSection] = useState(cleanSection(view?.section));
+  const inUse = viewSections(useQuery(q.views()).data ?? []);
+  // The sections offered: those in use, and one just typed until it is saved.
+  const sections = section && !inUse.some((s) => sectionKey(s) === sectionKey(section)) ? [...inUse, section] : inUse;
   const { teams: allTeams } = useTeams();
   const { t: tt } = useTranslation("settingsTeams");
   const [f, setF] = useState<TicketFilters>(view?.filters ?? { status: ["open"] });
@@ -384,9 +398,10 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
     name: view?.name ?? "",
     shared: view?.shared ?? true,
     teamId: view?.team_id ?? null,
+    section: cleanSection(view?.section),
     f: view?.filters ?? { status: ["open"] },
   });
-  const dirty = JSON.stringify({ name, shared, teamId, f }) !== initial;
+  const dirty = JSON.stringify({ name, shared, teamId, section, f }) !== initial;
   const audience = viewAudience({ shared, team_id: teamId });
 
   const requestClose = () => {
@@ -402,11 +417,12 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
     mutationFn: () => {
       const filters = cleanFilters(f);
       return view
-        ? api.views.update(view.id, { name: name.trim(), shared: teamId ? false : shared, team_id: teamId, filters })
+        ? api.views.update(view.id, { name: name.trim(), shared: teamId ? false : shared, team_id: teamId, section: section || null, filters })
         : api.views.create({
             name: name.trim(),
             shared: teamId ? false : shared,
             team_id: teamId,
+            section: section || null,
             filters,
             position: nextPosition,
           });
@@ -471,6 +487,29 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
           <Field label={t("views.nameLabel")}>
             {(p) => (
               <TextInput {...p} autoFocus value={name} maxLength={60} placeholder={t("views.namePlaceholder")} onChange={(e) => setName(e.target.value)} />
+            )}
+          </Field>
+          <Field label={t("views.sectionLabel")} hint={t("views.sectionHint")} optional>
+            {(p) => (
+              <Picker
+                items={[
+                  { value: "", label: t("views.noSection"), icon: <X /> },
+                  ...sections.map((s) => ({ value: s, label: s, icon: <FolderClosed /> })),
+                ]}
+                value={section}
+                onSelect={setSection}
+                // A typed name joins the section it names in any case.
+                onCreate={(typed) => setSection(matchSection(cleanSection(typed).slice(0, MAX_VIEW_SECTION), inUse))}
+                createLabel={t("views.newSection")}
+                placeholder={t("views.sectionSearch")}
+                emptyText={t("views.sectionEmpty")}
+                width={300}
+                trigger={
+                  <ValueButton id={p.id} aria-describedby={p["aria-describedby"]} size="md" placeholder={t("views.noSection")} icon={section ? <FolderClosed /> : undefined} className="w-full">
+                    {section || undefined}
+                  </ValueButton>
+                }
+              />
             )}
           </Field>
           {allTeams.length > 0 || teamId ? (
