@@ -52,6 +52,11 @@ func RunTrigger(ctx context.Context, d *deps.Deps, a jobs.TicketTriggerArgs) err
 		}
 	}
 	return d.DB.Tx(ctx, func(tx pgx.Tx) error {
+		// One run at a time per ticket, each seeing what the one before it wrote: two replies
+		// at once must not both find the ticket unassigned.
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM tickets WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, a.WorkspaceID, a.TicketID); err != nil {
+			return err
+		}
 		t, err := domain.LoadTicket(ctx, tx, a.WorkspaceID, a.TicketID)
 		if db.IsNotFound(err) {
 			return nil // deleted since
