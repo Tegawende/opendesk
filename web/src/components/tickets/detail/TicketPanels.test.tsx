@@ -41,7 +41,8 @@ const data = (orders: PanelOrder[]): TicketPanelData => ({
   orders,
 });
 
-const text = (html: string) => html.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&");
+// The rendered text, read through the DOM rather than by stripping tags.
+const text = (html: string) => new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
 
 describe("Shopify ticket panel", () => {
   it("shows each line with its unit price, where the order goes and how, codes, refunds and tracking", () => {
