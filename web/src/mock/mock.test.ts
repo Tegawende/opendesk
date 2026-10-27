@@ -95,6 +95,14 @@ describe("mock backend", () => {
     }
   });
 
+  it("summarizes a whole list, every page of it", async () => {
+    const all = (await call("GET", "/v1/tickets?status=open,pending&limit=100")).body.data as { priority: string }[];
+    const s = (await call("GET", "/v1/tickets/summary?status=open,pending&sort=due&limit=1")).body;
+    expect(s).toMatchObject({ complete: true, total: all.length, urgent: all.filter((t) => t.priority === "urgent").length });
+    expect(s.awaiting + s.overdue + s.due_soon).toBeGreaterThan(0);
+    expect((await call("GET", "/v1/tickets/summary?q=sso")).body).toMatchObject({ complete: false, total: 0 });
+  });
+
   it("updates every ticket matching a bulk query", async () => {
     const open = (await call("GET", "/v1/tickets?status=open")).body.data as { id: string }[];
     const result = await call("POST", "/v1/tickets/bulk", { query: { status: ["open"] }, patch: { priority: "high" } });
@@ -106,7 +114,7 @@ describe("mock backend", () => {
 
   it("serves every list endpoint the app reads", async () => {
     for (const path of [
-      "/v1/me", "/v1/tickets", "/v1/tickets/counts", "/v1/contacts", "/v1/companies", "/v1/tags", "/v1/views",
+      "/v1/me", "/v1/tickets", "/v1/tickets/counts", "/v1/tickets/summary", "/v1/contacts", "/v1/companies", "/v1/tags", "/v1/views",
       "/v1/sla-policies", "/v1/automations", "/v1/mailboxes", "/v1/members", "/v1/invitations", "/v1/teams",
       "/v1/api-keys", "/v1/webhooks", "/v1/audit-logs", "/v1/notifications", "/v1/kb/collections", "/v1/kb/articles",
       "/v1/saved-replies", "/v1/me/sessions", "/v1/widget/settings", "/v1/workspace", "/v1/search?q=sso",
