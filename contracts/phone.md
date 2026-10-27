@@ -100,7 +100,8 @@ any order leave the same call.
 
 A call's number is normalized to E.164 when it says its country (`+`, `00`; spaces, dots,
 dashes, brackets and a trunk `(0)` dropped). Contacts match on the number's digits, written
-with or without `00` (an index on `contacts.phone`'s digits); the most recently updated wins.
+with or without `00` and with a trunk `(0)` dropped as on the call's side (an index on
+`contacts.phone`'s digits); the most recently updated wins.
 A new number creates a contact named after the provider's contact for it, else the number,
 and publishes `contact.created`. Calls from one new number are serialized, so they make one
 contact. A withheld number has no contact.

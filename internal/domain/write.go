@@ -67,6 +67,12 @@ func upsertContactByEmail(ctx context.Context, tx pgx.Tx, wid uuid.UUID, email, 
 	return id, created, nil
 }
 
+// PhoneDigitsSQL is the digits of contacts.phone that calls match on: a trunk "(0)"
+// written after the country code ("+32 (0)470 ...") is dropped before the digits are kept,
+// as phone.NormalizeNumber does on the call's side. It is the expression of
+// contacts_phone_digits_idx, so the index serves the lookup: change both together.
+const PhoneDigitsSQL = `regexp_replace(regexp_replace(phone, '\(0\)', '', 'g'), '[^0-9]', '', 'g')`
+
 // PhoneContact is the contact a phone number belongs to.
 type PhoneContact struct {
 	ID uuid.UUID
@@ -91,7 +97,7 @@ func ContactByPhone(ctx context.Context, tx pgx.Tx, wid uuid.UUID, number, name 
 	}
 	var found PhoneContact
 	err := tx.QueryRow(ctx, `SELECT id, blocked FROM contacts WHERE workspace_id = $1 AND phone <> ''
-		AND regexp_replace(phone, '[^0-9]', '', 'g') = ANY($2) ORDER BY updated_at DESC, id LIMIT 1`,
+		AND `+PhoneDigitsSQL+` = ANY($2) ORDER BY updated_at DESC, id LIMIT 1`,
 		wid, []string{digits, "00" + digits}).Scan(&found.ID, &found.Blocked)
 	if err == nil {
 		return found, nil

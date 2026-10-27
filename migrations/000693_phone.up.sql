@@ -107,8 +107,9 @@ CREATE INDEX phone_calls_activity_idx ON phone_calls (activity_id);
 CREATE INDEX phone_calls_contact_idx ON phone_calls (contact_id);
 CREATE INDEX phone_calls_agent_idx ON phone_calls (agent_user_id);
 
--- Calls find their contact by the digits of the number.
-CREATE INDEX contacts_phone_digits_idx ON contacts (workspace_id, (regexp_replace(phone, '[^0-9]', '', 'g'))) WHERE phone <> '';
+-- Calls find their contact by the digits of the number, a trunk "(0)" after the country
+-- code dropped first ("+32 (0)470 ..."). domain.ContactByPhone uses this same expression.
+CREATE INDEX contacts_phone_digits_idx ON contacts (workspace_id, (regexp_replace(regexp_replace(phone, '\(0\)', '', 'g'), '[^0-9]', '', 'g'))) WHERE phone <> '';
 
 -- Tickets opened by a call are on the phone channel.
 ALTER TABLE tickets DROP CONSTRAINT IF EXISTS tickets_channel_check;

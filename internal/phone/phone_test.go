@@ -677,3 +677,49 @@ func TestReuseCountsFromWhenTheTicketWasSolved(t *testing.T) {
 		t.Fatal("a ticket solved ten days ago was reused with a seven day window")
 	}
 }
+
+// A contact's number written with a trunk "(0)" after the country code matches the call,
+// through the digits index.
+func TestContactNumberWithTrunkZeroMatches(t *testing.T) {
+	h := newHarness(t)
+	cid := uuid.New()
+	h.e.Exec(`INSERT INTO contacts (id, workspace_id, name, phone) VALUES ($1, $2, 'Jane Doe', '+32 (0)470 12 34 56')`, cid, h.ws.ID)
+	h.sendAll(t, h.recorded(t, "answered"))
+	if tk := h.ticketOfCall(t, "1290001"); tk.Contact == nil || tk.Contact.ID != cid {
+		t.Fatalf("the call did not find the contact: %+v", tk.Contact)
+	}
+	var contacts int
+	h.e.Scalar(`SELECT count(*) FROM contacts WHERE workspace_id = $1`, &contacts, h.ws.ID)
+	if contacts != 1 {
+		t.Fatalf("contacts %d", contacts)
+	}
+	// The lookup's expression is the index's.
+	tx, err := h.e.D.DB.Pool.Begin(h.e.Ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(h.e.Ctx)
+	if _, err := tx.Exec(h.e.Ctx, `SET LOCAL enable_seqscan = off`); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := tx.Query(h.e.Ctx, `EXPLAIN SELECT id FROM contacts WHERE workspace_id = $1 AND phone <> '' AND `+domain.PhoneDigitsSQL+` = ANY($2)`,
+		h.ws.ID, []string{"32470123456"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plan strings.Builder
+	matched := false
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatal(err)
+		}
+		plan.WriteString(line + "\n")
+		// The digits are in the index condition, not a filter after it.
+		matched = matched || strings.Contains(line, "Index Cond") && strings.Contains(line, "regexp_replace")
+	}
+	rows.Close()
+	if !strings.Contains(plan.String(), "contacts_phone_digits_idx") || !matched {
+		t.Fatalf("the lookup does not use the digits index:\n%s", plan.String())
+	}
+}
