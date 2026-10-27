@@ -340,6 +340,25 @@ func registerTickets(d *deps.Deps, api huma.API) {
 			return &struct{ Body TicketCounts }{c}, nil
 		})
 
+	huma.Register(api, huma.Operation{OperationID: "ticket-list-summary", Method: http.MethodGet, Path: "/v1/tickets/summary",
+		Summary: "Summarize a ticket list", Tags: tags,
+		Description: "Counts every ticket GET /v1/tickets lists for the same filters, all pages together: the total, awaiting a reply, urgent, overdue and due within the hour, as the caller sees them. sort, order, limit and cursor are ignored. complete is false, with every count 0, when more than 10000 tickets match or q is set."},
+		func(ctx context.Context, in *listIn) (*struct{ Body TicketListSummary }, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeTicketsRead)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			lq, err := ticketListQuery(ctx, d.DB.Pool, p, *in)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			s, err := ticketListSummary(ctx, d.DB.Pool, p.WorkspaceID, p.ActorUserID(), lq)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return &struct{ Body TicketListSummary }{s}, nil
+		})
+
 	huma.Register(api, huma.Operation{OperationID: "create-ticket", Method: http.MethodPost, Path: "/v1/tickets",
 		Summary: "Create a ticket", Tags: tags, DefaultStatus: http.StatusCreated},
 		func(ctx context.Context, in *struct{ Body ticketCreateBody }) (*ticketOut, error) {
