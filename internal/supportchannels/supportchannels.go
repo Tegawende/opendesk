@@ -17,6 +17,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/ai"
 	"github.com/useopendesk/opendesk/internal/deps"
 	"github.com/useopendesk/opendesk/internal/supportchannels/providers/discord"
+	"github.com/useopendesk/opendesk/internal/supportchannels/providers/googlechat"
 	"github.com/useopendesk/opendesk/internal/supportchannels/providers/slack"
 	"github.com/useopendesk/opendesk/internal/supportchannels/providers/telegram"
 )
@@ -35,7 +36,7 @@ func For(d *deps.Deps) *Service {
 	if got, ok := services.Load(d); ok {
 		return got.(*Service)
 	}
-	r, err := NewRegistry(slack.Adapter{}, discord.Adapter{}, telegram.Adapter{})
+	r, err := NewRegistry(slack.Adapter{}, discord.Adapter{}, telegram.Adapter{}, googlechat.New())
 	if err != nil {
 		panic(err)
 	}
@@ -90,6 +91,18 @@ type destination struct {
 	IncludeNotes        bool       `json:"include_notes"`
 	MessageLimit        int        `json:"message_limit"`
 	CreatedAt           time.Time  `json:"created_at"`
+}
+
+type delivery struct {
+	EventSeq     int64      `json:"event_seq"`
+	EventType    string     `json:"event_type"`
+	TicketNumber *int64     `json:"ticket_number,omitempty"`
+	Status       string     `json:"status"`
+	Attempts     int        `json:"attempts"`
+	LastError    string     `json:"last_error"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	DeliveredAt  *time.Time `json:"delivered_at,omitempty"`
 }
 
 // AvailableDestination is a provider location discovered during onboarding.

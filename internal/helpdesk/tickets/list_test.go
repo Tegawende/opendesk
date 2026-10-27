@@ -14,6 +14,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/events"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
+	"github.com/useopendesk/opendesk/internal/helpdesk/tickets"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
 )
@@ -58,7 +59,7 @@ func TestListFilters(t *testing.T) {
 		"assignee_id": ws.Admin.ID.String()})
 	t4 := createTicket(t, e, ws, map[string]any{"subject": "Buy cheap pills", "status": "open"})
 	e.Do("PATCH", "/v1/tickets/"+t4.ID.String(), agent, map[string]any{"spam": true}).Want(t, 200)
-	t5 := createTicket(t, e, ws, map[string]any{"subject": "Thanks!", "status": "solved", "contact": map[string]any{"email": "fan@example.com"}})
+	t5 := createTicket(t, e, ws, map[string]any{"subject": "Thanks!", "status": "solved", "contact": map[string]any{"email": "fan@example.com", "name": "Aysel Məmmədova"}})
 	// Another workspace's ticket never appears.
 	other := e.NewWorkspace()
 	createTicket(t, e, other, map[string]any{"subject": "Refund for order 1001"})
@@ -92,6 +93,9 @@ func TestListFilters(t *testing.T) {
 		{"q=sparkles", []uuid.UUID{t2.ID}}, // message body search
 		{"q=" + url.QueryEscape(fmt.Sprintf("#%d", t3.Number)), []uuid.UUID{t3.ID}},
 		{"q=" + fmt.Sprint(t5.Number), []uuid.UUID{t5.ID}},
+		{"q=aysel", []uuid.UUID{t5.ID}},                                 // customer name
+		{"q=" + url.QueryEscape("Məmməd"), []uuid.UUID{t5.ID}},          // prefix on customer name
+		{"q=" + url.QueryEscape("fan@example.com"), []uuid.UUID{t5.ID}}, // customer email
 		{"q=nothingmatches", []uuid.UUID{}},
 	}
 	for _, c := range cases {
@@ -363,5 +367,216 @@ func TestCountStats(t *testing.T) {
 	e.Do("GET", "/v1/tickets/counts", ws.Admin.As(ws), nil).Want(t, 200).JSON(t, &c)
 	if c.Stats["team:"+priv.String()] != (stats{0, 1, 0}) || c.Stats["view:"+view.String()] != (stats{2, 4, 0}) {
 		t.Errorf("admin stats %+v", c.Stats)
+	}
+}
+
+// A list's summary counts all of it, every page together, with the list's filters and the
+// caller's visibility; awaiting follows the inbox row's rule (TicketRow.tsx awaitingReply).
+func TestListSummary(t *testing.T) {
+	e, ws := newEnv(t)
+	team := addTeam(t, e, ws, ws.Agent.ID)
+	priv := addPrivateTeam(t, e, ws, map[uuid.UUID]string{ws.Admin.ID: hd.TeamLead})
+	type tk struct {
+		status, priority        string
+		team                    *uuid.UUID
+		spam, deleted           bool
+		customerLag             *time.Duration // the customer's last message, this long before the last message
+		responded               bool
+		firstDue, resDue        *time.Duration // from now
+		breachedFR, breachedRes bool
+	}
+	ago := func(d time.Duration) *time.Duration { return &d }
+	cases := map[string]tk{
+		"s1":  {status: "open", priority: "urgent", team: &team, customerLag: ago(0)},                         // awaiting, urgent
+		"s2":  {status: "pending", priority: "normal", team: &team, customerLag: ago(500 * time.Millisecond)}, // awaiting (within a second)
+		"s3":  {status: "open", priority: "normal", customerLag: ago(5 * time.Second)},                        // answered since
+		"s4":  {status: "on_hold", priority: "normal", customerLag: ago(0), firstDue: ago(30 * time.Minute)},  // due soon, not awaiting
+		"s5":  {status: "open", priority: "normal", firstDue: ago(-time.Hour)},                                // overdue
+		"s6":  {status: "open", priority: "normal", responded: true, firstDue: ago(-time.Hour), resDue: ago(2 * time.Hour)},
+		"s7":  {status: "pending", priority: "high", responded: true, resDue: ago(10 * time.Minute)},    // due soon
+		"s8":  {status: "open", priority: "normal", firstDue: ago(30 * time.Minute), breachedRes: true}, // overdue: a breach is recorded
+		"s9":  {status: "solved", priority: "urgent", customerLag: ago(0), firstDue: ago(-time.Hour)},   // urgent only
+		"s10": {status: "open", priority: "urgent", spam: true, customerLag: ago(0)},
+		"s11": {status: "open", priority: "urgent", team: &priv, customerLag: ago(0)},
+		"s12": {status: "open", priority: "urgent", deleted: true, customerLag: ago(0)},
+	}
+	for name, c := range cases {
+		id := createTicket(t, e, ws, map[string]any{"subject": name}).ID
+		last := time.Now().Add(-time.Minute)
+		var lastCustomer, responded *time.Time
+		if c.customerLag != nil {
+			v := last.Add(-*c.customerLag)
+			lastCustomer = &v
+		}
+		if c.responded {
+			responded = &last
+		}
+		due := func(d *time.Duration) *time.Time {
+			if d == nil {
+				return nil
+			}
+			v := time.Now().Add(*d)
+			return &v
+		}
+		e.Exec(`UPDATE tickets SET status = $2, priority = $3, team_id = $4, spam = $5, last_message_at = $6,
+			last_customer_message_at = $7, first_responded_at = $8, first_response_due_at = $9, resolution_due_at = $10,
+			sla_first_response_breached_at = CASE WHEN $11 THEN now() END, sla_resolution_breached_at = CASE WHEN $12 THEN now() END,
+			deleted_at = CASE WHEN $13 THEN now() END
+			WHERE id = $1`, id, c.status, c.priority, c.team, c.spam, last, lastCustomer, responded,
+			due(c.firstDue), due(c.resDue), c.breachedFR, c.breachedRes, c.deleted)
+	}
+	view := ids.New()
+	e.Exec(`INSERT INTO views (id, workspace_id, name, filters) VALUES ($1, $2, 'Open', '{"status":["open"]}')`, view, ws.ID)
+
+	// The web's awaitingReply, over the tickets the list returns.
+	awaiting := func(tk domain.Ticket) bool {
+		return (tk.Status == "open" || tk.Status == "pending") && tk.LastCustomerMessageAt != nil &&
+			!tk.LastCustomerMessageAt.Before(tk.LastMessageAt.Add(-time.Second))
+	}
+	type counts struct{ Total, Awaiting, Urgent, Overdue, DueSoon int }
+	summary := func(a hdtest.Auth, query string) tickets.TicketListSummary {
+		t.Helper()
+		var s tickets.TicketListSummary
+		e.Do("GET", "/v1/tickets/summary?"+query, a, nil).Want(t, 200).JSON(t, &s)
+		return s
+	}
+	agent, lead := ws.Agent.As(ws), ws.Admin.As(ws)
+	for _, c := range []struct {
+		who   string
+		as    hdtest.Auth
+		query string
+		want  counts
+	}{
+		{"agent", agent, "", counts{9, 2, 2, 2, 2}},                         // s1..s9: s11 is a private team's
+		{"lead", lead, "", counts{10, 3, 3, 2, 2}},                          // and s11
+		{"viewer", ws.Viewer.As(ws), "", counts{9, 2, 2, 2, 2}},             // reads like the agent
+		{"agent", agent, "status=open,pending", counts{7, 2, 1, 2, 1}},      // s1 s2 s3 s5 s6 s7 s8
+		{"agent", agent, "priority=urgent", counts{2, 1, 2, 0, 0}},          // s1 s9
+		{"agent", agent, "team_id=" + team.String(), counts{2, 2, 1, 0, 0}}, // s1 s2
+		{"agent", agent, "view_id=" + view.String(), counts{5, 1, 1, 2, 0}}, // s1 s3 s5 s6 s8
+		{"agent", agent, "view_id=" + view.String() + "&priority=urgent", counts{1, 1, 1, 0, 0}},
+		{"agent", agent, "spam=true", counts{1, 1, 1, 0, 0}},                  // s10
+		{"agent", agent, "sort=due&order=asc&limit=1", counts{9, 2, 2, 2, 2}}, // pagination and sort change nothing
+	} {
+		s := summary(c.as, c.query)
+		if got := (counts{s.Total, s.Awaiting, s.Urgent, s.Overdue, s.DueSoon}); !s.Complete || got != c.want {
+			t.Errorf("%s %q: got %+v complete %v, want %+v", c.who, c.query, got, s.Complete, c.want)
+		}
+		// The same tickets as the list, and awaiting as the list's rows show it.
+		q, _ := url.ParseQuery(c.query)
+		q.Del("sort")
+		q.Del("order")
+		q.Set("limit", "100")
+		page := list(t, e, c.as, q.Encode())
+		n := 0
+		for _, tk := range page.Data {
+			if awaiting(tk) {
+				n++
+			}
+		}
+		if len(page.Data) != s.Total || n != s.Awaiting {
+			t.Errorf("%s %q: list has %d tickets, %d awaiting; summary %+v", c.who, c.query, len(page.Data), n, s)
+		}
+	}
+
+	// A full-text search is not counted.
+	if s := summary(agent, "q=s1"); s.Complete || s.Total != 0 {
+		t.Errorf("search summary %+v", s)
+	}
+	// Past the cap the list is not counted; a shorter one still is.
+	defer tickets.SetSummaryCap(3)()
+	if s := summary(agent, ""); s.Complete || s.Total != 0 || s.Awaiting != 0 {
+		t.Errorf("capped summary %+v", s)
+	}
+	if s := summary(agent, "status=solved"); !s.Complete || s.Total != 1 || s.Urgent != 1 {
+		t.Errorf("solved summary %+v", s)
+	}
+	// The list's filter errors are the summary's.
+	e.Do("GET", "/v1/tickets/summary?status=nope", agent, nil).Want(t, 422)
+	e.Do("GET", "/v1/tickets/summary?view_id="+ids.New().String(), agent, nil).Want(t, 422)
+}
+
+// Folder counts cover every status: the open folders, Solved and Spam each count the caller's
+// tickets, never a closed or deleted one, and a private team's only for its members and the
+// ticket's assignee.
+func TestFolderCounts(t *testing.T) {
+	e, ws := newEnv(t)
+	team := addTeam(t, e, ws, ws.Agent.ID)
+	priv := addPrivateTeam(t, e, ws, map[uuid.UUID]string{ws.Admin.ID: hd.TeamLead})
+	agent, admin := ws.Agent.ID, ws.Admin.ID
+	type tk struct {
+		name                  string
+		status                string
+		spam, urgent, deleted bool
+		assignee, team        *uuid.UUID
+	}
+	for _, c := range []tk{
+		{name: "t1", status: "open", urgent: true},
+		{name: "t2", status: "pending", assignee: &agent},
+		{name: "t3", status: "on_hold", urgent: true},
+		{name: "t4", status: "open", team: &team},
+		{name: "t5", status: "pending", assignee: &admin, team: &team},
+		{name: "t6", status: "solved", urgent: true},
+		{name: "t7", status: "solved", assignee: &agent},
+		{name: "t8", status: "closed", urgent: true},
+		{name: "t9", status: "closed", spam: true},
+		{name: "t10", status: "open", spam: true, urgent: true},
+		{name: "t11", status: "on_hold", spam: true},
+		{name: "t12", status: "solved", spam: true, assignee: &agent},
+		{name: "t13", status: "open", urgent: true, team: &priv},
+		{name: "t14", status: "solved", team: &priv},
+		{name: "t15", status: "solved", spam: true, team: &priv},
+		{name: "t16", status: "pending", urgent: true, assignee: &agent, team: &priv},
+		{name: "t17", status: "solved", assignee: &agent, team: &priv},
+		{name: "t18", status: "open", spam: true, assignee: &agent, team: &priv},
+		{name: "t19", status: "open", deleted: true},
+		{name: "t20", status: "solved", deleted: true},
+		{name: "t21", status: "open", spam: true, deleted: true},
+	} {
+		id := createTicket(t, e, ws, map[string]any{"subject": c.name}).ID
+		priority := "normal"
+		if c.urgent {
+			priority = "urgent"
+		}
+		e.Exec(`UPDATE tickets SET status = $2, spam = $3, priority = $4, assignee_id = $5, team_id = $6,
+			deleted_at = CASE WHEN $7 THEN now() END WHERE id = $1`, id, c.status, c.spam, priority, c.assignee, c.team, c.deleted)
+	}
+
+	type folders struct{ Unassigned, Mine, Open, Pending, OnHold, Solved, Spam, MyTeams, MyTeamsUnassigned int }
+	type urgent struct{ Unassigned, Mine, Open, Pending, MyTeams int }
+	cases := []struct {
+		who     string
+		as      hdtest.Auth
+		folders folders
+		urgent  urgent
+	}{
+		// The agent: t13, t14 and t15 are a private team's; t16, t17 and t18 are theirs.
+		{"agent", ws.Agent.As(ws),
+			folders{
+				Unassigned: 3, Mine: 2, Open: 2, Pending: 3, OnHold: 1, // t1 t3 t4; t2 t16; t1 t4; t2 t5 t16; t3
+				Solved: 3, Spam: 4, // t6 t7 t17; t10 t11 t12 t18
+				MyTeams: 2, MyTeamsUnassigned: 1, // t4 t5; t4
+			},
+			urgent{Unassigned: 2, Mine: 1, Open: 1, Pending: 2}}, // t1 t3; t16; t1; t3 t16
+		// The private team's lead counts its tickets too.
+		{"lead", ws.Admin.As(ws),
+			folders{
+				Unassigned: 4, Mine: 1, Open: 3, Pending: 3, OnHold: 1, // t1 t3 t4 t13; t5; t1 t4 t13; t2 t5 t16; t3
+				Solved: 4, Spam: 5, // t6 t7 t14 t17; t10 t11 t12 t15 t18
+				MyTeams: 2, MyTeamsUnassigned: 1, // t13 t16; t13
+			},
+			urgent{Unassigned: 3, Open: 2, Pending: 2, MyTeams: 2}}, // t1 t3 t13; t1 t13; t3 t16; t13 t16
+	}
+	for _, c := range cases {
+		var got tickets.TicketCounts
+		e.Do("GET", "/v1/tickets/counts", c.as, nil).Want(t, 200).JSON(t, &got)
+		if f := (folders{got.Unassigned, got.Mine, got.Open, got.Pending, got.OnHold, got.Solved, got.Spam,
+			got.MyTeams.Open, got.MyTeams.Unassigned}); f != c.folders {
+			t.Errorf("%s folders: got %+v want %+v", c.who, f, c.folders)
+		}
+		if u := (urgent{got.Stats["ticket_folder:unassigned"].Urgent, got.Stats["ticket_folder:mine"].Urgent,
+			got.Stats["ticket_folder:open"].Urgent, got.Stats["ticket_folder:pending"].Urgent, got.Stats["team:mine"].Urgent}); u != c.urgent {
+			t.Errorf("%s urgent: got %+v want %+v", c.who, u, c.urgent)
+		}
 	}
 }
