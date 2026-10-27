@@ -108,7 +108,8 @@ A call goes on the contact's open ticket (open, pending or on hold, most recentl
 else on their latest solved ticket updated within the connection's `reuse_days` (0: never);
 else on a new ticket on the `phone` channel, routed like any new ticket
 (`routing.Resolve` with channel `phone`, so routing rules can send phone tickets to a team),
-named "Call from …" or "Call to …" and running the `ticket_created` automations. Merged,
+named "Call from …" or "Call to …" and running the `ticket_created` automations. Like an
+`api` ticket, a phone ticket has no reply address: replies there are recorded, not emailed. Merged,
 deleted, spam and closed tickets are never reused. A call is placed once, on its first event,
 so the insight card can show its ticket; the ticket moves up (`updated_at`, `ticket.updated`
 with `changes: ["calls"]`) when the call lands on it and when it ends.
