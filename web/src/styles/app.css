@@ -586,6 +586,13 @@
   [role="button"]:not([aria-disabled="true"]) {
     cursor: pointer;
   }
+  /* While a pane edge is dragged (components/ui/resize-handle.tsx): one cursor, no selection, nothing easing behind it. */
+  [data-pane-resizing],
+  [data-pane-resizing] * {
+    cursor: col-resize !important;
+    user-select: none !important;
+    transition: none !important;
+  }
   /* Thin, quiet scrollbars. */
   * {
     scrollbar-width: thin;
