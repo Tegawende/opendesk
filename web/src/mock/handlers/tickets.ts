@@ -4,6 +4,7 @@ import type { Attachment, Channel, Message, Priority, ReportsOverview, Severity,
 import { contactRef, db, me, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
 import { HttpError, del, forbidden, get, invalid, notFound, paginate, patch, post, required, respond, s, strArr, type Ctx } from "../router";
+import { searchWiki } from "./wiki";
 import { canCreateLabels, checkRequiredOnSolve, mergeFields } from "../labels";
 import { canSeeTicket, defaultBrand, teamRole } from "../teams";
 import { addActivity, addMessage, applyPatch, buildMessage, canSendFrom, counts, fieldFiltersFromQuery, findTicket, matches, newTicket, notify, publishTicketUpdated, sortTickets, type ListFilters } from "../tickets";
@@ -44,6 +45,8 @@ function filtersFrom(ctx: Ctx): ListFilters {
     channel: (q.get("channel") as Channel | null) ?? undefined,
     channel_not: csv(q.get("channel_not"), CHANNELS),
     contact_id: q.get("contact_id") ?? undefined,
+    contact_not: q.get("contact_not") ?? undefined,
+    company_not: q.get("company_not") ?? undefined,
     view_id: q.get("view_id") ?? undefined,
     q: q.get("q") ?? undefined,
     spam: q.get("spam") === "true",
@@ -565,12 +568,12 @@ export function registerTickets() {
 
   get("/v1/search", (ctx) => {
     const q = (ctx.query.get("q") ?? "").trim().toLowerCase();
-    if (!q) return { tickets: [], contacts: [], articles: [] };
+    if (!q) return { tickets: [], contacts: [], articles: [], wiki_pages: [] };
     const ws = ctx.ws;
     const tickets = sortTickets(ws.tickets.filter((t) => matches(ws, t, { q }, db.meId)), "last_message_at", "desc").slice(0, 5);
     const contacts = ws.contacts.filter((c) => [c.name, c.email ?? "", c.company?.name ?? ""].join(" ").toLowerCase().includes(q)).slice(0, 5);
     const articles = ws.articles.filter((a) => (a.title + " " + a.excerpt).toLowerCase().includes(q)).slice(0, 5);
-    return { tickets, contacts, articles };
+    return { tickets, contacts, articles, wiki_pages: searchWiki(ws, q, 5) };
   });
 
   get("/v1/reports/overview", (ctx) => reports(ctx));

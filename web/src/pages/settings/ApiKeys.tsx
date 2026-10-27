@@ -19,6 +19,7 @@ import { IconTile, ListSkeleton, MonoChip, StatePill, SummaryStrip } from "@/com
 import { MotionList, MotionRow } from "@/components/settings2/motion";
 import { useListMutation } from "@/components/settings2/optimistic";
 import { GrantedTeams, PrivateTeamsField } from "@/components/settings2/teams";
+import { ReauthNotice, isReauthError } from "@/components/settings/ReauthNotice";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
 import type { ApiKey } from "@/lib/api/types";
@@ -31,6 +32,8 @@ const scopeGroups: { resource: string; label: string; scopes: { id: string; labe
   { resource: "tickets", label: "Tickets", scopes: [{ id: "tickets:read", label: "Read" }, { id: "tickets:write", label: "Write" }] },
   { resource: "contacts", label: "Contacts", scopes: [{ id: "contacts:read", label: "Read" }, { id: "contacts:write", label: "Write" }] },
   { resource: "kb", label: "Knowledge base", scopes: [{ id: "kb:read", label: "Read" }, { id: "kb:write", label: "Write" }] },
+  { resource: "changelog", label: "Changelog", scopes: [{ id: "changelog:read", label: "Read" }, { id: "changelog:write", label: "Write" }] },
+  { resource: "wiki", label: "Wiki", scopes: [{ id: "wiki:read", label: "Read" }, { id: "wiki:write", label: "Write" }] },
   { resource: "settings", label: "Settings", scopes: [{ id: "settings:read", label: "Read" }, { id: "settings:write", label: "Write" }] },
   { resource: "realtime", label: "Realtime", scopes: [{ id: "realtime", label: "Subscribe" }] },
 ];
@@ -311,7 +314,7 @@ function InlineName({ initial, onDone }: { initial: string; onDone: (v: string |
   );
 }
 
-function CreateKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (k: ApiKey & { secret: string }) => void }) {
+export function CreateKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (k: ApiKey & { secret: string }) => void }) {
   const { t } = useTranslation("settingsDev");
   const qc = useQueryClient();
   const [name, setName] = useState("");
@@ -335,7 +338,10 @@ function CreateKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreate
       upsertInList(qc, qk.apiKeys, row as ApiKey, { prepend: true });
       onCreated(k);
     },
-    onError: (e) => setError(errorMessage(e)),
+    // A key needs a recent sign-in (with 2FA when on): the notice below says why and signs in again.
+    onError: (e) => {
+      if (!isReauthError(e)) setError(errorMessage(e));
+    },
   });
 
   const toggle = (id: string, on: boolean) => setScopes((s) => (on ? [...new Set([...s, id])] : s.filter((x) => x !== id)));
@@ -421,6 +427,7 @@ function CreateKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreate
           )}
         </Field>
         <PrivateTeamsField value={privateTeams} onChange={setPrivateTeams} />
+        {isReauthError(create.error) && <ReauthNotice error={create.error} />}
         <button type="submit" className="hidden" />
       </form>
     </Dialog>

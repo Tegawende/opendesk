@@ -27,19 +27,23 @@ func (r Role) Valid() bool { _, ok := roleRank[r]; return ok }
 
 // API key scopes.
 const (
-	ScopeTicketsRead   = "tickets:read"
-	ScopeTicketsWrite  = "tickets:write"
-	ScopeContactsRead  = "contacts:read"
-	ScopeContactsWrite = "contacts:write"
-	ScopeKBRead        = "kb:read"
-	ScopeKBWrite       = "kb:write"
-	ScopeSettingsRead  = "settings:read"
-	ScopeSettingsWrite = "settings:write"
-	ScopeRealtime      = "realtime"
+	ScopeTicketsRead    = "tickets:read"
+	ScopeTicketsWrite   = "tickets:write"
+	ScopeContactsRead   = "contacts:read"
+	ScopeContactsWrite  = "contacts:write"
+	ScopeKBRead         = "kb:read"
+	ScopeKBWrite        = "kb:write"
+	ScopeChangelogRead  = "changelog:read"
+	ScopeChangelogWrite = "changelog:write"
+	ScopeWikiRead       = "wiki:read"
+	ScopeWikiWrite      = "wiki:write"
+	ScopeSettingsRead   = "settings:read"
+	ScopeSettingsWrite  = "settings:write"
+	ScopeRealtime       = "realtime"
 )
 
 var AllScopes = []string{ScopeTicketsRead, ScopeTicketsWrite, ScopeContactsRead, ScopeContactsWrite,
-	ScopeKBRead, ScopeKBWrite, ScopeSettingsRead, ScopeSettingsWrite, ScopeRealtime}
+	ScopeKBRead, ScopeKBWrite, ScopeChangelogRead, ScopeChangelogWrite, ScopeWikiRead, ScopeWikiWrite, ScopeSettingsRead, ScopeSettingsWrite, ScopeRealtime}
 
 type Kind string
 

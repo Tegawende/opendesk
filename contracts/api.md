@@ -28,7 +28,7 @@ it exists, and this file is the contract the parts are built against.
 - Roles: `owner` > `admin` > `agent` > `viewer`. Viewers read only. Settings routes
   (mailboxes, members, api keys, webhooks, automations, sla, business hours, assignment, triage, widget settings, labels, label groups, custom fields, workspace images) need `admin`.
 - API key scopes: `tickets:read`, `tickets:write`, `contacts:read`, `contacts:write`,
-  `kb:read`, `kb:write`, `settings:read`, `settings:write`, `realtime`.
+  `kb:read`, `kb:write`, `changelog:read`, `changelog:write`, `wiki:read`, `wiki:write`, `settings:read`, `settings:write`, `realtime`.
 
 ## Resource shapes
 
@@ -138,7 +138,7 @@ type FieldOp = "eq" | "ne" | "contains" | "not_contains" | "gt" | "gte" | "lt" |
 
 type SavedReply = { id: string; title: string; shortcut: string; body_html: string; team_id: string | null /* offered only on that team's tickets */; created_at: string; updated_at: string };
 type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number; team_id: string | null /* shared with that team's members; shared is then false */ };
-type TicketFilters = { status?: TicketStatus[]; priority?: Priority[]; severity?: (Severity | "none")[] /* "none": no severity */; assignee?: "me" | "none" | string; team_id?: "mine" | "none" | string /* comma-separated team ids, mine (the caller's teams) and none: tickets of any of them */; team_not?: string /* same values as team_id: tickets of none of them; a ticket without a team is kept unless none is listed */; brand_id?: string; widget_id?: string; mailbox_id?: string; mailbox_not?: string /* comma-separated mailbox ids: tickets whose reply address is none of them */; received_at?: string /* the address a ticket was first written to */; tag?: string /* comma-separated label names (a name never contains a comma), case-insensitive: tickets carrying any of them; one name is one label */; tag_not?: string /* comma-separated label names: tickets carrying none of them */; untagged?: boolean /* tickets carrying no label */; channel?: Channel; channel_not?: Channel[] /* tickets on none of them */; q?: string; fields?: FieldFilter[] /* max 20, ANDed */ }; /* every filter is ANDed with the others; lists take at most 50 values */
+type TicketFilters = { status?: TicketStatus[]; priority?: Priority[]; severity?: (Severity | "none")[] /* "none": no severity */; assignee?: "me" | "none" | string; team_id?: "mine" | "none" | string /* comma-separated team ids, mine (the caller's teams) and none: tickets of any of them */; team_not?: string /* same values as team_id: tickets of none of them; a ticket without a team is kept unless none is listed */; brand_id?: string; widget_id?: string; mailbox_id?: string; mailbox_not?: string /* comma-separated mailbox ids: tickets whose reply address is none of them */; contact_not?: string /* comma-separated contact ids: tickets whose contact is none of them; a ticket without a contact is kept */; company_not?: string /* comma-separated company ids: tickets whose contact belongs to none of them; a ticket whose contact has no company is kept */; received_at?: string /* the address a ticket was first written to */; tag?: string /* comma-separated label names (a name never contains a comma), case-insensitive: tickets carrying any of them; one name is one label */; tag_not?: string /* comma-separated label names: tickets carrying none of them */; untagged?: boolean /* tickets carrying no label */; channel?: Channel; channel_not?: Channel[] /* tickets on none of them */; q?: string; fields?: FieldFilter[] /* max 20, ANDed */ }; /* every filter is ANDed with the others; lists take at most 50 values */
 type SlaPolicy = { id: string; name: string; priority: Priority | null; team_id: string | null /* only that team's tickets; null = any */; first_response_minutes: number; resolution_minutes: number;
   business_hours: boolean /* count only open business hours (default false): the team's own hours, else the workspace's */; enabled: boolean; position: number };
 
@@ -152,7 +152,7 @@ type TriageField = "priority" | "severity" | "labels" | "team";
 type DecisionEngine = { provider: "typesafe" /* Jev, direct or through OpenRouter */ | "llm" | "none"; model: string /* "jev-latest", "~typesafe/jev-latest", or the LLM fast model */; connected: boolean };
 type TriageSettings = { auto_triage: boolean; fields: TriageField[]; assign_after_triage: boolean;
   threshold: number /* 0.5..0.99, default 0.7: confidence at or above it applies a decision, below it leaves a suggestion */;
-  engine: DecisionEngine; available: boolean /* triage can run: AI or a decision engine is configured and AI is on for the workspace */ };
+  engine: DecisionEngine /* the workspace's: Jev on its own TypeSafe or OpenRouter key when it has one (contracts/ai.md "Provider per workspace"), else the instance's */; available: boolean /* triage can run: AI or a decision engine is configured and AI is on for the workspace */ };
 type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 type BusinessHours = { enabled: boolean; timezone: string /* the workspace timezone */; schedule: Record<Weekday, { start: string; end: string }[]> /* "HH:MM", 24h */; holidays: { date: string /* YYYY-MM-DD */; name: string }[] };
 type OnboardingStepId = "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_ollie" | "setup_ai_agent";
@@ -210,6 +210,14 @@ type AliasSettings = {
 type KbCollection = { id: string; name: string; slug: string; description: string; position: number; article_count: number; brand_id: string | null /* the brand whose help center shows it; null = every brand */ };
 type KbArticle = { id: string; collection_id: string | null; title: string; slug: string; excerpt: string; body_html: string; status: "draft" | "published"; author: UserRef | null; views: number; published_at: string | null; updated_at: string;
   brand_id: string | null /* null = every brand. An article in a collection with a brand belongs to the collection's brand */ };
+// A changelog entry: a product update the help center publishes at /changelog ("Changelog" below).
+type ChangelogEntry = { id: string; title: string /* 1..200 */; slug: string /* unique in the workspace */;
+  excerpt: string /* plain text, up to 300; derived from the body unless written */; body_html: string /* sanitized rich text, up to 200 KB */;
+  categories: string[] /* up to 5 names, each up to 32 characters, such as "New", "Improved", "Fixed"; compared without case */;
+  status: "draft" | "published";
+  published_at: string | null /* the date it carries: set when first published unless given. A published entry dated in the future is scheduled: public pages, feeds and lists show it from then */;
+  author: UserRef | null /* public routes leave out the email */; brand_id: string | null /* the brand whose help center shows it; null = every brand */;
+  created_at: string; updated_at: string };
 type ApiKey = { id: string; name: string; prefix: string; scopes: string[]; last_used_at: string | null; expires_at: string | null; created_at: string; created_by: UserRef | null };
 type Webhook = { id: string; url: string; description: string; events: string[]; header_names: string[]; enabled: boolean; created_at: string };
 type WebhookDelivery = { id: string; event_id: string; event_type: string; status: "pending" | "succeeded" | "failed"; attempts: number; response_code: number | null; duration_ms: number | null; created_at: string };
@@ -487,7 +495,7 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 ### Helpdesk (owner: backend-helpdesk)
 | method | path | notes |
 | --- | --- | --- |
-| GET | `/v1/tickets` | filters: `status` (csv), `priority` (csv), `severity` (csv of `sev1`..`sev4` and `none`), `assignee` (`me`/`none`/uuid), `team_id` (csv of uuids, `mine` for the caller's teams, `none`: tickets of any of them), `team_not` (same values: tickets of none of them), `brand_id`, `widget_id`, `mailbox_id`, `mailbox_not` (csv of uuids), `received_at` (the address a ticket was first written to: a mailbox's address or an alias, case-insensitive), `tag` (csv of label names: any of them), `tag_not` (csv of label names: none of them), `untagged` (`true`: no label), `channel`, `channel_not` (csv), `contact_id`, `view_id` (an explicit filter replaces the view's own for the same key; `field.*` filters and `untagged=true` add to it), `q`, `spam`, `field.<key>` / `field.<key>[<op>]` (custom fields, below), `sort` (`last_message_at`/`created_at`/`priority`/`severity` (sev1 first, none last)/`due`/`field.<key>`), `order` |
+| GET | `/v1/tickets` | filters: `status` (csv), `priority` (csv), `severity` (csv of `sev1`..`sev4` and `none`), `assignee` (`me`/`none`/uuid), `team_id` (csv of uuids, `mine` for the caller's teams, `none`: tickets of any of them), `team_not` (same values: tickets of none of them), `brand_id`, `widget_id`, `mailbox_id`, `mailbox_not` (csv of uuids), `received_at` (the address a ticket was first written to: a mailbox's address or an alias, case-insensitive), `tag` (csv of label names: any of them), `tag_not` (csv of label names: none of them), `untagged` (`true`: no label), `channel`, `channel_not` (csv), `contact_id`, `contact_not` (csv of contact ids: tickets whose contact is none of them), `company_not` (csv of company ids: tickets whose contact belongs to none of them), `view_id` (an explicit filter replaces the view's own for the same key; `field.*` filters and `untagged=true` add to it), `q`, `spam`, `field.<key>` / `field.<key>[<op>]` (custom fields, below), `sort` (`last_message_at`/`created_at`/`priority`/`severity` (sev1 first, none last)/`due`/`field.<key>`), `order` |
 | GET | `/v1/tickets/counts` | → `{ unassigned, mine, open, pending, on_hold, solved, spam, views: {<view_id>: n}, teams: {<team_id>: {open, unassigned}}, my_teams: {open, unassigned}, stats: {<row id>: {awaiting, urgent, overdue}} }`. `teams` lists every team the caller can see (open and pending, spam excluded); `my_teams` sums the caller's teams; Every count, the folders and `views` included, covers only tickets the caller can see (contracts/teams.md "Visibility"): a private team's tickets count for its members and for their assignee. `stats` breaks a sidebar row's tickets down, over the same tickets as its count: `ticket_folder:unassigned`, `ticket_folder:mine`, `ticket_folder:open`, `ticket_folder:pending` (pending and on hold), `team:<id>` for each team in `teams`, `team:mine` (as `my_teams`) and `view:<id>` for each view in `views`. `awaiting`: open or pending, and the customer's last message is the last message (within a second); `urgent`: urgent priority; `overdue`: not solved or closed, and the due time that applies has passed (first response while unanswered, else resolution) or an SLA breach is recorded |
 | POST | `/v1/tickets` | `{subject, contact_id? , contact?: {email,name}, channel?: "email"\|"api", mailbox_id?, brand_id?, body_html, kind?: "reply"\|"note", priority?, severity?, assignee_id?, team_id?, tags?: string[], fields?: FieldValues, status?}`; an email ticket with a reply is sent to the contact (`422 mailbox_cannot_send` when its mailbox has `sending: "system_off"`; nothing is created). Without `team_id` the team comes from routing (contracts/teams.md "Routing"); `brand_id` defaults to the mailbox's brand, else the default brand (`mailbox_id` of another brand: `422`; an address the caller may not send from: `403 forbidden`). An assignee who is not on a private team is `422 not_on_team` |
 | GET | `/v1/tickets/{id}` | id is uuid, or `#<number>` / numeric number |
@@ -535,7 +543,7 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 | DELETE | `/v1/custom-fields/{id}` | admin → 204; removes the field's values from every record |
 | POST | `/v1/custom-fields/reorder` | admin. `{entity, ids: string[]}` → `{data: CustomField[]}` (that entity's fields) |
 | CRUD | `/v1/saved-replies` | `body_html` takes template variables (contracts/templates.md); an unknown variable or a tag that does not parse is `422`. Body takes `team_id?` (null for everyone). List `?ticket_id=` (replies of no team and of the ticket's team) or `?team_id=<id\|none>`. A team's replies are written by admins and the team's leads and members (`403 forbidden` otherwise); a private team's are listed only to its members (others get `404`) |
-| CRUD | `/v1/views` | `{name, filters, shared, team_id?}`. `team_id` shares the view with that team's members (admins and the team's leads write it; with `shared: true` it is `422`). List `?team_id=` |
+| CRUD | `/v1/views` | `{name, filters, shared, team_id?}`. `team_id` shares the view with that team's members (admins and the team's leads write it; with `shared: true` it is `422`). Every id in `filters` (teams, mailboxes, brands, widgets, contacts, companies) is one of the workspace's own, else `422`. List `?team_id=` |
 | CRUD | `/v1/sla-policies` | body takes `business_hours?: boolean`, `team_id?` (null for every team). List `?team_id=` |
 | GET/PUT | `/v1/business-hours` | GET members → `BusinessHours`; PUT admin, full `BusinessHours` (`timezone` sets `settings.timezone`) → `BusinessHours`. Audit `business_hours.updated` |
 | GET/PATCH | `/v1/assignment` | GET members → `Assignment`; PATCH admin `{mode?, rules? /* replaces */, auto_away_minutes?, new_ticket_notify?}` → `Assignment` (another `new_ticket_notify` is `422`). Audit `assignment.updated {mode, rules, auto_away_minutes, new_ticket_notify}` |
@@ -543,7 +551,18 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 | CRUD | `/v1/automations` | |
 | CRUD | `/v1/imports`, `/v1/imports/{id}` | admin users only (reads also API keys with `settings:read`). History imports from Zendesk, Help Scout, Freshdesk, Intercom, Front and CSV files: check, CSV upload, start, pause, resume, cancel, sync, undo and credential removal; see `contracts/imports.md` |
 | CRUD | `/v1/kb/collections`, `/v1/kb/articles` | articles list supports `collection_id`, `status`, `q` and `for_brand_id` (what that brand shows: its own articles and those of every brand; the composer's and assistant's scope for a ticket's brand); both lists `brand_id` (a brand id, or `none` for what every brand shows; an article's brand is its collection's when that has one). Create and PATCH take `brand_id` (a brand of the workspace, or null) |
-| GET | `/v1/search?q=&brand_id=` | → `{tickets: Ticket[], contacts: Contact[], articles: KbArticle[]}` (5 each). `brand_id` (optional) narrows the articles to what that brand shows: its own and those of every brand |
+| CRUD | `/v1/changelog/entries` | Changelog ("Changelog" below). Reads: members and `changelog:read`; writes: agents and `changelog:write`. List: newest first by `published_at`, else `updated_at` (drafts); `status` (`draft`; `published`: live, dated now or earlier; `scheduled`: published with a future date), `category`, `q`, `brand_id` (a brand, or `none`), `for_brand_id`. Create `{title, slug?, body_html?, excerpt?, categories?, status?, published_at?, brand_id?}`; PATCH the same, where `published_at: null` dates it when it is next published. Events `changelog_entry.created` / `.updated` / `.deleted` |
+| GET | `/v1/changelog/categories` | members and `changelog:read` → `{name, count}[]`: the categories the workspace's entries use, most used first |
+| GET | `/v1/wiki/pages` | viewer (`wiki:read`) → `{data: WikiNode[], next_cursor: null}`: every page of the wiki without bodies, the tree (`contracts/wiki.md`) |
+| GET | `/v1/wiki/pages/{id}` | viewer (`wiki:read`) → `WikiPage` with its body, breadcrumbs and subpages |
+| POST | `/v1/wiki/pages` | agent (`wiki:write`). `{parent_id?, title?, icon?, body_html?, position?}` → 201 `WikiPage`. `422 wiki_full` past 5,000 pages, `page_too_deep` past 10 levels, `page_too_large` past 512 KB |
+| PATCH | `/v1/wiki/pages/{id}` | agent (`wiki:write`). `{title?, icon?, body_html?, version?}` → `WikiPage`. A `version` that is not the page's is `409 page_changed` and changes nothing |
+| POST | `/v1/wiki/pages/{id}/move` | agent (`wiki:write`). `{parent_id: string \| null, position}` → `WikiPage`; moves its subpages along. Under itself or a subpage is `422 page_cycle` |
+| DELETE | `/v1/wiki/pages/{id}` | agent (`wiki:write`): admins any page, agents a page when they created it and every page under it (`403` otherwise); API keys any. Removes its subpages and their history → 204. Audit `wiki_page.deleted` |
+| GET | `/v1/wiki/pages/{id}/revisions` | viewer (`wiki:read`) → `{data: WikiRevision[]}` newest first, without bodies; `/revisions/{revisionId}` → `WikiRevision` with `body_html` |
+| POST | `/v1/wiki/pages/{id}/revisions/{revisionId}/restore` | agent (`wiki:write`) → `WikiPage`: the revision's title, icon and body as a new version |
+| GET | `/v1/wiki/search?q=&limit=` | viewer (`wiki:read`) → `{data: WikiSearchHit[]}` (default 20, at most 50) |
+| GET | `/v1/search?q=&brand_id=` | → `{tickets: Ticket[], contacts: Contact[], articles: KbArticle[], wiki_pages: WikiSearchHit[]}` (5 each; each kind only with its read scope). `brand_id` (optional) narrows the articles to what that brand shows: its own and those of every brand |
 | GET | `/v1/reports/overview?from=&to=&team_id=&brand_id=` | → `{created, solved, open_now, first_response_p50_minutes, resolution_p50_minutes, csat_avg, csat_count, sla_breached, by_day: [{date, created, solved}], by_channel: {...}, by_severity: Record<Severity \| "none", number> /* tickets created in the range */, by_agent: [{user, solved, first_response_p50_minutes}], by_team: [{team_id: string \| null, created, solved, open_now, first_response_p50_minutes}], by_brand: [{brand_id, created, solved, open_now, first_response_p50_minutes}]}`. `team_id` (a team, or `none`) and `brand_id` narrow every figure. Private teams' tickets are counted, with no subjects or contacts |
 | POST | `/v1/attachments` | multipart `file` → `Attachment` (unattached, linked when sent). Only whoever uploaded it (that user, or that API key) may send it in `attachment_ids` (`422` otherwise) |
 | GET | `/v1/attachments/{id}` | → 302 to signed URL or streamed. For img tags, the links messages carry are signed (`?exp=&sig=`) and work for one to two hours. A file on a ticket the caller may not see is `404` (contracts/teams.md "Visibility"); an upload not sent yet is its uploader's alone (`404` for anyone else) |
@@ -754,6 +773,23 @@ published article; `setup_triage` auto-assignment is not `none` anywhere or auto
 than the seeded ones; `try_ollie` any Ollie feature was used in the workspace; `setup_ai_agent` (admin) the AI agent's setup
 checklist is complete (`GET /v1/ai/agent/setup`, `contracts/agent.md` "Setup"). Titles are English copy the app may override.
 
+#### Changelog
+
+Product updates a workspace publishes on its help centers (contracts/teams.md "Serving") and through
+`/v1/public/help/{slug}/changelog`, so a team can post them from its own release tooling with an API key
+(`changelog:write`) and show them in its product.
+
+- An entry is a draft or published. `published_at` is the date it carries: given, or set the first time it is
+  published (and kept when it is unpublished, so republishing a fix does not move it). A published entry dated
+  in the future is scheduled: nothing public shows it before then, and no job runs at that moment.
+- `categories` are free names (up to 5 per entry, 32 characters each, whitespace collapsed); a second spelling
+  of one already on the entry is dropped. Filters match them without case. Pages and the app colour each by its
+  name (`toneFor`).
+- Body HTML goes through the same sanitizer as articles; images are `/v1/attachments/...` uploads or https URLs.
+- A brand's entries go with it when it is deleted (`changelog_entry.deleted` each); null is every brand.
+- The slug is taken from the title unless given; a slug in use is `409 conflict`. Entries and articles have
+  separate slugs.
+
 ### Public, no auth (owner: backend-helpdesk)
 | method | path | notes |
 | --- | --- | --- |
@@ -761,6 +797,8 @@ checklist is complete (`GET /v1/ai/agent/setup`, `contracts/agent.md` "Setup"). 
 | GET | `/v1/public/help/{workspace_slug}/collections/{slug}` | `{collection, articles}`, the brand's and shared only |
 | GET | `/v1/public/help/{workspace_slug}/articles/{slug}` | `KbArticle`, increments views; the brand's and shared only |
 | GET | `/v1/public/help/{workspace_slug}/search?q=` | `KbArticle[]`, the brand's and shared only |
+| GET | `/v1/public/help/{workspace_slug}/changelog` | `{data: ChangelogEntry[], next_cursor}`: published entries dated now or earlier, newest first, the brand's and shared only; `?category=`, `?limit=` (default 20, max 50), `?cursor=` |
+| GET | `/v1/public/help/{workspace_slug}/changelog/{slug}` | `ChangelogEntry`, the same entries only |
 | POST | `/v1/public/csat/survey` | `{token}` → `{workspace_name, brand_color, ticket: {number, subject}, score: number \| null, comment, locale, locale_fixed}`; `locale_fixed` true when the workspace fixes a set `locale`: the page uses it and offers no other |
 | POST | `/v1/public/csat/rating` | `{token, score: 1..5, comment?}` records the score and answers the same survey object. The token rides in bodies only, never an API URL |
 

@@ -162,19 +162,29 @@ func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) erro
 		}
 		b.add(ref.col + " = " + b.arg(id))
 	}
-	if strings.TrimSpace(f.MailboxNot) != "" {
-		var boxes []uuid.UUID
-		for _, raw := range hd.SplitCSV(f.MailboxNot) {
-			id, err := hd.ParseRef(raw, "mailbox_not")
-			if err != nil {
-				return err
-			}
-			boxes = append(boxes, id)
-		}
-		if len(boxes) > 50 {
-			return httpx.Validation("mailbox_not takes at most 50 values")
-		}
+	boxes, err := refList(f.MailboxNot, "mailbox_not")
+	if err != nil {
+		return err
+	}
+	if len(boxes) > 0 {
 		b.add("(t.mailbox_id IS NULL OR NOT t.mailbox_id = ANY(" + b.arg(boxes) + "::uuid[]))")
+	}
+	contacts, err := refList(f.ContactNot, "contact_not")
+	if err != nil {
+		return err
+	}
+	if len(contacts) > 0 {
+		// A ticket without a contact is from none of them.
+		b.add("(t.contact_id IS NULL OR NOT t.contact_id = ANY(" + b.arg(contacts) + "::uuid[]))")
+	}
+	companies, err := refList(f.CompanyNot, "company_not")
+	if err != nil {
+		return err
+	}
+	if len(companies) > 0 {
+		// A ticket without a contact, or whose contact has no company, is from none of them.
+		b.add(`NOT EXISTS (SELECT 1 FROM contacts fc WHERE fc.workspace_id = t.workspace_id AND fc.id = t.contact_id
+			AND fc.company_id = ANY(` + b.arg(companies) + `::uuid[]))`)
 	}
 	if a := strings.ToLower(strings.TrimSpace(f.ReceivedAt)); a != "" {
 		b.add("t.received_at = " + b.arg(a))
@@ -216,15 +226,35 @@ func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) erro
 			parts = append(parts, "t.number = "+b.arg(n))
 		}
 		tsq := "websearch_to_tsquery('simple', " + b.arg(q) + ")"
+		// The customer's name, email and phone (contacts.search) match too.
+		contact := `EXISTS (SELECT 1 FROM contacts fc WHERE fc.workspace_id = t.workspace_id AND fc.id = t.contact_id AND (fc.search @@ ` + tsq
 		parts = append(parts, "t.search @@ "+tsq, "t.fields_search @@ "+tsq,
 			`EXISTS (SELECT 1 FROM messages fm WHERE fm.workspace_id = t.workspace_id AND fm.ticket_id = t.id AND fm.deleted_at IS NULL AND fm.search @@ `+tsq+`)`)
 		if pq := prefixQuery(q); pq != "" {
 			ptsq := "to_tsquery('simple', " + b.arg(pq) + ")"
 			parts = append(parts, "t.search @@ "+ptsq, "t.fields_search @@ "+ptsq)
+			contact += " OR fc.search @@ " + ptsq
 		}
+		parts = append(parts, contact+"))")
 		b.add("(" + strings.Join(parts, " OR ") + ")")
 	}
 	return nil
+}
+
+// refList parses a comma-separated list of ids, at most 50.
+func refList(raw, field string) ([]uuid.UUID, error) {
+	var out []uuid.UUID
+	for _, v := range hd.SplitCSV(raw) {
+		id, err := hd.ParseRef(v, field)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	if len(out) > 50 {
+		return nil, httpx.Validation(field + " takes at most 50 values")
+	}
+	return out, nil
 }
 
 // teamClause is the predicate for tickets of any of a comma-separated list of team ids,
@@ -516,7 +546,8 @@ func mergeFilters(view, req hd.TicketFilters) hd.TicketFilters {
 		out.ChannelNot = req.ChannelNot
 	}
 	for _, f := range []struct{ dst, src *string }{{&out.Assignee, &req.Assignee}, {&out.TeamID, &req.TeamID}, {&out.TeamNot, &req.TeamNot},
-		{&out.MailboxID, &req.MailboxID}, {&out.MailboxNot, &req.MailboxNot}, {&out.Tag, &req.Tag}, {&out.TagNot, &req.TagNot},
+		{&out.MailboxID, &req.MailboxID}, {&out.MailboxNot, &req.MailboxNot}, {&out.ContactNot, &req.ContactNot}, {&out.CompanyNot, &req.CompanyNot},
+		{&out.Tag, &req.Tag}, {&out.TagNot, &req.TagNot},
 		{&out.Channel, &req.Channel}, {&out.Q, &req.Q}, {&out.BrandID, &req.BrandID}, {&out.WidgetID, &req.WidgetID},
 		{&out.ReceivedAt, &req.ReceivedAt}} {
 		if *f.src != "" {
