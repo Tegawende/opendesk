@@ -98,10 +98,12 @@ type Call struct {
 	VoicemailURL string        `json:"voicemail_url,omitempty"`
 	LinksValid   time.Duration `json:"links_valid,omitempty"`
 	Link         string        `json:"link,omitempty"`
-	// Tags are the provider's labels on the call, nil when the event did not say.
-	Tags []string `json:"tags,omitempty"`
-	// Comments are the provider users' notes on the call, nil when the event did not say.
-	Comments []Comment `json:"comments,omitempty"`
+	// Tags are the provider's labels on the call as of the event, nil when the event did
+	// not say. An empty list says there are none, so it survives storage (no omitempty).
+	Tags []string `json:"tags"`
+	// Comments are the provider users' notes on the call as of the event, nil when the
+	// event did not say.
+	Comments []Comment `json:"comments"`
 	// Agent is the provider user who took or made the call.
 	Agent *Person `json:"agent,omitempty"`
 	// Caller is the provider's own contact for the number, if it has one.

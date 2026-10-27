@@ -86,9 +86,12 @@ CREATE TABLE phone_calls (
     voicemail_url    text NOT NULL DEFAULT '',
     links_expire_at  timestamptz,
     link             text NOT NULL DEFAULT '',
-    -- The provider's labels on the call and its users' comments on it.
+    -- The provider's labels on the call and its users' comments on it, each with the time
+    -- of the event they came with: an older event never replaces a newer list.
     tags             text[] NOT NULL DEFAULT '{}',
+    tags_at          timestamptz,
     comments         jsonb NOT NULL DEFAULT '[]',
+    comments_at      timestamptz,
     summary          text NOT NULL DEFAULT '',
     transcript       text NOT NULL DEFAULT '',
     outside_hours    boolean NOT NULL DEFAULT false,

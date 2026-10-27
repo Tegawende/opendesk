@@ -66,7 +66,9 @@ type phoneCall struct {
 	LinksExpireAt  *time.Time
 	Link           string
 	Tags           []string
+	TagsAt         *time.Time
 	Comments       []provider.Comment
+	CommentsAt     *time.Time
 	Summary        string
 	Transcript     string
 	OutsideHours   bool
@@ -77,7 +79,7 @@ type phoneCall struct {
 const callSelect = `SELECT id, workspace_id, connection_id, provider, external_call_id, ticket_id, activity_id, contact_id, direction,
 	stage, outcome, missed_reason, number, line_id, line_name, agent_user_id, agent_name, caller_name, started_at, answered_at, ended_at,
 	duration_seconds, has_recording, has_voicemail, asset_url, recording_url, voicemail_url, links_expire_at, link, tags, comments,
-	summary, transcript, outside_hours, ended_trigger_at, card_queued_at
+	summary, transcript, outside_hours, ended_trigger_at, card_queued_at, tags_at, comments_at
 	FROM phone_calls`
 
 func scanCall(row pgx.Row) (phoneCall, error) {
@@ -85,7 +87,7 @@ func scanCall(row pgx.Row) (phoneCall, error) {
 	err := row.Scan(&c.ID, &c.WorkspaceID, &c.ConnectionID, &c.Provider, &c.ExternalID, &c.TicketID, &c.ActivityID, &c.ContactID, &c.Direction,
 		&c.Stage, &c.Outcome, &c.MissedReason, &c.Number, &c.LineID, &c.LineName, &c.AgentUserID, &c.AgentName, &c.CallerName, &c.StartedAt, &c.AnsweredAt,
 		&c.EndedAt, &c.Duration, &c.HasRecording, &c.HasVoicemail, &c.AssetURL, &c.RecordingURL, &c.VoicemailURL, &c.LinksExpireAt, &c.Link,
-		&c.Tags, &c.Comments, &c.Summary, &c.Transcript, &c.OutsideHours, &c.EndedTriggerAt, &c.CardQueuedAt)
+		&c.Tags, &c.Comments, &c.Summary, &c.Transcript, &c.OutsideHours, &c.EndedTriggerAt, &c.CardQueuedAt, &c.TagsAt, &c.CommentsAt)
 	return c, err
 }
 
@@ -225,12 +227,15 @@ func merge(c *phoneCall, ev provider.Event) {
 			c.LinksExpireAt = &exp
 		}
 	}
-	// Tags and comments come whole with each event that has them, so the latest wins.
-	if x.Tags != nil {
-		c.Tags = x.Tags
+	// Tags and comments come whole with each event, an empty list included, so the list of
+	// the latest event wins: one older than the list the call has never replaces it.
+	if x.Tags != nil && newer(ev.At, c.TagsAt) {
+		at := ev.At
+		c.Tags, c.TagsAt = x.Tags, &at
 	}
-	if x.Comments != nil {
-		c.Comments = x.Comments
+	if x.Comments != nil && newer(ev.At, c.CommentsAt) {
+		at := ev.At
+		c.Comments, c.CommentsAt = x.Comments, &at
 	}
 	if x.Agent != nil {
 		if n := displayname.Clean(x.Agent.Name, displayname.Person); n != "" {
@@ -243,6 +248,11 @@ func merge(c *phoneCall, ev provider.Event) {
 		}
 	}
 	c.Outcome = outcome(*c)
+}
+
+// newer reports whether an event at at is as recent as the one a value came with.
+func newer(at time.Time, stored *time.Time) bool {
+	return stored == nil || !at.Before(*stored)
 }
 
 // outcome is how an ended call went: a voicemail was left, someone answered, or nobody
@@ -369,11 +379,12 @@ func (s *Service) saveCall(ctx context.Context, tx pgx.Tx, c phoneCall) error {
 		missed_reason = $7, number = $8, line_name = $9, agent_user_id = $10, agent_name = $11, caller_name = $12, started_at = $13,
 		answered_at = $14, ended_at = $15, duration_seconds = $16, has_recording = $17, has_voicemail = $18, asset_url = $19,
 		summary = $20, transcript = $21, outside_hours = $22, ended_trigger_at = $23, card_queued_at = $24, line_id = $25,
-		recording_url = $26, voicemail_url = $27, links_expire_at = $28, link = $29, tags = $30, comments = $31, updated_at = now()
+		recording_url = $26, voicemail_url = $27, links_expire_at = $28, link = $29, tags = $30, comments = $31, tags_at = $32,
+		comments_at = $33, updated_at = now()
 		WHERE id = $1`, c.ID, c.TicketID, c.ActivityID, c.ContactID, c.Stage, c.Outcome, c.MissedReason, c.Number, c.LineName,
 		c.AgentUserID, c.AgentName, c.CallerName, c.StartedAt, c.AnsweredAt, c.EndedAt, c.Duration, c.HasRecording, c.HasVoicemail,
 		c.AssetURL, c.Summary, c.Transcript, c.OutsideHours, c.EndedTriggerAt, c.CardQueuedAt, c.LineID,
-		c.RecordingURL, c.VoicemailURL, c.LinksExpireAt, c.Link, nonNil(c.Tags), commentsOrEmpty(c.Comments))
+		c.RecordingURL, c.VoicemailURL, c.LinksExpireAt, c.Link, nonNil(c.Tags), commentsOrEmpty(c.Comments), c.TagsAt, c.CommentsAt)
 	if err != nil {
 		return fmt.Errorf("save call: %w", err)
 	}
