@@ -558,7 +558,8 @@
       "email": "Email",
       "chat": "Chat",
       "api": "API",
-      "portal": "Portal"
+      "portal": "Portal",
+      "phone": "Phone"
     },
     "via": {
       "address": "The address's team",

@@ -153,6 +153,15 @@ export const qk = {
   get integrationCatalog() {
     return w(["integrations", "catalog"] as const);
   },
+  get phoneProviders() {
+    return w(["phone", "providers"] as const);
+  },
+  get phoneConnections() {
+    return w(["phone", "connections"] as const);
+  },
+  get phoneLines() {
+    return w(["phone", "lines"] as const);
+  },
   get supportChannelProviders() {
     return w(["support-channels", "providers"] as const);
   },
@@ -404,6 +413,9 @@ export const q = {
   webhookDeliveries: (id: string) => list(qk.webhookDeliveries(id), () => api.webhooks.deliveries(id, { limit: 50 })),
   integrations: () => list(qk.integrations, () => api.integrations.list()),
   integrationCatalog: () => list(qk.integrationCatalog, () => api.integrations.catalog(), { staleTime: 60 * 60_000 }),
+  phoneProviders: () => list(qk.phoneProviders, api.phone.providers, { staleTime: 60 * 60_000 }),
+  phoneConnections: () => list(qk.phoneConnections, api.phone.connections),
+  phoneLines: () => list(qk.phoneLines, api.phone.lines, { staleTime: 5 * 60_000 }),
   supportChannelProviders: () => list(qk.supportChannelProviders, api.supportChannels.providers, { staleTime: 60 * 60_000 }),
   supportChannelConnections: () => list(qk.supportChannelConnections, api.supportChannels.connections),
   supportChannelDestinations: () => list(qk.supportChannelDestinations, api.supportChannels.destinations),

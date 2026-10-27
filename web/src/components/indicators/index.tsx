@@ -256,7 +256,7 @@ export function SentimentIcon({ sentiment, className }: { sentiment: Sentiment |
   );
 }
 
-// Channel: envelope, bubble, braces, globe; drawn to match the family.
+// Channel: envelope, bubble, handset, braces, globe; drawn to match the family.
 
 export function ChannelIcon({ channel, className, plain }: { channel: Channel; className?: string; plain?: boolean }) {
   useTranslation("indicators");
@@ -279,6 +279,14 @@ export function ChannelIcon({ channel, className, plain }: { channel: Channel; c
       )}
       {channel === "api" && (
         <path d="M5.5 3.5C4 3.5 4 4.5 4 6s-1.5 2-1.5 2S4 8.5 4 10s0 2.5 1.5 2.5M10.5 3.5C12 3.5 12 4.5 12 6s1.5 2 1.5 2S12 8.5 12 10s0 2.5-1.5 2.5" stroke={c} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round" />
+      )}
+      {channel === "phone" && (
+        <path
+          d="M5.6 2.25H4a1.5 1.5 0 0 0-1.5 1.6C2.85 9.15 6.85 13.15 12.15 13.5a1.5 1.5 0 0 0 1.6-1.5v-1.6a1 1 0 0 0-.73-.96l-1.9-.55a1 1 0 0 0-1 .27l-.72.73a7.6 7.6 0 0 1-3.29-3.29l.73-.72a1 1 0 0 0 .27-1l-.55-1.9a1 1 0 0 0-.96-.73z"
+          stroke={c}
+          strokeWidth={SW}
+          strokeLinejoin="round"
+        />
       )}
       {channel === "portal" && (
         <>

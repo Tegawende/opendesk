@@ -144,5 +144,6 @@
     "automatic": "Les contacts sont créés automatiquement à partir des e-mails et du chat",
     "search": "pour rechercher partout",
     "domains": "Les entreprises regroupent les contacts par domaine de messagerie"
-  }
+  },
+  "callWith": "Appeler avec {{provider}}"
 }

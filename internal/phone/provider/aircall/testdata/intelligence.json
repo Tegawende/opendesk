@@ -1,0 +1,45 @@
+[
+  {
+    "resource": "conversation_intelligence",
+    "event": "summary.created",
+    "timestamp": 1793095500,
+    "token": "hook-token-1",
+    "data": {
+      "id": 31,
+      "call_id": "1290001",
+      "call_uuid": "c-uuid",
+      "number_id": 501,
+      "content": "The customer asked for a replacement bulb for order 1042.",
+      "participants": []
+    }
+  },
+  {
+    "resource": "conversation_intelligence",
+    "event": "transcription.created",
+    "timestamp": 1793095510,
+    "token": "hook-token-1",
+    "data": {
+      "id": 32,
+      "call_id": 1290001,
+      "content": {
+        "language": "fr-FR",
+        "utterances": [
+          {
+            "start_time": 0.5,
+            "end_time": 2.1,
+            "text": "Bonjour, LampTwist support.",
+            "participant_type": "internal",
+            "user_id": 9001
+          },
+          {
+            "start_time": 2.5,
+            "end_time": 6.0,
+            "text": "Hello, my bulb arrived broken.",
+            "participant_type": "external",
+            "phone_number": "+32470123456"
+          }
+        ]
+      }
+    }
+  }
+]

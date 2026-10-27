@@ -836,5 +836,34 @@
     "notSent": "A reply you were sending was not sent. Open its ticket to send it again.",
     "tooLongToHold": "Sent at once: this reply is too long to hold for undo.",
     "noteNotSaved": "Couldn’t update the note"
+  },
+  "call": {
+    "withheld": "a withheld number",
+    "inProgress": "In progress",
+    "ringing": "Ringing",
+    "voicemail": "Voicemail",
+    "missed": "Missed",
+    "noAnswer": "No answer",
+    "answered": "Answered",
+    "outboundBy": "{{who}} called {{caller}}",
+    "outbound": "Call to {{caller}}",
+    "inboundAnsweredBy": "{{caller}} called, {{who}} answered",
+    "inbound": "Call from {{caller}}",
+    "outsideHours": "Outside business hours",
+    "line": "Line {{line}}",
+    "playRecording": "Play recording",
+    "playVoicemail": "Play voicemail",
+    "openIn": "Open in {{provider}}",
+    "summary": "Summary",
+    "showTranscript": "Show transcript",
+    "hideTranscript": "Hide transcript",
+    "reason": {
+      "out_of_opening_hours": "Outside opening hours",
+      "short_abandoned": "Hung up quickly",
+      "abandoned_in_ivr": "Hung up in the menu",
+      "abandoned_in_classic": "Hung up while waiting",
+      "no_available_agent": "No teammate available",
+      "agents_did_not_answer": "Nobody answered"
+    }
   }
 }

@@ -578,7 +578,8 @@
       "email": "E-mail",
       "chat": "Chat",
       "api": "API",
-      "portal": "Portail"
+      "portal": "Portail",
+      "phone": "Téléphone"
     },
     "via": {
       "address": "L’équipe de l’adresse",

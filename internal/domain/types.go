@@ -105,6 +105,8 @@ const (
 	ChannelChat   = "chat"
 	ChannelAPI    = "api"
 	ChannelPortal = "portal"
+	// ChannelPhone: a ticket a call opened (contracts/phone.md).
+	ChannelPhone = "phone"
 )
 
 var (
@@ -112,7 +114,7 @@ var (
 	Priorities = []string{"low", "normal", "high", "urgent"}
 	// Severities are ordered most severe first; a ticket may have none (nil).
 	Severities = []string{"sev1", "sev2", "sev3", "sev4"}
-	Channels   = []string{ChannelEmail, ChannelChat, ChannelAPI, ChannelPortal}
+	Channels   = []string{ChannelEmail, ChannelChat, ChannelAPI, ChannelPortal, ChannelPhone}
 )
 
 type Ticket struct {
@@ -122,7 +124,7 @@ type Ticket struct {
 	Status    string      `json:"status" enum:"open,pending,on_hold,solved,closed"`
 	Priority  string      `json:"priority" enum:"low,normal,high,urgent"`
 	Severity  *string     `json:"severity" enum:"sev1,sev2,sev3,sev4" nullable:"true"`
-	Channel   string      `json:"channel" enum:"email,chat,api,portal"`
+	Channel   string      `json:"channel" enum:"email,chat,api,portal,phone"`
 	MailboxID *uuid.UUID  `json:"mailbox_id"`
 	Contact   *ContactRef `json:"contact"`
 	Assignee  *UserRef    `json:"assignee"`

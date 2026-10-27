@@ -280,7 +280,8 @@ export type TicketStatus = "open" | "pending" | "on_hold" | "solved" | "closed";
 export type Priority = "low" | "normal" | "high" | "urgent";
 /** Business impact; sev1 is the most severe. A ticket may have none. */
 export type Severity = "sev1" | "sev2" | "sev3" | "sev4";
-export type Channel = "email" | "chat" | "api" | "portal";
+/** phone: a ticket a call opened (contracts/phone.md). */
+export type Channel = "email" | "chat" | "api" | "portal" | "phone";
 // Labels ("tags" in the API) and custom fields (contracts/api.md "Labels and custom fields").
 export type LabelColor =
   | "gray" | "red" | "orange" | "amber" | "yellow" | "lime" | "green" | "teal" | "cyan" | "blue" | "indigo" | "violet" | "purple" | "pink" | "rose";
@@ -516,7 +517,48 @@ export type ActivityType =
   | "field_changed"
   /** data: {from, to}, each {id, name} (name, else email) or null. */
   | "contact_changed"
+  /** data: CallData. Updated in place (activity.updated) as the call moves on. */
+  | "call"
   | (string & {});
+
+/** A call entry's data (contracts/phone.md "Timeline"). */
+export type CallData = {
+  call_id: string;
+  provider: string;
+  direction: "inbound" | "outbound";
+  stage: "ringing" | "answered" | "ended";
+  /** Set once the call ended. */
+  outcome: "" | "answered" | "missed" | "voicemail";
+  /** The provider's own reason (out_of_opening_hours, no_available_agent, ...). */
+  missed_reason: string;
+  /** E.164, "" when withheld. */
+  number: string;
+  line: string;
+  line_id: string;
+  caller_name: string;
+  /** The member who took or made the call, when the provider's user has their email. */
+  agent: UserRef | null;
+  agent_name: string;
+  started_at: string | null;
+  answered_at: string | null;
+  ended_at: string | null;
+  duration: number;
+  recording: boolean;
+  voicemail: boolean;
+  /** The provider's lasting page for the recording or voicemail. */
+  asset_url: string;
+  /** Direct links, working until links_expire_at. */
+  recording_url: string;
+  voicemail_url: string;
+  links_expire_at: string | null;
+  /** The call at the provider. */
+  link: string;
+  tags: string[];
+  comments: { id: string; text: string; author?: string; at?: string }[];
+  summary: string;
+  transcript: string;
+  outside_hours: boolean;
+};
 export type Activity = {
   id: string;
   ticket_id: string;
@@ -661,11 +703,14 @@ export type AIClientConnection = {
   last_used_at: string | null;
 };
 
-export type AutomationTrigger = "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated";
+/** call_ended: a phone call reached its final state (contracts/phone.md). */
+export type AutomationTrigger = "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated" | "call_ended";
 export type ConditionField =
   | "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "severity" | "status" | "tag" | "sentiment" | "ai_decide"
   /** contracts/teams.md: equals/not_equals with an id (team and widget also "none"); received_at also contains. */
   | "assignee_id" | "team_id" | "brand_id" | "widget_id" | "received_at"
+  /** The call of a call_ended automation (contracts/phone.md "Automations"). */
+  | "call_outcome" | "call_direction" | "call_missed_reason" | "call_time" | "call_line" | "call_tag"
   /** A ticket custom field, or the ticket contact's. */
   | `field.${string}` | `contact.field.${string}`;
 /** `eq` is the AI sentiment condition's operator (contracts/ai.md). `any` and `none` on subject, body, from_email,
@@ -1011,6 +1056,30 @@ export type SupportChannelProvider = {
   fields: { name: string; label: string; secret: boolean; generated?: boolean; discovered?: boolean; help?: string }[];
 };
 export type SupportChannelAccount = { id: string; name: string };
+
+/** contracts/phone.md. */
+export type PhoneProvider = { key: string; name: string; fields: { name: string; label: string; secret: boolean }[] };
+export type PhoneHealthCode = "" | "receiving" | "webhook_missing" | "credentials_refused" | "provider_unreachable";
+export type PhoneConnection = {
+  id: string;
+  provider: string;
+  name: string;
+  account_name: string;
+  status: "connected" | "error";
+  last_error: string;
+  health_status: "unknown" | "healthy" | "action_required" | "error";
+  health_code: PhoneHealthCode;
+  health_detail: string;
+  health_checked_at: string | null;
+  /** A call goes on the caller's latest solved ticket updated within this many days; 0 opens a new one. */
+  reuse_days: number;
+  assign_answered: boolean;
+  insight_cards: boolean;
+  last_event_at: string | null;
+  webhook_url: string;
+  created_at: string;
+};
+export type PhoneLine = { id: string; name: string; provider: string };
 export type SupportChannelConnection = {
   id: string;
   provider: string;

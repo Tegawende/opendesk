@@ -78,7 +78,8 @@
     "changelog": "Changelog",
     "changelogEntry": "Update",
     "newUpdate": "New update",
-    "myTeams": "My teams"
+    "myTeams": "My teams",
+    "phone": "Phone"
   },
   "folders": {
     "unassigned": "Unassigned",
@@ -136,7 +137,8 @@
     "apiKeys": "API keys",
     "aiClients": "AI clients",
     "webhooks": "Webhooks",
-    "auditLog": "Audit log"
+    "auditLog": "Audit log",
+    "phone": "Phone"
   },
   "settingsPage": "Settings page",
   "command": {

@@ -755,5 +755,103 @@
       "none": "Gmail führt keine weiteren Adressen.",
       "sendOnly": "Bei einer reinen Sendeverbindung teilt Google die weiteren Absenderadressen dieses Kontos nicht. Füge sie oben von Hand hinzu."
     }
+  },
+  "phone": {
+    "title": "Telefon",
+    "description": "Verbinde deine Cloud-Telefonanlage. Jeder Anruf landet im Ticket der anrufenden Person: wer ihn angenommen hat, wie lange er dauerte und seine Aufnahme.",
+    "connections": {
+      "title": "Telefonanlagen",
+      "description": "Anrufe dieser Konten werden in Tickets festgehalten."
+    },
+    "empty": {
+      "title": "Noch keine Telefonanlage",
+      "body": "Verbinde Aircall, und jeder Anruf wird im Ticket der anrufenden Person festgehalten.",
+      "tipTimeline": "Anrufe im Verlauf des Tickets",
+      "tipMissed": "Kein verpasster Anruf bleibt liegen",
+      "tipAutomations": "Automatisierungen, wenn ein Anruf endet"
+    },
+    "health": {
+      "healthy": "Empfängt Anrufe",
+      "action_required": "Handlung nötig",
+      "error": "Funktioniert nicht",
+      "unknown": "Noch nicht geprüft",
+      "test": "Testen",
+      "tested": "Die Verbindung funktioniert.",
+      "testedAttention": "Die Verbindung braucht deine Aufmerksamkeit.",
+      "testError": "Die Verbindung konnte nicht getestet werden."
+    },
+    "healthCode": {
+      "receiving": "Anrufe werden an opendesk gesendet.",
+      "webhook_missing": "Die Telefonanlage sendet keine Anrufe an opendesk. Teste die Verbindung, um sie neu einzurichten.",
+      "credentials_refused": "Die Telefonanlage hat die Zugangsdaten abgelehnt. Ersetze sie durch gültige.",
+      "provider_unreachable": "Die Telefonanlage ist nicht erreichbar. Versuche es gleich noch einmal."
+    },
+    "lastEvent": "Letztes Anrufereignis {{when}}",
+    "noEventYet": "Noch kein Anruf. Anrufe erscheinen in Tickets, sobald sie klingeln.",
+    "webhook": "Webhook-Adresse, von opendesk in deinem Konto eingetragen",
+    "rotate": {
+      "label": "Zugangsdaten von {{name}} ersetzen",
+      "title": "Zugangsdaten von {{name}} ersetzen",
+      "submit": "Ersetzen",
+      "saved": "Zugangsdaten ersetzt."
+    },
+    "disconnectLabel": "{{name}} trennen",
+    "disconnectTitle": "Telefonanlage trennen?",
+    "disconnectBody": "opendesk entfernt seinen eigenen Webhook aus {{name}} und hält keine neuen Anrufe mehr fest. Anrufe, die schon in Tickets stehen, bleiben.",
+    "disconnect": "Trennen",
+    "disconnected": "Telefonanlage getrennt.",
+    "disconnectError": "Die Telefonanlage konnte nicht getrennt werden.",
+    "saveError": "Die Änderung konnte nicht gespeichert werden.",
+    "placement": {
+      "title": "Anrufe von {{name}}",
+      "description": "Wohin ein Anruf geht und was er dort tut.",
+      "reuse": "Ein kürzlich gelöstes Ticket verwenden",
+      "reuseHint": "Hat die anrufende Person kein offenes Ticket, geht der Anruf in ihr letztes Ticket, das in der gewählten Zeit gelöst wurde.",
+      "reuseNever": "Hat die anrufende Person kein offenes Ticket, öffnet der Anruf ein neues.",
+      "never": "Nie",
+      "day": "Innerhalb von 1 Tag",
+      "daysN": "Innerhalb von {{n}} Tagen",
+      "assign": "Angenommene Anrufe zuweisen",
+      "assignHint": "Ein Ticket ohne Zuständige geht an die Person aus dem Team, die den Anruf angenommen hat. Sie wird an ihrer E-Mail erkannt.",
+      "cards": "Anrufende in Aircall zeigen",
+      "cardsHint": "Während ein Anruf klingelt, zeigt Aircall die anrufende Person, das Ticket des Anrufs und ihre letzten Tickets.",
+      "dial": "Aus opendesk anrufen",
+      "dialHint": "Telefonnummern bei Kontakten und Tickets öffnen deine Telefon-App. Lege Aircall als Standard-App für Telefonlinks fest, um damit anzurufen."
+    },
+    "automations": {
+      "title": "Automatisierungen",
+      "description": "Automatisierungen können laufen, wenn ein Anruf endet, nach seinem Ergebnis, seiner Richtung, seiner Leitung, seinen Labels und ob er außerhalb der Geschäftszeiten kam.",
+      "docs": "Telefon-Anleitung",
+      "docsHint": "Einrichtungsschritte und Beispiele für Automatisierungen.",
+      "openDocs": "Anleitung öffnen"
+    },
+    "example": {
+      "name": "Verpasster Anruf außerhalb der Öffnungszeiten",
+      "hint": "Das Ticket der anrufenden Person wieder öffnen, eine Notiz hinzufügen und die Priorität erhöhen. Ausgeschaltet angelegt, damit du sie prüfen kannst.",
+      "create": "Diese Automatisierung anlegen",
+      "note": "Verpasster Anruf außerhalb der Öffnungszeiten: zurückrufen.",
+      "created": "Automatisierung angelegt, ausgeschaltet.",
+      "error": "Die Automatisierung konnte nicht angelegt werden."
+    },
+    "providers": {
+      "title": "Verfügbare Telefonanlagen",
+      "descriptionAdmin": "Wähle eine aus, um sie mit ihrem API-Schlüssel zu verbinden.",
+      "description": "Eine Person mit Adminrechten kann eine Telefonanlage verbinden."
+    },
+    "provider": {
+      "aircall": "Cloud-Telefonanlage. Anrufe, Aufnahmen und KI-Zusammenfassungen landen in Tickets."
+    },
+    "field": {
+      "api_id": "API-ID",
+      "api_token": "API-Token"
+    },
+    "connect": {
+      "title": "{{name}} verbinden",
+      "aircallSetup": "Öffne in Aircall Integrationen und API, dann API-Schlüssel, und lege einen Schlüssel an. Füge hier seine API-ID und sein Token ein: opendesk trägt seinen eigenen Webhook in deinem Konto ein und lässt die anderen in Ruhe.",
+      "cancel": "Abbrechen",
+      "submit": "Verbinden",
+      "connected": "{{name}} verbunden.",
+      "error": "{{name}} konnte nicht verbunden werden."
+    }
   }
 }

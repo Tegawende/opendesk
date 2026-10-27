@@ -59,7 +59,7 @@ func RunTrigger(ctx context.Context, d *deps.Deps, a jobs.TicketTriggerArgs) err
 		if err != nil {
 			return err
 		}
-		run := &triggerRun{d: d, tx: tx, wid: a.WorkspaceID, tid: a.TicketID, fired: map[uuid.UUID]bool{}, messageID: a.MessageID}
+		run := &triggerRun{d: d, tx: tx, wid: a.WorkspaceID, tid: a.TicketID, fired: map[uuid.UUID]bool{}, messageID: a.MessageID, callID: a.CallID}
 
 		updated := func(field string) bool {
 			return a.Trigger == jobs.TriggerTicketUpdated && slices.Contains(a.Changes, field)
@@ -169,6 +169,10 @@ type triggerRun struct {
 	teamMoved bool
 	// messageID is the message the run is about, if any.
 	messageID *uuid.UUID
+	// callID is the phone call a call_ended run is about (contracts/phone.md), and call
+	// its facts once read.
+	callID *uuid.UUID
+	call   *callFacts
 }
 
 // automations evaluates the enabled automations for trigger in position order.
@@ -245,6 +249,14 @@ type facts struct {
 	contactEmail                                                   *string
 	fields, contactFields                                          map[string]any
 	defs                                                           map[string]domain.FieldDefs // by entity
+	// call is the call of a call_ended run; nil otherwise, and then call conditions fail.
+	call *callFacts
+}
+
+// callFacts are what call conditions read (contracts/phone.md "Automations").
+type callFacts struct {
+	outcome, direction, missedReason, time, line string
+	tags                                         []string
 }
 
 func (r *triggerRun) facts(ctx context.Context, messageID *uuid.UUID) (facts, error) {
@@ -290,6 +302,24 @@ func (r *triggerRun) facts(ctx context.Context, messageID *uuid.UUID) (facts, er
 	if f.fromEmail == "" && f.contactEmail != nil {
 		f.fromEmail = *f.contactEmail
 	}
+	if r.callID != nil && r.call != nil {
+		f.call = r.call
+	} else if r.callID != nil {
+		var c callFacts
+		var outside bool
+		err := r.tx.QueryRow(ctx, `SELECT outcome, direction, missed_reason, outside_hours, line_name, tags FROM phone_calls
+			WHERE workspace_id = $1 AND id = $2`, r.wid, *r.callID).Scan(&c.outcome, &c.direction, &c.missedReason, &outside, &c.line, &c.tags)
+		if err != nil && !db.IsNotFound(err) {
+			return f, err
+		}
+		if err == nil {
+			c.time = "business_hours"
+			if outside {
+				c.time = "outside_business_hours"
+			}
+			f.call, r.call = &c, &c // the call does not change during the run
+		}
+	}
 	return f, nil
 }
 
@@ -325,22 +355,11 @@ func match(c hd.Condition, f facts) bool {
 		}
 		return p > c.DecideThreshold()
 	}
+	if slices.Contains(hd.CallFields, c.Field) {
+		return matchCall(c, f.call)
+	}
 	if c.Field == "tag" {
-		if c.Op == "not_contains" || c.Op == "not_equals" || c.Op == "none" {
-			// "tag not_equals x" holds when no tag equals x; "tag none" when no tag contains a phrase.
-			for _, t := range f.tags {
-				if !compare(c.Op, t, c.Value) {
-					return false
-				}
-			}
-			return true
-		}
-		for _, t := range f.tags {
-			if compare(c.Op, t, c.Value) {
-				return true
-			}
-		}
-		return false
+		return matchTags(c, f.tags)
 	}
 	var v string
 	switch c.Field {
@@ -376,6 +395,47 @@ func match(c hd.Condition, f facts) bool {
 		return false
 	}
 	return compare(c.Op, v, c.Value)
+}
+
+// matchTags holds a condition against a list of labels: "not_equals x" holds when no label
+// equals x, "none" when no label contains a phrase; the others when one label does.
+func matchTags(c hd.Condition, tags []string) bool {
+	if c.Op == "not_contains" || c.Op == "not_equals" || c.Op == "none" {
+		for _, t := range tags {
+			if !compare(c.Op, t, c.Value) {
+				return false
+			}
+		}
+		return true
+	}
+	for _, t := range tags {
+		if compare(c.Op, t, c.Value) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchCall holds a call condition; without a call (another trigger) none holds.
+func matchCall(c hd.Condition, call *callFacts) bool {
+	if call == nil {
+		return false
+	}
+	switch c.Field {
+	case "call_outcome":
+		return compare(c.Op, call.outcome, c.Value)
+	case "call_direction":
+		return compare(c.Op, call.direction, c.Value)
+	case "call_missed_reason":
+		return compare(c.Op, call.missedReason, c.Value)
+	case "call_time":
+		return compare(c.Op, call.time, c.Value)
+	case "call_line":
+		return compare(c.Op, call.line, c.Value)
+	case "call_tag":
+		return matchTags(c, call.tags)
+	}
+	return false
 }
 
 func compare(op, have, want string) bool {

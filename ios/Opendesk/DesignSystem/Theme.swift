@@ -201,6 +201,7 @@ extension Channel {
         case .chat: .teal
         case .api: .violet
         case .portal: .indigo
+        case .phone: .green
         }
     }
 
@@ -210,6 +211,7 @@ extension Channel {
         case .chat: "bubble.left.and.bubble.right"
         case .api: "chevron.left.forwardslash.chevron.right"
         case .portal: "globe"
+        case .phone: "phone"
         }
     }
 }

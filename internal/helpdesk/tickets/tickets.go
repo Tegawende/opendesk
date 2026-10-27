@@ -53,7 +53,7 @@ type listIn struct {
 	Tag        string `query:"tag" doc:"Comma-separated label names: tickets carrying any of them"`
 	TagNot     string `query:"tag_not" doc:"Comma-separated label names: tickets carrying none of them"`
 	Untagged   bool   `query:"untagged" doc:"Tickets carrying no label"`
-	Channel    string `query:"channel" enum:"email,chat,api,portal,"`
+	Channel    string `query:"channel" enum:"email,chat,api,portal,phone,"`
 	ChannelNot string `query:"channel_not" doc:"Comma-separated channels: tickets on none of them"`
 	ContactID  string `query:"contact_id"`
 	ViewID     string `query:"view_id" doc:"Apply a saved view's filters; explicit filters override it"`

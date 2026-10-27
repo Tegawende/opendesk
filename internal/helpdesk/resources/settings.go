@@ -20,6 +20,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
+	"github.com/useopendesk/opendesk/internal/jobs"
 )
 
 const maxMinutes = 525600 // one year
@@ -118,7 +119,7 @@ func scanSLA(r pgx.Row) (SlaPolicy, error) {
 type Automation struct {
 	ID         uuid.UUID      `json:"id"`
 	Name       string         `json:"name"`
-	Trigger    string         `json:"trigger" enum:"ticket_created,customer_replied,agent_replied,ticket_updated"`
+	Trigger    string         `json:"trigger" enum:"ticket_created,customer_replied,agent_replied,ticket_updated,call_ended"`
 	Conditions []hd.Condition `json:"conditions"`
 	Actions    []hd.Action    `json:"actions"`
 	Enabled    bool           `json:"enabled"`
@@ -128,7 +129,7 @@ type Automation struct {
 
 type automationWriteBody struct {
 	Name       *string         `json:"name,omitempty" maxLength:"200"`
-	Trigger    *string         `json:"trigger,omitempty" enum:"ticket_created,customer_replied,agent_replied,ticket_updated"`
+	Trigger    *string         `json:"trigger,omitempty" enum:"ticket_created,customer_replied,agent_replied,ticket_updated,call_ended"`
 	Conditions *[]hd.Condition `json:"conditions,omitempty"`
 	Actions    *[]hd.Action    `json:"actions,omitempty"`
 	Enabled    *bool           `json:"enabled,omitempty"`
@@ -166,6 +167,9 @@ func (b *automationWriteBody) apply(ctx context.Context, q db.Querier, wid uuid.
 	}
 	if a.Conditions == nil {
 		a.Conditions = []hd.Condition{}
+	}
+	if a.Trigger != jobs.TriggerCallEnded && hd.UsesCallFields(a.Conditions) {
+		return httpx.Validation("call conditions need the call_ended trigger")
 	}
 	if b.Enabled != nil {
 		a.Enabled = *b.Enabled

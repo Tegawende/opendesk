@@ -14,7 +14,7 @@ import { renderSentReply } from "./templates";
 import { cannotSend, sendingOf } from "./mailhost";
 
 const STATUSES: TicketStatus[] = ["open", "pending", "on_hold", "solved", "closed"];
-const CHANNELS: Channel[] = ["email", "chat", "api", "portal"];
+const CHANNELS: Channel[] = ["email", "chat", "api", "portal", "phone"];
 const PRIORITIES: Priority[] = ["low", "normal", "high", "urgent"];
 const SEVERITIES: Severity[] = ["sev1", "sev2", "sev3", "sev4"];
 const SUGGESTION_FIELDS: SuggestionField[] = ["priority", "severity", "labels", "team", "spam"];

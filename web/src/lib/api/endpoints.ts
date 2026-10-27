@@ -414,6 +414,16 @@ export const api = {
       http.patch<T.Integration>(`/v1/integrations/${id}`, b),
     remove: (id: string) => http.del(`/v1/integrations/${id}`),
   },
+  phone: {
+    providers: () => http.get<{ data: T.PhoneProvider[] }>("/v1/phone/providers"),
+    connections: () => http.get<{ data: T.PhoneConnection[] }>("/v1/phone/connections"),
+    connect: (b: { provider: string; name?: string; credentials: Record<string, string> }) => http.create<T.PhoneConnection>("/v1/phone/connections", b),
+    update: (id: string, b: { name?: string; reuse_days?: number; assign_answered?: boolean; insight_cards?: boolean; credentials?: Record<string, string> }) =>
+      http.patch<T.PhoneConnection>(`/v1/phone/connections/${id}`, b),
+    test: (id: string) => http.post<T.PhoneConnection>(`/v1/phone/connections/${id}/test`),
+    disconnect: (id: string) => http.del(`/v1/phone/connections/${id}`),
+    lines: () => http.get<{ data: T.PhoneLine[] }>("/v1/phone/lines"),
+  },
   supportChannels: {
     providers: () => http.get<{ data: T.SupportChannelProvider[] }>("/v1/support-channels/providers"),
     accounts: (provider: string, credentials: Record<string, string>) =>

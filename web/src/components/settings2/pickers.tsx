@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, Inbox, Lock, MessageSquareReply, PencilLine, Reply, SquarePlus } from "lucide-react";
+import { ChevronDown, Inbox, Lock, MessageSquareReply, PencilLine, PhoneCall, Reply, SquarePlus } from "lucide-react";
 import { forwardRef, type ReactNode } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Picker, type PickerItem } from "@/components/ui/picker";
@@ -51,7 +51,7 @@ export const severityFilterItems = (): PickerItem[] => [
   ...severityItems(),
   { value: "none", label: i18n.t("settingsInbox:edit.noSeverity"), icon: <span className="h-[16px] w-[22px] rounded-[4px] border border-dashed border-line-strong" /> },
 ];
-export const channelItems = (): PickerItem[] => (["email", "chat", "api", "portal"] as Channel[]).map((c) => ({
+export const channelItems = (): PickerItem[] => (["email", "chat", "api", "portal", "phone"] as Channel[]).map((c) => ({
   value: c,
   label: channelLabel(c),
   icon: <ChannelIcon channel={c} />,
@@ -69,6 +69,7 @@ const triggerGlyph: Record<AutomationTrigger, ReactNode> = {
   customer_replied: <MessageSquareReply />,
   agent_replied: <Reply />,
   ticket_updated: <PencilLine />,
+  call_ended: <PhoneCall />,
 };
 
 /** The trigger's glyph in its hue. */

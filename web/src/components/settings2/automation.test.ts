@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { actionLabel, actionNeedsValue, aiActions, fieldLabel, isPhraseOp, offered, opLabel, opsFor, phrases, sentimentLabel, triggerLabel, validPhrases } from "./automation";
+import { actionLabel, actionNeedsValue, aiActions, callFields, fieldLabel, isPhraseOp, offered, opLabel, opsFor, phrases, sentimentLabel, triggerLabel, validPhrases } from "./automation";
+
+describe("call conditions", () => {
+  it("labels the call trigger and fields, with is / is not, and contains for lines and labels", () => {
+    expect(triggerLabel.call_ended).toBe("A call ends");
+    expect(fieldLabel.call_time).toBe("Call time");
+    expect(callFields.has("call_outcome")).toBe(true);
+    expect(callFields.has("subject")).toBe(false);
+    expect(opsFor("call_outcome")).toEqual(["equals", "not_equals"]);
+    expect(opsFor("call_line")).toEqual(["equals", "not_equals", "contains", "not_contains"]);
+  });
+});
 
 describe("automation AI helpers", () => {
   it("offers AI actions only when AI is on, but keeps one in use", () => {
