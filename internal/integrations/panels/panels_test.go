@@ -70,8 +70,9 @@ type fakeShopify struct {
 	// noAddress answers as for an app without access to customer addresses: a null
 	// shippingAddress with an access error for it.
 	noAddress bool
-	// tags is the $tags variable of the last lookup.
-	tags any
+	// query and vars are the last lookup's.
+	query string
+	vars  map[string]any
 }
 
 func newFakeShopify(tokens ...string) *fakeShopify {
@@ -96,10 +97,10 @@ func (f *fakeShopify) withoutAddresses(on bool) {
 	f.noAddress = on
 }
 
-func (f *fakeShopify) lastTags() any {
+func (f *fakeShopify) last() (string, map[string]any) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.tags
+	return f.query, f.vars
 }
 
 func (f *fakeShopify) set(secret, scope string) {
@@ -146,7 +147,7 @@ func (f *fakeShopify) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.lookups.Add(1)
-	f.tags = req.Variables["tags"]
+	f.query, f.vars = req.Query, req.Variables
 	if req.Variables["q"] != `email:"ada@example.com"` {
 		// A phrase search can still return a near match: it must not be taken.
 		_, _ = io.WriteString(w, `{"data":{"customers":{"nodes":[{"id":"gid://shopify/Customer/9","displayName":"Ada Other",
@@ -154,9 +155,10 @@ func (f *fakeShopify) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"tags":[],"orders":{"nodes":[]}}]}}}`)
 		return
 	}
-	// The query says @include(if: $tags): without it, Shopify leaves the field out.
+	// Shopify leaves out what the query does not ask for: the tags here. The rest of the
+	// answer is whole whatever the query, so that only what the panel shows is told.
 	tags := ""
-	if req.Variables["tags"] == true {
+	if strings.Contains(req.Query, "tags") {
 		tags = `"tags":["VIP","newsletter"],`
 	}
 	address, errs := `{"city":" Brussels ","countryCodeV2":"be"}`, ""
@@ -165,22 +167,26 @@ func (f *fakeShopify) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		errs = `,"errors":[{"message":"Access denied for shippingAddress field.","extensions":{"code":"ACCESS_DENIED"},
 			"path":["customers","nodes",0,"orders","nodes",0,"shippingAddress"]}]`
 	}
-	_, _ = io.WriteString(w, `{"data":{"customers":{"nodes":[{"id":"gid://shopify/Customer/42","displayName":"Ada Buyer",
-		"defaultEmailAddress":{"emailAddress":"Ada@Example.com"},"numberOfOrders":"3","amountSpent":{"amount":"412.50","currencyCode":"EUR"},
-		`+tags+`"orders":{"nodes":[{"id":"gid://shopify/Order/1001","name":"#1042","createdAt":"2026-10-20T09:00:00Z","cancelledAt":null,
+	orders := []string{`{"id":"gid://shopify/Order/1001","name":"#1042","createdAt":"2026-10-20T09:00:00Z","cancelledAt":null,
 		"displayFinancialStatus":"PARTIALLY_REFUNDED","displayFulfillmentStatus":"FULFILLED",
 		"currentTotalPriceSet":{"shopMoney":{"amount":"119.32","currencyCode":"EUR"}},
 		"totalRefundedSet":{"shopMoney":{"amount":"14.44","currencyCode":"EUR"}},
-		"discountCodes":["WELCOME10"," "],"shippingLine":{"title":"DHL Express"},"shippingAddress":`+address+`,
+		"discountCodes":["WELCOME10"," "],"shippingLine":{"title":"DHL Express"},"shippingAddress":` + address + `,
 		"lineItems":{"nodes":[{"title":"Arco lamp","variantTitle":"Black","quantity":1,"originalUnitPriceSet":{"shopMoney":{"amount":"129.00","currencyCode":"EUR"}}},
 			{"title":"Lucide Leanne Wall Lamp","variantTitle":null,"quantity":3,"originalUnitPriceSet":{"shopMoney":{"amount":"14.44","currencyCode":"EUR"}}}]},
-		"fulfillments":[{"trackingInfo":[{"company":"DHL","number":"JD0123","url":"https://dhl.example/track/JD0123"},{"company":null,"number":null,"url":"javascript:alert(1)"}]}]},
-		{"id":"gid://shopify/Order/998","name":"#1039","createdAt":"2026-09-02T14:00:00Z","cancelledAt":"2026-09-03T08:30:00Z",
+		"fulfillments":[{"trackingInfo":[{"company":"DHL","number":"JD0123","url":"https://dhl.example/track/JD0123"},{"company":null,"number":null,"url":"javascript:alert(1)"}]}]}`,
+		`{"id":"gid://shopify/Order/998","name":"#1039","createdAt":"2026-09-02T14:00:00Z","cancelledAt":"2026-09-03T08:30:00Z",
 		"displayFinancialStatus":"REFUNDED","displayFulfillmentStatus":"UNFULFILLED",
 		"currentTotalPriceSet":{"shopMoney":{"amount":"0.00","currencyCode":"EUR"}},
 		"totalRefundedSet":{"shopMoney":{"amount":"0.00","currencyCode":"EUR"}},
 		"discountCodes":[],"shippingLine":null,"shippingAddress":null,
-		"lineItems":{"nodes":[]},"fulfillments":[]}]}}]}}`+errs+`}`)
+		"lineItems":{"nodes":[]},"fulfillments":[]}`}
+	if n, ok := req.Variables["orders"].(float64); ok && int(n) < len(orders) {
+		orders = orders[:int(n)]
+	}
+	_, _ = io.WriteString(w, `{"data":{"customers":{"nodes":[{"id":"gid://shopify/Customer/42","displayName":"Ada Buyer",
+		"defaultEmailAddress":{"emailAddress":"Ada@Example.com"},"numberOfOrders":"3","amountSpent":{"amount":"412.50","currencyCode":"EUR"},
+		`+tags+`"orders":{"nodes":[`+strings.Join(orders, ",")+`]}}]}}`+errs+`}`)
 }
 
 func TestShopifyPanel(t *testing.T) {
@@ -231,12 +237,14 @@ func TestShopifyPanel(t *testing.T) {
 	var d Data
 	var status string
 	d = readPanel(t, e, path, viewer)
-	if d.State != "ok" || d.Customer == nil || d.Customer.Name != "Ada Buyer" || d.Customer.OrdersCount != 3 || d.Customer.TotalSpent != "412.50" ||
+	if d.State != "ok" || d.Customer == nil || d.Customer.Name != "Ada Buyer" || d.Customer.OrdersCount == nil || *d.Customer.OrdersCount != 3 ||
+		d.Customer.TotalSpent != "412.50" || d.Customer.Email != "" ||
 		d.Customer.URL != "https://admin.shopify.com/store/lumen-store/customers/42" || !slices.Equal(d.Customer.Tags, []string{"VIP", "newsletter"}) {
 		t.Fatalf("customer = %+v (%s %s)", d.Customer, d.State, d.Message)
 	}
-	if shop.lastTags() != true || !p.ShowTags {
-		t.Fatalf("tags asked for: %v, panel %v", shop.lastTags(), p.ShowTags)
+	// Until an admin chooses, a panel shows what it always has: everything but the email, 5 orders.
+	if query, vars := shop.last(); !slices.Equal(p.Fields, defaultFields) || p.OrdersShown != 5 || vars["orders"] != 5.0 || query != customerQuery(newFieldSet(defaultFields)) {
+		t.Fatalf("panel %v %d, asked %v", p.Fields, p.OrdersShown, vars)
 	}
 	if len(d.Orders) != 2 {
 		t.Fatalf("orders = %+v", d.Orders)
@@ -284,21 +292,75 @@ func TestShopifyPanel(t *testing.T) {
 		t.Fatal("refresh did not ask again")
 	}
 
-	// Tags turned off are not asked for, and the changed panel never answers from before.
-	e.Do("PATCH", "/v1/ticket-panels/"+p.ID.String(), agent, map[string]any{"show_tags": false}).Want(t, 403)
-	if upd := e.Do("PATCH", "/v1/ticket-panels/"+p.ID.String(), admin, map[string]any{"show_tags": false}).Want(t, 200).Map(t); upd["show_tags"] != false {
-		t.Fatalf("tags off = %v", upd)
+	// An admin chooses what shows: what is left out is not asked for, nor told, and the changed
+	// panel never answers from before.
+	id := "/v1/ticket-panels/" + p.ID.String()
+	few := map[string]any{"fields": []string{"line_items", "orders_count", "line_items"}, "orders_shown": 1}
+	e.Do("PATCH", id, agent, few).Want(t, 403)
+	e.Do("PATCH", id, admin, map[string]any{"fields": []string{"tags", "notes"}}).Want(t, 422)
+	if r := e.Do("PATCH", id, admin, map[string]any{"fields": []string{"line_prices"}}).Want(t, 422); !strings.Contains(string(r.Body), "line_items") {
+		t.Fatalf("prices without lines: %s", r.Body)
+	}
+	e.Do("PATCH", id, admin, map[string]any{"orders_shown": 0}).Want(t, 422)
+	e.Do("PATCH", id, admin, map[string]any{"orders_shown": 6}).Want(t, 422)
+	_, seq = e.Events(ws.ID, 0)
+	var chosen Panel
+	e.Do("PATCH", id, admin, few).Want(t, 200).JSON(t, &chosen)
+	if !slices.Equal(chosen.Fields, []string{"orders_count", "line_items"}) || chosen.OrdersShown != 1 {
+		t.Fatalf("chosen = %v %d", chosen.Fields, chosen.OrdersShown)
+	}
+	if types, _ := e.Events(ws.ID, seq); !slices.Contains(types, "ticket_panel.updated") {
+		t.Fatalf("events = %v", types)
 	}
 	d = readPanel(t, e, path, viewer)
-	if d.State != "ok" || shop.lastTags() != false || d.Customer == nil || d.Customer.Tags == nil || len(d.Customer.Tags) != 0 {
-		t.Fatalf("without tags = %+v (asked %v)", d.Customer, shop.lastTags())
+	query, vars := shop.last()
+	for _, gone := range []string{"tags", "amountSpent", "displayFinancialStatus", "displayFulfillmentStatus", "totalRefundedSet", "discountCodes",
+		"shippingLine", "shippingAddress", "originalUnitPriceSet", "fulfillments"} {
+		if strings.Contains(query, gone) {
+			t.Errorf("asked for %s:\n%s", gone, query)
+		}
 	}
-	var showTags bool
-	e.Scalar(`SELECT show_tags FROM ticket_panels WHERE id = $1`, &showTags, p.ID)
-	if showTags {
-		t.Fatal("show_tags not stored")
+	if !strings.Contains(query, "numberOfOrders") || !strings.Contains(query, "lineItems(first: $items)") || vars["orders"] != 1.0 {
+		t.Fatalf("query %v:\n%s", vars, query)
 	}
-	e.Do("PATCH", "/v1/ticket-panels/"+p.ID.String(), admin, map[string]any{"show_tags": true}).Want(t, 200)
+	if d.State != "ok" || d.Customer == nil || d.Customer.OrdersCount == nil || *d.Customer.OrdersCount != 3 || d.Customer.TotalSpent != "" ||
+		d.Customer.Currency != "" || d.Customer.Tags == nil || len(d.Customer.Tags) != 0 || len(d.Orders) != 1 {
+		t.Fatalf("few = %+v %+v (%s)", d.Customer, d.Orders, d.Message)
+	}
+	if o := d.Orders[0]; o.Number != "#1042" || o.Total != "119.32" || o.FinancialStatus != "" || o.FulfillmentStatus != "" || o.Refunded != "" ||
+		o.Shipping != nil || len(o.DiscountCodes) != 0 || len(o.Tracking) != 0 || len(o.Items) != 2 || o.Items[0] != (OrderItem{Title: "Arco lamp", Variant: "Black", Quantity: 1}) {
+		t.Fatalf("few order = %+v", o)
+	}
+	raw = string(e.Do("GET", path, viewer, nil).Want(t, 200).Body)
+	for _, gone := range []string{`"price"`, `"total_spent"`, `"financial_status"`, `"refunded"`, `"shipping"`, `"email"`} {
+		if strings.Contains(raw, gone) {
+			t.Errorf("answer tells %s: %s", gone, raw)
+		}
+	}
+	var stored string
+	var ordersShown int
+	e.Scalar(`SELECT array_to_string(fields, ',') FROM ticket_panels WHERE id = $1`, &stored, p.ID)
+	e.Scalar(`SELECT orders_shown FROM ticket_panels WHERE id = $1`, &ordersShown, p.ID)
+	if stored != "orders_count,line_items" || ordersShown != 1 {
+		t.Fatalf("stored %q %d", stored, ordersShown)
+	}
+	e.Scalar(`SELECT count(*) FROM audit_logs WHERE workspace_id = $1 AND action = 'ticket_panel.updated'
+		AND data->'changes' @> '["fields","orders_shown"]'`, &auditN, ws.ID)
+	if auditN != 1 {
+		t.Fatalf("fields audit = %d", auditN)
+	}
+	// The store's spelling of the email, when chosen; nothing at all, when nothing is.
+	e.Do("PATCH", id, admin, map[string]any{"fields": []string{"email"}}).Want(t, 200)
+	if d = readPanel(t, e, path, viewer); d.Customer == nil || d.Customer.Email != "Ada@Example.com" || d.Customer.OrdersCount != nil {
+		t.Fatalf("email = %+v", d.Customer)
+	}
+	if e.Do("PATCH", id, admin, map[string]any{"fields": []string{}}).Want(t, 200).JSON(t, &chosen); chosen.Fields == nil || len(chosen.Fields) != 0 {
+		t.Fatalf("none = %v", chosen.Fields)
+	}
+	if d = readPanel(t, e, path, viewer); d.State != "ok" || len(d.Orders) != 1 || d.Orders[0].Items == nil || len(d.Orders[0].Items) != 0 {
+		t.Fatalf("none = %+v", d)
+	}
+	e.Do("PATCH", id, admin, map[string]any{"fields": defaultFields, "orders_shown": 5}).Want(t, 200)
 
 	// An app without access to addresses: the orders still show, with their shipping method.
 	shop.withoutAddresses(true)
@@ -475,9 +537,18 @@ func TestPanelFollowsTicketVisibility(t *testing.T) {
 	var created struct {
 		Panel Panel `json:"panel"`
 	}
-	e.Do("POST", "/v1/ticket-panels", ws.Admin.As(ws), map[string]any{"kind": "shopify", "shop": "lumen-store", "token": "shpat_good", "show_tags": false}).Want(t, 201).JSON(t, &created)
-	if created.Panel.ShowTags {
-		t.Fatal("added with tags off, shows them")
+	add := func(extra map[string]any) map[string]any {
+		b := map[string]any{"kind": "shopify", "shop": "lumen-store", "token": "shpat_good"}
+		for k, v := range extra {
+			b[k] = v
+		}
+		return b
+	}
+	e.Do("POST", "/v1/ticket-panels", ws.Admin.As(ws), add(map[string]any{"fields": []string{"tags", "street"}})).Want(t, 422)
+	e.Do("POST", "/v1/ticket-panels", ws.Admin.As(ws), add(map[string]any{"orders_shown": 9})).Want(t, 422)
+	e.Do("POST", "/v1/ticket-panels", ws.Admin.As(ws), add(map[string]any{"fields": []string{"tracking", "total_spent"}, "orders_shown": 2})).Want(t, 201).JSON(t, &created)
+	if !slices.Equal(created.Panel.Fields, []string{"total_spent", "tracking"}) || created.Panel.OrdersShown != 2 {
+		t.Fatalf("added with %v %d", created.Panel.Fields, created.Panel.OrdersShown)
 	}
 	lead := e.AddUser(ws, "agent", "Lena Lead")
 	var team string
@@ -540,7 +611,12 @@ func TestHTTPPanel(t *testing.T) {
 	if !strings.HasPrefix(created.Secret, "pnsec_") || created.Panel.Name != "Odoo" || strings.Contains(created.Panel.Host, "s3cret") {
 		t.Fatalf("created = %+v", created)
 	}
-	e.Do("PATCH", "/v1/ticket-panels/"+created.Panel.ID.String(), admin, map[string]any{"show_tags": false}).Want(t, 422)
+	if created.Panel.Fields == nil || len(created.Panel.Fields) != 0 || created.Panel.OrdersShown != 0 {
+		t.Fatalf("an http panel has fields: %+v", created.Panel)
+	}
+	e.Do("PATCH", "/v1/ticket-panels/"+created.Panel.ID.String(), admin, map[string]any{"fields": []string{"tags"}}).Want(t, 422)
+	e.Do("PATCH", "/v1/ticket-panels/"+created.Panel.ID.String(), admin, map[string]any{"orders_shown": 2}).Want(t, 422)
+	e.Do("POST", "/v1/ticket-panels", admin, map[string]any{"kind": "http", "url": srv.URL + "/panel", "fields": []string{}}).Want(t, 422)
 	if strings.Contains(string(e.Do("GET", "/v1/ticket-panels", viewer, nil).Want(t, 200).Body), "s3cret") {
 		t.Fatal("the URL's query is listed")
 	}
@@ -650,8 +726,58 @@ func TestShopifyHelpers(t *testing.T) {
 	if errs := blocking([]gqlError{addr}, json.RawMessage("null")); len(errs) != 1 {
 		t.Errorf("no data, yet no error: %v", errs)
 	}
-	if !strings.Contains(customerQuery, "tags @include(if: $tags)") {
-		t.Error("tags are read whatever the panel says")
+}
+
+func TestShopifyFields(t *testing.T) {
+	if got, err := normalizeFields([]string{"tracking", " tags ", "line_prices", "line_items", "tracking"}); err != nil ||
+		!slices.Equal(got, []string{"tags", "line_items", "line_prices", "tracking"}) {
+		t.Errorf("normalize = %v, %v", got, err)
+	}
+	if got, err := normalizeFields(nil); err != nil || got == nil || len(got) != 0 {
+		t.Errorf("none = %#v, %v", got, err)
+	}
+	for _, in := range [][]string{{"notes"}, {"Tags"}, {""}, {"line_prices"}} {
+		if _, err := normalizeFields(in); err == nil {
+			t.Errorf("normalizeFields(%q) accepted", in)
+		}
+	}
+	if slices.Contains(defaultFields, FieldEmail) || len(defaultFields) != len(shopifyFields)-1 {
+		t.Errorf("defaults = %v", defaultFields)
+	}
+	if got := (&row{Kind: KindShopify}).shownFields(); !slices.Equal(got, defaultFields) {
+		t.Errorf("unchosen = %v", got)
+	}
+	if got := (&row{Kind: KindHTTP}).shownFields(); got == nil || len(got) != 0 {
+		t.Errorf("http = %v", got)
+	}
+
+	// Each field asks for its part of the answer, and only for it.
+	parts := map[string][]string{
+		FieldTags: {"tags"}, FieldOrdersCount: {"numberOfOrders"}, FieldTotalSpent: {"amountSpent"},
+		FieldFinancialStatus: {"displayFinancialStatus"}, FieldFulfillmentStatus: {"displayFulfillmentStatus"},
+		FieldLineItems: {"lineItems(first: $items)"}, FieldLinePrices: {"originalUnitPriceSet"}, FieldShipping: {"shippingLine", "shippingAddress"},
+		FieldDiscounts: {"discountCodes"}, FieldRefunds: {"totalRefundedSet"}, FieldTracking: {"fulfillments", "trackingInfo"},
+	}
+	all := customerQuery(newFieldSet(shopifyFields))
+	bare := customerQuery(fieldSet{})
+	for field, want := range parts {
+		for _, w := range want {
+			if !strings.Contains(all, w) || strings.Contains(bare, w) {
+				t.Errorf("%s: %s in all %v, in none %v", field, w, strings.Contains(all, w), strings.Contains(bare, w))
+			}
+		}
+	}
+	if q := customerQuery(newFieldSet([]string{FieldLineItems})); !strings.Contains(q, "nodes { title variantTitle quantity }") {
+		t.Errorf("lines without prices:\n%s", q)
+	}
+	if customerQuery(newFieldSet([]string{FieldEmail})) != bare {
+		t.Error("the email asks for more: it is read to match the contact anyway")
+	}
+	for _, q := range []string{all, bare} {
+		if strings.Count(q, "{") != strings.Count(q, "}") || !strings.Contains(q, "defaultEmailAddress { emailAddress }") ||
+			!strings.Contains(q, "orders(first: $orders, sortKey: CREATED_AT, reverse: true)") || !strings.Contains(q, "currentTotalPriceSet") {
+			t.Errorf("query:\n%s", q)
+		}
 	}
 }
 

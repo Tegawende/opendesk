@@ -26,17 +26,20 @@ type Data struct {
 	FetchedAt time.Time `json:"fetched_at"`
 }
 
-// Customer is the store's own record of the contact. Amounts are decimal strings.
+// Customer is the store's own record of the contact. Amounts are decimal strings. A field the
+// panel does not show is left out, and a list is empty.
 type Customer struct {
 	Name        string   `json:"name"`
 	URL         string   `json:"url" doc:"The customer in the store's admin"`
-	OrdersCount int64    `json:"orders_count"`
-	TotalSpent  string   `json:"total_spent"`
-	Currency    string   `json:"currency"`
-	Tags        []string `json:"tags" doc:"Empty when the panel leaves tags out"`
+	Email       string   `json:"email,omitempty" doc:"The customer's default email in the store (field email)"`
+	OrdersCount *int64   `json:"orders_count,omitempty" doc:"Field orders_count"`
+	TotalSpent  string   `json:"total_spent,omitempty" doc:"Field total_spent"`
+	Currency    string   `json:"currency,omitempty" doc:"total_spent's currency"`
+	Tags        []string `json:"tags" doc:"Field tags; empty when the panel leaves them out"`
 }
 
-// Order is one of the contact's last orders, newest first.
+// Order is one of the contact's last orders, newest first. A field the panel does not show is
+// left out, and a list is empty.
 type Order struct {
 	ID                string      `json:"id"`
 	Number            string      `json:"number" doc:"As the store shows it, such as #1042"`
@@ -44,8 +47,8 @@ type Order struct {
 	CreatedAt         time.Time   `json:"created_at"`
 	Total             string      `json:"total"`
 	Currency          string      `json:"currency"`
-	FinancialStatus   string      `json:"financial_status" doc:"Lowercase, such as paid, pending, refunded, partially_refunded"`
-	FulfillmentStatus string      `json:"fulfillment_status" doc:"Lowercase, such as fulfilled, unfulfilled, partially_fulfilled"`
+	FinancialStatus   string      `json:"financial_status,omitempty" doc:"Lowercase, such as paid, pending, refunded, partially_refunded"`
+	FulfillmentStatus string      `json:"fulfillment_status,omitempty" doc:"Lowercase, such as fulfilled, unfulfilled, partially_fulfilled"`
 	Cancelled         bool        `json:"cancelled"`
 	CancelledAt       *time.Time  `json:"cancelled_at,omitempty"`
 	Refunded          string      `json:"refunded,omitempty" doc:"Decimal, what was refunded; left out when nothing was"`
@@ -67,7 +70,7 @@ type OrderItem struct {
 	Title    string `json:"title"`
 	Variant  string `json:"variant,omitempty"`
 	Quantity int    `json:"quantity"`
-	Price    string `json:"price" doc:"Unit price before discounts, decimal, in the order's currency"`
+	Price    string `json:"price,omitempty" doc:"Unit price before discounts, decimal, in the order's currency (field line_prices)"`
 }
 
 // Tracking is one parcel of an order.

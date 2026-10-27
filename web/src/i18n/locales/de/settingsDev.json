@@ -540,8 +540,36 @@
     "secretVerify": "Jede Anfrage trägt OD-Signature, wie Webhook-Zustellungen. Prüfe sie, bevor du antwortest:",
     "secretAnswer": "Antworte mit JSON-Abschnitten benannter Werte, höchstens 64 KB:",
     "secretSaved": "Gespeichert",
-    "showTags": "Kunden-Tags anzeigen",
-    "showTagsHint": "Viele Shops versehen Kunden mit Marketing-Tags, etwa Newsletter oder wie sie sich angemeldet haben. Schalte das aus, damit Tickets keine Tags zeigen.",
+    "fields": {
+      "menu": "Auswählen, was angezeigt wird",
+      "title": "Was Tickets von {{name}} zeigen",
+      "description": "Wähle, was jedes Ticket aus Shopify zeigt. Was du weglässt, wird nicht aus dem Shop gelesen.",
+      "customer": "Kunde",
+      "order": "Jede Bestellung",
+      "orders": "Angezeigte Bestellungen",
+      "always": "Der Name des Kunden sowie Nummer, Datum und Summe jeder Bestellung werden immer angezeigt.",
+      "preview": "Vorschau",
+      "defaults": "Standard verwenden",
+      "saved": "Gespeichert, was {{name}} zeigt",
+      "f": {
+        "tags": "Tags",
+        "email": "E-Mail im Shop",
+        "orders_count": "Anzahl der Bestellungen",
+        "total_spent": "Gesamtausgaben",
+        "financial_status": "Zahlungsstatus",
+        "fulfillment_status": "Versandstatus",
+        "line_items": "Produkte",
+        "line_prices": "Stückpreise",
+        "shipping": "Stadt, Land und Versandart",
+        "discounts": "Rabattcodes",
+        "refunds": "Erstatteter Betrag",
+        "tracking": "Sendungsverfolgung"
+      },
+      "hint": {
+        "tags": "Viele Shops versehen Kunden mit Marketing-Tags, etwa Newsletter.",
+        "email": "Meist die Adresse des Kontakts selbst."
+      }
+    },
     "catalog": {
       "kind": "Ticket-Panel",
       "shopify": "Zeig neben jedem Ticket den Shopify-Kunden des Kontakts und seine letzten Bestellungen.",

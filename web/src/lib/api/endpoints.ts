@@ -393,11 +393,21 @@ export const api = {
   ticketPanels: {
     list: () => http.get<{ data: T.TicketPanel[] }>("/v1/ticket-panels"),
     /** An http panel answers its signing `secret`, shown once. */
-    create: (b: { kind: "shopify" | "http"; name?: string; shop?: string; client_id?: string; client_secret?: string; token?: string; url?: string; show_tags?: boolean }) =>
+    create: (b: { kind: "shopify" | "http"; name?: string; shop?: string; client_id?: string; client_secret?: string; token?: string; url?: string; fields?: T.ShopifyField[]; orders_shown?: number }) =>
       http.create<{ panel: T.TicketPanel; secret?: string }>("/v1/ticket-panels", b),
     update: (
       id: string,
-      b: { name?: string; enabled?: boolean; position?: number; client_id?: string; client_secret?: string; token?: string; url?: string; show_tags?: boolean },
+      b: {
+        name?: string;
+        enabled?: boolean;
+        position?: number;
+        client_id?: string;
+        client_secret?: string;
+        token?: string;
+        url?: string;
+        fields?: T.ShopifyField[];
+        orders_shown?: number;
+      },
     ) =>
       http.patch<T.TicketPanel>(`/v1/ticket-panels/${id}`, b),
     rotateSecret: (id: string) => http.post<{ panel: T.TicketPanel; secret: string }>(`/v1/ticket-panels/${id}/rotate-secret`),

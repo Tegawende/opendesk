@@ -196,39 +196,57 @@ func (s *Service) checkShopify(ctx context.Context, shop string, c shopifyCred) 
 	return clip(strings.TrimSpace(out.Shop.Name), 64), nil
 }
 
-// customerQuery reads the contact's customer and last orders. Its requested cost is about 350
-// points (5 orders of 10 lines and 5 fulfilments), well under Shopify's 1,000 per query.
-const customerQuery = `query PanelCustomer($q: String!, $orders: Int!, $items: Int!, $tags: Boolean!) {
+// customerQuery reads the contact's customer and last orders, asking only for the fields the
+// panel shows. With them all and 5 orders its requested cost is about 350 points (5 orders of
+// 10 lines and 5 fulfilments), well under Shopify's 1,000 per query; lines and tracking are most
+// of it, so a panel without them, or with fewer orders, costs a fraction.
+func customerQuery(f fieldSet) string {
+	var b strings.Builder
+	line := func(on bool, s string) {
+		if on {
+			b.WriteString(s)
+			b.WriteByte('\n')
+		}
+	}
+	line(true, `query PanelCustomer($q: String!, $orders: Int!, $items: Int!) {
   customers(first: 1, query: $q) {
     nodes {
       id
       displayName
-      defaultEmailAddress { emailAddress }
-      numberOfOrders
-      amountSpent { amount currencyCode }
-      tags @include(if: $tags)
-      orders(first: $orders, sortKey: CREATED_AT, reverse: true) {
+      defaultEmailAddress { emailAddress }`)
+	line(f[FieldOrdersCount], `      numberOfOrders`)
+	line(f[FieldTotalSpent], `      amountSpent { amount currencyCode }`)
+	line(f[FieldTags], `      tags`)
+	line(true, `      orders(first: $orders, sortKey: CREATED_AT, reverse: true) {
         nodes {
           id
           name
           createdAt
           cancelledAt
-          displayFinancialStatus
-          displayFulfillmentStatus
-          currentTotalPriceSet { shopMoney { amount currencyCode } }
-          totalRefundedSet { shopMoney { amount currencyCode } }
-          discountCodes
-          shippingLine { title }
-          shippingAddress { city countryCodeV2 }
-          lineItems(first: $items) {
-            nodes { title variantTitle quantity originalUnitPriceSet { shopMoney { amount currencyCode } } }
-          }
-          fulfillments(first: 5) { trackingInfo(first: 5) { company number url } }
-        }
+          currentTotalPriceSet { shopMoney { amount currencyCode } }`)
+	line(f[FieldFinancialStatus], `          displayFinancialStatus`)
+	line(f[FieldFulfillmentStatus], `          displayFulfillmentStatus`)
+	line(f[FieldRefunds], `          totalRefundedSet { shopMoney { amount currencyCode } }`)
+	line(f[FieldDiscounts], `          discountCodes`)
+	line(f[FieldShipping], `          shippingLine { title }
+          shippingAddress { city countryCodeV2 }`)
+	if f[FieldLineItems] {
+		price := ""
+		if f[FieldLinePrices] {
+			price = " originalUnitPriceSet { shopMoney { amount currencyCode } }"
+		}
+		line(true, `          lineItems(first: $items) {
+            nodes { title variantTitle quantity`+price+` }
+          }`)
+	}
+	line(f[FieldTracking], `          fulfillments(first: 5) { trackingInfo(first: 5) { company number url } }`)
+	b.WriteString(`        }
       }
     }
   }
-}`
+}`)
+	return b.String()
+}
 
 type shopMoney struct {
 	ShopMoney struct {
@@ -244,7 +262,7 @@ type shopifyCustomer struct {
 		EmailAddress string `json:"emailAddress"`
 	} `json:"defaultEmailAddress"`
 	NumberOfOrders json.Number `json:"numberOfOrders"`
-	AmountSpent    struct {
+	AmountSpent    *struct {
 		Amount       string `json:"amount"`
 		CurrencyCode string `json:"currencyCode"`
 	} `json:"amountSpent"`
@@ -269,10 +287,10 @@ type shopifyCustomer struct {
 			} `json:"shippingAddress"`
 			LineItems struct {
 				Nodes []struct {
-					Title                string    `json:"title"`
-					VariantTitle         *string   `json:"variantTitle"`
-					Quantity             int       `json:"quantity"`
-					OriginalUnitPriceSet shopMoney `json:"originalUnitPriceSet"`
+					Title                string     `json:"title"`
+					VariantTitle         *string    `json:"variantTitle"`
+					Quantity             int        `json:"quantity"`
+					OriginalUnitPriceSet *shopMoney `json:"originalUnitPriceSet"`
 				} `json:"nodes"`
 			} `json:"lineItems"`
 			Fulfillments []struct {
@@ -310,12 +328,18 @@ func (s *Service) readShopify(ctx context.Context, x *row, sub subject, d *Data)
 			Nodes []shopifyCustomer `json:"nodes"`
 		} `json:"customers"`
 	}
-	vars := map[string]any{"q": searchPhrase(sub.Email), "orders": shopifyOrders, "items": shopifyItems, "tags": x.ShowTags}
-	err = s.graphql(ctx, x.Target, token, customerQuery, vars, &out)
+	f := newFieldSet(x.shownFields())
+	orders := x.OrdersShown
+	if orders < 1 || orders > shopifyOrders {
+		orders = defaultOrdersShown
+	}
+	query := customerQuery(f)
+	vars := map[string]any{"q": searchPhrase(sub.Email), "orders": orders, "items": shopifyItems}
+	err = s.graphql(ctx, x.Target, token, query, vars, &out)
 	if errors.Is(err, errAuth) && !fresh {
 		// The app's token was revoked before its end: once more with a new one.
 		if token, _, err = s.shopifyToken(ctx, x, true); err == nil {
-			err = s.graphql(ctx, x.Target, token, customerQuery, vars, &out)
+			err = s.graphql(ctx, x.Target, token, query, vars, &out)
 		}
 	}
 	if err != nil {
@@ -335,49 +359,75 @@ func (s *Service) readShopify(ctx context.Context, x *row, sub subject, d *Data)
 		return nil
 	}
 	admin := adminURL(x.Target)
-	count, _ := strconv.ParseInt(c.NumberOfOrders.String(), 10, 64)
-	tags := []string{}
-	if x.ShowTags && c.Tags != nil {
-		tags = c.Tags
+	// Only what the panel shows is told, whatever the answer carries.
+	cust := &Customer{Name: c.DisplayName, URL: admin + "/customers/" + url.PathEscape(gidNumber(c.ID)), Tags: []string{}}
+	if f[FieldOrdersCount] {
+		if n, err := strconv.ParseInt(c.NumberOfOrders.String(), 10, 64); err == nil {
+			cust.OrdersCount = &n
+		}
 	}
-	d.Customer = &Customer{Name: c.DisplayName, URL: admin + "/customers/" + url.PathEscape(gidNumber(c.ID)), OrdersCount: count,
-		TotalSpent: c.AmountSpent.Amount, Currency: c.AmountSpent.CurrencyCode, Tags: tags}
+	if f[FieldTotalSpent] && c.AmountSpent != nil {
+		cust.TotalSpent, cust.Currency = c.AmountSpent.Amount, c.AmountSpent.CurrencyCode
+	}
+	if f[FieldTags] && c.Tags != nil {
+		cust.Tags = c.Tags
+	}
+	if f[FieldEmail] {
+		cust.Email = strings.TrimSpace(c.DefaultEmailAddress.EmailAddress)
+	}
+	d.Customer = cust
 	d.Orders = []Order{}
 	for _, o := range c.Orders.Nodes {
 		order := Order{ID: o.ID, Number: o.Name, URL: admin + "/orders/" + url.PathEscape(gidNumber(o.ID)), CreatedAt: o.CreatedAt,
 			Total: o.CurrentTotalPriceSet.ShopMoney.Amount, Currency: o.CurrentTotalPriceSet.ShopMoney.CurrencyCode,
-			FinancialStatus: strings.ToLower(o.DisplayFinancialStatus), FulfillmentStatus: strings.ToLower(o.DisplayFulfillmentStatus),
 			Cancelled: o.CancelledAt != nil, CancelledAt: o.CancelledAt, DiscountCodes: []string{}, Items: []OrderItem{}, Tracking: []Tracking{}}
-		if r := o.TotalRefundedSet; r != nil && positive(r.ShopMoney.Amount) {
+		if f[FieldFinancialStatus] {
+			order.FinancialStatus = strings.ToLower(o.DisplayFinancialStatus)
+		}
+		if f[FieldFulfillmentStatus] {
+			order.FulfillmentStatus = strings.ToLower(o.DisplayFulfillmentStatus)
+		}
+		if r := o.TotalRefundedSet; f[FieldRefunds] && r != nil && positive(r.ShopMoney.Amount) {
 			order.Refunded = r.ShopMoney.Amount
 		}
-		for _, code := range o.DiscountCodes {
-			if code = strings.TrimSpace(code); code != "" {
-				order.DiscountCodes = append(order.DiscountCodes, code)
+		if f[FieldDiscounts] {
+			for _, code := range o.DiscountCodes {
+				if code = strings.TrimSpace(code); code != "" {
+					order.DiscountCodes = append(order.DiscountCodes, code)
+				}
 			}
 		}
-		var ship Shipping
-		if a := o.ShippingAddress; a != nil {
-			ship.City, ship.Country = strings.TrimSpace(deref(a.City)), strings.ToUpper(strings.TrimSpace(deref(a.CountryCodeV2)))
+		if f[FieldShipping] {
+			var ship Shipping
+			if a := o.ShippingAddress; a != nil {
+				ship.City, ship.Country = strings.TrimSpace(deref(a.City)), strings.ToUpper(strings.TrimSpace(deref(a.CountryCodeV2)))
+			}
+			if o.ShippingLine != nil {
+				ship.Method = strings.TrimSpace(o.ShippingLine.Title)
+			}
+			if ship != (Shipping{}) {
+				order.Shipping = &ship
+			}
 		}
-		if o.ShippingLine != nil {
-			ship.Method = strings.TrimSpace(o.ShippingLine.Title)
-		}
-		if ship != (Shipping{}) {
-			order.Shipping = &ship
-		}
-		for _, li := range o.LineItems.Nodes {
-			order.Items = append(order.Items, OrderItem{Title: li.Title, Variant: deref(li.VariantTitle), Quantity: li.Quantity,
-				Price: li.OriginalUnitPriceSet.ShopMoney.Amount})
-		}
-		for _, f := range o.Fulfillments {
-			for _, ti := range f.TrackingInfo {
-				tr := Tracking{Company: deref(ti.Company), Number: deref(ti.Number)}
-				if u := deref(ti.URL); strings.HasPrefix(u, "https://") {
-					tr.URL = u
+		if f[FieldLineItems] {
+			for _, li := range o.LineItems.Nodes {
+				item := OrderItem{Title: li.Title, Variant: deref(li.VariantTitle), Quantity: li.Quantity}
+				if f[FieldLinePrices] && li.OriginalUnitPriceSet != nil {
+					item.Price = li.OriginalUnitPriceSet.ShopMoney.Amount
 				}
-				if tr.Company != "" || tr.Number != "" || tr.URL != "" {
-					order.Tracking = append(order.Tracking, tr)
+				order.Items = append(order.Items, item)
+			}
+		}
+		if f[FieldTracking] {
+			for _, ful := range o.Fulfillments {
+				for _, ti := range ful.TrackingInfo {
+					tr := Tracking{Company: deref(ti.Company), Number: deref(ti.Number)}
+					if u := deref(ti.URL); strings.HasPrefix(u, "https://") {
+						tr.URL = u
+					}
+					if tr.Company != "" || tr.Number != "" || tr.URL != "" {
+						order.Tracking = append(order.Tracking, tr)
+					}
 				}
 			}
 		}

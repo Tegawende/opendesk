@@ -12,10 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api } from "@/lib/api/endpoints";
-import type { PanelOrder, PanelSection, TicketPanel, TicketPanelData } from "@/lib/api/types";
+import type { PanelOrder, PanelSection, ShopifyField, TicketPanel, TicketPanelData } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { countryName, money, shortDate } from "@/lib/format";
 import { ease } from "@/lib/motion";
+import { DEFAULT_SHOPIFY_FIELDS, MAX_ORDERS_SHOWN, panelShows, shownData } from "@/lib/panelFields";
 import { q, qk } from "@/lib/queries";
 
 const CLOSED_KEY = "od-ticket-panels-closed";
@@ -75,6 +76,7 @@ function PanelSectionView({ ticketId, panel, open, onToggle }: { ticketId: strin
   const reduce = useReducedMotion();
   const { data, isLoading } = useQuery({ ...q.ticketPanel(ticketId, panel.id), enabled: open });
   const [refreshing, setRefreshing] = useState(false);
+  const shows = panelShows(panel);
   const refresh = async () => {
     setRefreshing(true);
     try {
@@ -125,7 +127,7 @@ function PanelSectionView({ ticketId, panel, open, onToggle }: { ticketId: strin
             className="overflow-hidden"
           >
             <div className="px-4 pb-3.5" data-ph-mask>
-              {isLoading || !data ? <PanelSkeleton /> : <PanelBody data={data} showTags={panel.show_tags !== false} onRetry={() => void refresh()} />}
+              {isLoading || !data ? <PanelSkeleton /> : <PanelBody data={data} fields={shows.fields} ordersShown={shows.ordersShown} onRetry={() => void refresh()} />}
             </div>
           </motion.div>
         )}
@@ -148,8 +150,21 @@ function Quiet({ children }: { children: ReactNode }) {
   return <p className="text-[12px] text-fg-4">{children}</p>;
 }
 
-/** What a panel answered; `showTags` follows the panel's setting (an answer from before it changed may still carry tags). */
-export function PanelBody({ data, onRetry, showTags = true }: { data: TicketPanelData; onRetry?: () => void; showTags?: boolean }) {
+/**
+ * What a panel answered. A Shopify answer shows the panel's `fields` and `ordersShown` only (an
+ * answer from before they changed may carry more); settings previews a choice with the same view.
+ */
+export function PanelBody({
+  data,
+  onRetry,
+  fields = DEFAULT_SHOPIFY_FIELDS,
+  ordersShown = MAX_ORDERS_SHOWN,
+}: {
+  data: TicketPanelData;
+  onRetry?: () => void;
+  fields?: readonly ShopifyField[];
+  ordersShown?: number;
+}) {
   const { t } = useTranslation("inbox");
   switch (data.state) {
     case "no_contact":
@@ -168,7 +183,7 @@ export function PanelBody({ data, onRetry, showTags = true }: { data: TicketPane
         </p>
       );
   }
-  return data.kind === "shopify" ? <Commerce data={data} showTags={showTags} /> : <Sections sections={data.sections ?? []} />;
+  return data.kind === "shopify" ? <Commerce data={shownData(data, fields, ordersShown)} /> : <Sections sections={data.sections ?? []} />;
 }
 
 /** "Partly refunded" for partially_refunded, the word Shopify uses otherwise. */
@@ -187,10 +202,17 @@ function statusTone(s: string): "ok" | "warn" | "danger" | "neutral" {
   return "neutral";
 }
 
-function Commerce({ data, showTags }: { data: TicketPanelData; showTags: boolean }) {
+/** A Shopify answer, already cut to what the panel shows: whatever it carries shows. */
+function Commerce({ data }: { data: TicketPanelData }) {
   const { t } = useTranslation("inbox");
   const c = data.customer;
   const orders = data.orders ?? [];
+  const stats = c
+    ? [
+        c.orders_count !== undefined ? t("panels.orders", { count: c.orders_count }) : "",
+        c.total_spent ? t("panels.spent", { amount: money(c.total_spent, c.currency ?? "") }) : "",
+      ].filter(Boolean)
+    : [];
   return (
     <div className="flex flex-col gap-2.5">
       {c && (
@@ -205,10 +227,9 @@ function Commerce({ data, showTags }: { data: TicketPanelData; showTags: boolean
             <span className="truncate">{c.name}</span>
             <ArrowUpRight className="size-3 shrink-0 text-fg-4 group-hover:text-fg" />
           </a>
-          <p className="text-[11.5px] text-fg-3">
-            {t("panels.orders", { count: c.orders_count })} · {t("panels.spent", { amount: money(c.total_spent, c.currency) })}
-          </p>
-          {showTags && c.tags.length > 0 && (
+          {c.email && <p className="truncate text-[11.5px] text-fg-3">{c.email}</p>}
+          {stats.length > 0 && <p className="text-[11.5px] text-fg-3">{stats.join(" · ")}</p>}
+          {c.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {c.tags.slice(0, 6).map((tag) => (
                 <Badge key={tag}>{tag}</Badge>
@@ -258,13 +279,15 @@ function OrderRow({ o }: { o: PanelOrder }) {
         <span className="text-[11.5px] text-fg-4">{shortDate(o.created_at)}</span>
         <span className={cn("ml-auto text-[12px] tabular-nums", o.cancelled ? "text-fg-4" : "text-fg-2")}>{money(o.total, o.currency)}</span>
       </div>
-      <div className="mt-1 flex flex-wrap gap-1">
-        {o.cancelled && (
-          <Badge tone="danger">{o.cancelled_at ? t("panels.cancelledOn", { date: shortDate(o.cancelled_at) }) : t("panels.cancelled")}</Badge>
-        )}
-        {o.financial_status && <Badge tone={statusTone(o.financial_status)}>{word(o.financial_status)}</Badge>}
-        {!o.cancelled && o.fulfillment_status && <Badge tone={statusTone(o.fulfillment_status)}>{word(o.fulfillment_status)}</Badge>}
-      </div>
+      {(o.cancelled || o.financial_status || o.fulfillment_status) && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {o.cancelled && (
+            <Badge tone="danger">{o.cancelled_at ? t("panels.cancelledOn", { date: shortDate(o.cancelled_at) }) : t("panels.cancelled")}</Badge>
+          )}
+          {o.financial_status && <Badge tone={statusTone(o.financial_status)}>{word(o.financial_status)}</Badge>}
+          {!o.cancelled && o.fulfillment_status && <Badge tone={statusTone(o.fulfillment_status)}>{word(o.fulfillment_status)}</Badge>}
+        </div>
+      )}
       {o.items.length > 0 && (
         <ul className="mt-1.5 flex flex-col gap-0.5 text-[11.5px] text-fg-3">
           {o.items.map((it, i) => (

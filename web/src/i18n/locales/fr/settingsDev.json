@@ -549,8 +549,36 @@
     "secretVerify": "Chaque requête porte OD-Signature, comme les envois de webhooks. Vérifiez-la avant de répondre :",
     "secretAnswer": "Répondez en JSON par sections de valeurs nommées, 64 Ko au plus :",
     "secretSaved": "Je l’ai enregistré",
-    "showTags": "Afficher les balises du client",
-    "showTagsHint": "Beaucoup de boutiques ajoutent aux clients des balises marketing, comme newsletter ou leur mode d’inscription. Désactivez cette option pour ne pas les afficher sur les tickets.",
+    "fields": {
+      "menu": "Choisir ce qui s’affiche",
+      "title": "Ce que les tickets affichent de {{name}}",
+      "description": "Choisissez ce que chaque ticket affiche de Shopify. Ce que vous laissez de côté n’est pas lu dans la boutique.",
+      "customer": "Client",
+      "order": "Chaque commande",
+      "orders": "Commandes affichées",
+      "always": "Le nom du client, et pour chaque commande son numéro, sa date et son total, s’affichent toujours.",
+      "preview": "Aperçu",
+      "defaults": "Revenir aux réglages par défaut",
+      "saved": "Ce qu’affiche {{name}} est enregistré",
+      "f": {
+        "tags": "Balises",
+        "email": "E-mail dans la boutique",
+        "orders_count": "Nombre de commandes",
+        "total_spent": "Total dépensé",
+        "financial_status": "Statut du paiement",
+        "fulfillment_status": "Statut de l’expédition",
+        "line_items": "Produits",
+        "line_prices": "Prix unitaires",
+        "shipping": "Ville, pays et mode de livraison",
+        "discounts": "Codes de réduction",
+        "refunds": "Montant remboursé",
+        "tracking": "Suivi du colis"
+      },
+      "hint": {
+        "tags": "Beaucoup de boutiques ajoutent aux clients des balises marketing, comme newsletter.",
+        "email": "En général, l’adresse du contact lui-même."
+      }
+    },
     "catalog": {
       "kind": "Panneau de ticket",
       "shopify": "Affichez à côté de chaque ticket le client Shopify du contact et ses dernières commandes.",

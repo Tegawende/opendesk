@@ -4,23 +4,26 @@
 // token. Secrets and tokens never come back: they are replaced, a signing secret renewed.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, KeyRound, Link2, MoreHorizontal, Plus, Tags, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { ArrowUpRight, KeyRound, Link2, ListChecks, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Section } from "@/components/layout";
-import { PanelMark } from "@/components/tickets/detail/TicketPanels";
+import { PanelBody, PanelMark } from "@/components/tickets/detail/TicketPanels";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useConfirm } from "@/components/ui/confirm";
 import { CopyField } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, TextInput } from "@/components/ui/input";
-import { Menu, MenuCheckItem, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Switch } from "@/components/ui/switch";
 import { Segmented } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
-import type { TicketPanel } from "@/lib/api/types";
+import type { ShopifyField, TicketPanel, TicketPanelData } from "@/lib/api/types";
+import { cn } from "@/lib/cn";
+import { CUSTOMER_FIELDS, DEFAULT_SHOPIFY_FIELDS, MAX_ORDERS_SHOWN, normalizeFields, ORDER_FIELDS, panelShows } from "@/lib/panelFields";
 import { qk, q, removeFromList, upsertInList } from "@/lib/queries";
 import { ListSkeleton, StatePill } from "./bits";
 import { CatalogTile, ProviderMark } from "./integrations";
@@ -136,11 +139,12 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
   const qc = useQueryClient();
   const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
+  const [choosing, setChoosing] = useState(false);
   const state = !p.enabled ? ("paused" as const) : p.status === "error" ? ("failing" as const) : ("active" as const);
   const stateWord = !p.enabled ? t("panels.state.off") : t(`panels.state.${p.status}`);
 
   const update = useMutation({
-    mutationFn: (b: { enabled?: boolean; show_tags?: boolean }) => api.ticketPanels.update(p.id, b),
+    mutationFn: (b: { enabled?: boolean }) => api.ticketPanels.update(p.id, b),
     onMutate: (b) => {
       const prev = qc.getQueryData<TicketPanel[]>(qk.ticketPanels);
       upsertInList(qc, qk.ticketPanels, { ...p, ...b });
@@ -200,9 +204,9 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
                     <MenuItem icon={<KeyRound />} onSelect={() => setEditing(true)}>
                       {t("panels.replaceCredentials")}
                     </MenuItem>
-                    <MenuCheckItem icon={<Tags />} checked={p.show_tags} onSelect={() => update.mutate({ show_tags: !p.show_tags })}>
-                      {t("panels.showTags")}
-                    </MenuCheckItem>
+                    <MenuItem icon={<ListChecks />} onSelect={() => setChoosing(true)}>
+                      {t("panels.fields.menu")}
+                    </MenuItem>
                   </>
                 ) : (
                   <>
@@ -234,6 +238,7 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
         )}
       </div>
       {editing && <EditPanelDialog p={p} onClose={() => setEditing(false)} />}
+      {choosing && <ShopifyFieldsDialog p={p} onClose={() => setChoosing(false)} />}
     </MotionRow>
   );
 }
@@ -242,7 +247,6 @@ function AddPanelDialog({ initialKind = "shopify", onClose, onAdded }: { initial
   const { t } = useTranslation("settingsDev");
   const qc = useQueryClient();
   const [kind, setKind] = useState<Kind>(initialKind);
-  const [showTags, setShowTags] = useState(true);
   const [shop, setShop] = useState("");
   const [cred, setCred] = useState<ShopifyCred>({ auth: "client_credentials", clientId: "", clientSecret: "", token: "" });
   const [url, setUrl] = useState("");
@@ -253,7 +257,7 @@ function AddPanelDialog({ initialKind = "shopify", onClose, onAdded }: { initial
     mutationFn: () =>
       api.ticketPanels.create(
         kind === "shopify"
-          ? { kind, shop: shop.trim(), ...shopifyBody(cred), name: name.trim() || undefined, show_tags: showTags }
+          ? { kind, shop: shop.trim(), ...shopifyBody(cred), name: name.trim() || undefined }
           : { kind, url: url.trim(), name: name.trim() || undefined },
       ),
     onSuccess: (r) => {
@@ -315,13 +319,6 @@ function AddPanelDialog({ initialKind = "shopify", onClose, onAdded }: { initial
               {(f) => <TextInput {...f} autoFocus className="mono" value={shop} placeholder="my-store.myshopify.com" onChange={(e) => setShop(e.target.value)} />}
             </Field>
             <ShopifyCredentialFields value={cred} onChange={setCred} />
-            <label className="flex cursor-pointer items-start justify-between gap-3">
-              <span className="flex flex-col gap-0.5">
-                <span className="text-[12.5px] font-medium text-fg-2">{t("panels.showTags")}</span>
-                <span className="text-[12px] leading-[18px] text-fg-3">{t("panels.showTagsHint")}</span>
-              </span>
-              <Switch checked={showTags} onCheckedChange={setShowTags} aria-label={t("panels.showTags")} />
-            </label>
           </>
         ) : (
           <Field label={t("panels.url")} hint={t("panels.urlHint")}>
@@ -460,6 +457,165 @@ function EditPanelDialog({ p, onClose }: { p: TicketPanel; onClose: () => void }
         )}
         <button type="submit" className="hidden" />
       </form>
+    </Dialog>
+  );
+}
+
+const day = (n: number) => new Date(Date.UTC(2026, 9, 27 - n, 9)).toISOString();
+
+/** A made-up answer for the preview of what tickets show: every field Shopify gives, filled. */
+const PREVIEW: TicketPanelData = {
+  panel_id: "preview",
+  kind: "shopify",
+  state: "ok",
+  fetched_at: day(0),
+  customer: {
+    name: "Ada Buyer",
+    url: "#",
+    email: "ada@example.com",
+    orders_count: 3,
+    total_spent: "412.50",
+    currency: "EUR",
+    tags: ["VIP", "newsletter"],
+  },
+  orders: [
+    {
+      id: "o1",
+      number: "#1042",
+      url: "#",
+      created_at: day(7),
+      total: "119.32",
+      currency: "EUR",
+      financial_status: "partially_refunded",
+      fulfillment_status: "fulfilled",
+      cancelled: false,
+      refunded: "14.44",
+      discount_codes: ["WELCOME10"],
+      shipping: { city: "Brussels", country: "BE", method: "DHL Express" },
+      items: [
+        { title: "Arco floor lamp", variant: "Marble", quantity: 1, price: "129.00" },
+        { title: "LED bulb E27", quantity: 2, price: "12.90" },
+      ],
+      tracking: [{ company: "DHL Express", number: "JD0146000042" }],
+    },
+    {
+      id: "o2",
+      number: "#1039",
+      url: "#",
+      created_at: day(40),
+      total: "289.00",
+      currency: "EUR",
+      financial_status: "paid",
+      fulfillment_status: "unfulfilled",
+      cancelled: false,
+      discount_codes: [],
+      shipping: { city: "Lyon", country: "FR", method: "Colissimo" },
+      items: [{ title: "Tolomeo desk lamp", variant: "Aluminium", quantity: 1, price: "289.00" }],
+      tracking: [],
+    },
+  ],
+};
+
+/**
+ * What a Shopify panel shows on tickets: a checklist of Shopify's fields, the customer's and each
+ * order's, and how many orders, beside a preview. What is left out is not asked of Shopify.
+ */
+export function ShopifyFieldsDialog({ p, onClose }: { p: TicketPanel; onClose: () => void }) {
+  const { t } = useTranslation("settingsDev");
+  const qc = useQueryClient();
+  const previewId = useId();
+  const [fields, setFields] = useState<ShopifyField[]>(() => normalizeFields(panelShows(p).fields));
+  const [orders, setOrders] = useState(() => panelShows(p).ordersShown);
+  const isDefault = orders === MAX_ORDERS_SHOWN && fields.join() === DEFAULT_SHOPIFY_FIELDS.join();
+  const save = useMutation({
+    mutationFn: () => api.ticketPanels.update(p.id, { fields, orders_shown: orders }),
+    onSuccess: (row) => {
+      upsertInList(qc, qk.ticketPanels, row);
+      toast.success(t("panels.fields.saved", { name: p.name }));
+      onClose();
+    },
+    onError: (e) => toast.error(e, t("panels.updateError")),
+  });
+  const toggle = (f: ShopifyField, on: boolean) => setFields((cur) => normalizeFields(on ? [...cur, f] : cur.filter((x) => x !== f)));
+  const option = (f: ShopifyField) => {
+    const nested = f === "line_prices";
+    const disabled = nested && !fields.includes("line_items");
+    const hint = f === "tags" || f === "email" ? t(`panels.fields.hint.${f}`) : null;
+    return (
+      <label key={f} className={cn("flex items-start gap-2 text-[12.5px] text-fg-2", nested && "pl-6", disabled ? "opacity-50" : "cursor-pointer")}>
+        <Checkbox className="mt-0.5" checked={fields.includes(f)} disabled={disabled} onCheckedChange={(v) => toggle(f, v)} />
+        <span className="flex min-w-0 flex-col">
+          <span>{t(`panels.fields.f.${f}`)}</span>
+          {hint && <span className="text-[11.5px] leading-[16px] text-fg-4">{hint}</span>}
+        </span>
+      </label>
+    );
+  };
+  return (
+    <Dialog
+      open
+      size="xl"
+      onOpenChange={(o) => !o && onClose()}
+      title={t("panels.fields.title", { name: p.name })}
+      description={t("panels.fields.description")}
+      footer={
+        <>
+          <Button
+            variant="ghost"
+            className="mr-auto"
+            disabled={isDefault}
+            onClick={() => {
+              setFields([...DEFAULT_SHOPIFY_FIELDS]);
+              setOrders(MAX_ORDERS_SHOWN);
+            }}
+          >
+            {t("panels.fields.defaults")}
+          </Button>
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
+          <Button variant="primary" loading={save.isPending} onClick={() => save.mutate()}>
+            {t("panels.save")}
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-5 pb-1 sm:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="flex flex-col gap-4">
+          <div className="grid gap-4 rounded-md border border-line p-3.5 sm:grid-cols-2">
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-2 text-[12.5px] font-medium text-fg">{t("panels.fields.customer")}</legend>
+              {CUSTOMER_FIELDS.map(option)}
+            </fieldset>
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-2 text-[12.5px] font-medium text-fg">{t("panels.fields.order")}</legend>
+              {ORDER_FIELDS.map(option)}
+            </fieldset>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[12.5px] font-medium text-fg-2">{t("panels.fields.orders")}</span>
+            <Segmented<string>
+              size="xs"
+              value={String(orders)}
+              onChange={(v) => setOrders(Number(v))}
+              options={Array.from({ length: MAX_ORDERS_SHOWN }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))}
+            />
+          </div>
+          <p className="text-[12px] leading-[18px] text-fg-4">{t("panels.fields.always")}</p>
+        </div>
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span id={previewId} className="label-caps">
+            {t("panels.fields.preview")}
+          </span>
+          <div role="group" aria-labelledby={previewId} className="max-h-[440px] overflow-y-auto rounded-md border border-line bg-surface px-4 py-3.5">
+            <div className="mb-2.5 flex items-center gap-2">
+              <PanelMark panel={p} />
+              <span className="label-caps min-w-0 truncate">{p.name}</span>
+            </div>
+            <PanelBody data={PREVIEW} fields={fields} ordersShown={orders} />
+          </div>
+        </div>
+      </div>
     </Dialog>
   );
 }

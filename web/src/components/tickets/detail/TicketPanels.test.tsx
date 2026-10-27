@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import "@/i18n";
-import type { PanelOrder, TicketPanelData } from "@/lib/api/types";
+import type { PanelOrder, ShopifyField, TicketPanelData } from "@/lib/api/types";
+import { DEFAULT_SHOPIFY_FIELDS, normalizeFields, shownData } from "@/lib/panelFields";
 import { PanelBody, shippingLine } from "./TicketPanels";
 
 const order = (patch: Partial<PanelOrder> = {}): PanelOrder => ({
@@ -33,6 +34,7 @@ const data = (orders: PanelOrder[]): TicketPanelData => ({
   customer: {
     name: "Ada Buyer",
     url: "https://admin.shopify.com/store/lumen-store/customers/42",
+    email: "ada@example.com",
     orders_count: 3,
     total_spent: "412.50",
     currency: "EUR",
@@ -85,11 +87,55 @@ describe("Shopify ticket panel", () => {
     expect(t).not.toContain("DHL Express");
   });
 
-  it("shows the customer's tags only when the panel does", () => {
-    expect(text(renderToStaticMarkup(<PanelBody data={data([])} />))).toContain("footer_signup");
-    const off = text(renderToStaticMarkup(<PanelBody data={data([])} showTags={false} />));
-    expect(off).not.toContain("footer_signup");
-    expect(off).toContain("3 orders");
+  it("shows what it always has until an admin chooses, the email aside", () => {
+    const t = text(renderToStaticMarkup(<PanelBody data={data([order(), order({ id: "o2", number: "#1041" })])} />));
+    expect(t).toContain("footer_signup");
+    expect(t).toContain("3 orders · €412.50 spent");
+    expect(t).not.toContain("ada@example.com");
+    expect(t).toContain("#1041");
+  });
+
+  it("shows only the fields the panel shows, and as many orders", () => {
+    const two = data([order(), order({ id: "o2", number: "#1041" })]);
+    const render = (fields: ShopifyField[], ordersShown?: number) => text(renderToStaticMarkup(<PanelBody data={two} fields={fields} ordersShown={ordersShown} />));
+
+    // Nothing chosen: the customer's name and each order's number, date and total.
+    const bare = render([]);
+    expect(bare).toContain("Ada Buyer");
+    expect(bare).toContain("#1042");
+    expect(bare).toContain("€119.32");
+    for (const gone of ["footer_signup", "orders", "spent", "Partly refunded", "Fulfilled", "Lucide", "Brussels", "WELCOME10", "refunded", "DHL"]) expect(bare).not.toContain(gone);
+
+    // Lines without their prices; the store's email; the spend without the count.
+    const some = render(["email", "total_spent", "line_items"], 1);
+    expect(some).toContain("ada@example.com");
+    expect(some).toContain("€412.50 spent");
+    expect(some).not.toContain("3 orders");
+    expect(some).toContain("3×Lucide Leanne Wall Lamp - Black");
+    expect(some).not.toContain("€14.44");
+    expect(some).not.toContain("#1041");
+
+    // Each order field on its own.
+    expect(render(["financial_status"])).toContain("Partly refunded");
+    expect(render(["fulfillment_status"])).toContain("Fulfilled");
+    expect(render(["line_items", "line_prices"])).toContain("€12.90");
+    expect(render(["shipping"])).toContain("Brussels, Belgium · DHL Express");
+    expect(render(["discounts"])).toContain("WELCOME10");
+    expect(render(["refunds"])).toContain("€14.44 refunded");
+    expect(render(["tracking"])).toContain("DHL · JD0123");
+    expect(render(["tags"])).toContain("newsletter");
+  });
+
+  it("cuts an answer to the panel's choice, the way the mock and the server do", () => {
+    const d = shownData(data([order(), order({ id: "o2" })]), ["line_items", "line_prices", "email"], 1);
+    expect(d.customer).toEqual({ name: "Ada Buyer", url: "https://admin.shopify.com/store/lumen-store/customers/42", tags: [], email: "ada@example.com" });
+    expect(d.orders).toHaveLength(1);
+    expect(d.orders![0]).not.toHaveProperty("financial_status");
+    expect(d.orders![0]).not.toHaveProperty("shipping");
+    expect(d.orders![0].items[0].price).toBe("14.44");
+    expect(d.orders![0].tracking).toEqual([]);
+    expect(normalizeFields(["tracking", "line_prices", "tags", "tags"])).toEqual(["tags", "tracking"]);
+    expect(DEFAULT_SHOPIFY_FIELDS).not.toContain("email");
   });
 
   it("writes the destination from what the store knows", () => {

@@ -545,8 +545,36 @@
     "secretVerify": "Every request carries OD-Signature, like webhook deliveries. Verify it before answering:",
     "secretAnswer": "Answer JSON sections of labelled values, at most 64 KB:",
     "secretSaved": "I’ve saved it",
-    "showTags": "Show customer tags",
-    "showTagsHint": "Many stores tag customers for marketing, such as newsletter or how they signed up. Turn this off to leave tags out of tickets.",
+    "fields": {
+      "menu": "Choose what shows",
+      "title": "What tickets show from {{name}}",
+      "description": "Choose what each ticket shows from Shopify. What you leave out is not read from the store.",
+      "customer": "Customer",
+      "order": "Each order",
+      "orders": "Orders shown",
+      "always": "The customer’s name, and each order’s number, date and total, always show.",
+      "preview": "Preview",
+      "defaults": "Use the defaults",
+      "saved": "Saved what {{name}} shows",
+      "f": {
+        "tags": "Tags",
+        "email": "Email in the store",
+        "orders_count": "Number of orders",
+        "total_spent": "Total spent",
+        "financial_status": "Payment status",
+        "fulfillment_status": "Fulfilment status",
+        "line_items": "Products",
+        "line_prices": "Unit prices",
+        "shipping": "City, country and shipping method",
+        "discounts": "Discount codes",
+        "refunds": "Refunded amount",
+        "tracking": "Tracking"
+      },
+      "hint": {
+        "tags": "Many stores tag customers for marketing, such as newsletter.",
+        "email": "Usually the contact’s own address."
+      }
+    },
     "catalog": {
       "kind": "Ticket panel",
       "shopify": "Show the contact’s Shopify customer and last orders beside each ticket.",

@@ -28,25 +28,53 @@ describe("mock ticket panels", () => {
     }
   });
 
-  it("leaves the customer's tags out when the panel says so, for Shopify panels only", async () => {
-    const panels = (await call("GET", "/v1/ticket-panels")).body.data as { id: string; kind: string; show_tags: boolean }[];
+  it("shows the fields and orders the panel chose, for Shopify panels only", async () => {
+    const panels = (await call("GET", "/v1/ticket-panels")).body.data as { id: string; kind: string; fields: string[]; orders_shown: number }[];
     const shop = panels.find((p) => p.kind === "shopify")!;
-    expect(shop.show_tags).toBe(true);
+    expect(shop.fields).toEqual(["tags", "orders_count", "total_spent", "financial_status", "fulfillment_status", "line_items", "line_prices", "shipping", "discounts", "refunds", "tracking"]);
+    expect(shop.orders_shown).toBe(5);
     const tickets = (await call("GET", "/v1/tickets")).body.data as { id: string; contact: { email: string | null } | null }[];
     const ids = tickets.filter((t) => t.contact?.email).map((t) => t.id);
     const read = async () => {
       for (const id of ids) {
         const d = (await call("GET", `/v1/tickets/${id}/panels/${shop.id}`)).body;
+        if (d.state === "ok" && d.orders.length > 1) return d;
+      }
+      throw new Error("no contact the store knows with orders");
+    };
+    const full = await read();
+    expect(full.customer.tags.length).toBeGreaterThan(0);
+    expect(full.customer.email).toBeUndefined();
+    expect(full.orders[0].items[0].price).toBeDefined();
+
+    const path = `/v1/ticket-panels/${shop.id}`;
+    expect((await call("PATCH", path, { fields: ["tags", "street"] })).status).toBe(422);
+    expect((await call("PATCH", path, { fields: ["line_prices"] })).status).toBe(422);
+    expect((await call("PATCH", path, { orders_shown: 6 })).status).toBe(422);
+    const upd = (await call("PATCH", path, { fields: ["line_items", "email", "line_items"], orders_shown: 1 })).body;
+    expect(upd.fields).toEqual(["email", "line_items"]);
+    expect(upd.orders_shown).toBe(1);
+    const few = await (async () => {
+      for (const id of ids) {
+        const d = (await call("GET", `/v1/tickets/${id}/panels/${shop.id}`)).body;
         if (d.state === "ok") return d;
       }
       throw new Error("no contact the store knows");
-    };
-    expect((await read()).customer.tags.length).toBeGreaterThan(0);
-    expect((await call("PATCH", `/v1/ticket-panels/${shop.id}`, { show_tags: false })).body.show_tags).toBe(false);
-    expect((await read()).customer.tags).toEqual([]);
-    await call("PATCH", `/v1/ticket-panels/${shop.id}`, { show_tags: true });
-    const made = await call("POST", "/v1/ticket-panels", { kind: "http", url: "https://erp.example.com/tags" });
-    expect((await call("PATCH", `/v1/ticket-panels/${made.body.panel.id}`, { show_tags: false })).status).toBe(422);
+    })();
+    expect(few.customer.tags).toEqual([]);
+    expect(few.customer.email).toMatch(/@/);
+    expect(few.customer.orders_count).toBeUndefined();
+    expect(few.orders).toHaveLength(1);
+    expect(few.orders[0].financial_status).toBeUndefined();
+    expect(few.orders[0].shipping).toBeUndefined();
+    expect(few.orders[0].items[0].price).toBeUndefined();
+    expect(few.orders[0].tracking).toEqual([]);
+    await call("PATCH", path, { fields: shop.fields, orders_shown: 5 });
+
+    const made = await call("POST", "/v1/ticket-panels", { kind: "http", url: "https://erp.example.com/fields" });
+    expect(made.body.panel.fields).toEqual([]);
+    expect((await call("PATCH", `/v1/ticket-panels/${made.body.panel.id}`, { fields: ["tags"] })).status).toBe(422);
+    expect((await call("POST", "/v1/ticket-panels", { kind: "http", url: "https://erp.example.com/x", orders_shown: 2 })).status).toBe(422);
     await call("DELETE", `/v1/ticket-panels/${made.body.panel.id}`);
   });
 

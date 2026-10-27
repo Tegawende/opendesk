@@ -2,7 +2,8 @@
 // whose orders are made up from the contact's email, and http panels that answer a few
 // sections. Nothing is fetched; credentials are only checked as given, never kept.
 
-import type { PanelOrder, TicketPanel, TicketPanelData } from "@/lib/api/types";
+import type { PanelOrder, ShopifyField, TicketPanel, TicketPanelData } from "@/lib/api/types";
+import { DEFAULT_SHOPIFY_FIELDS, isShopifyField, MAX_ORDERS_SHOWN, normalizeFields, panelShows, SHOPIFY_FIELDS, shownData } from "@/lib/panelFields";
 import { db, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
 import { HttpError, del, forbidden, get, invalid, notFound, patch, post, respond, type Ctx } from "../router";
@@ -21,7 +22,8 @@ function seed(): TicketPanel[] {
       host: "margin-store.myshopify.com",
       auth: "client_credentials",
       client_id: "3f9c0d1e7a2b4c5d8e6f",
-      show_tags: true,
+      fields: [...DEFAULT_SHOPIFY_FIELDS],
+      orders_shown: MAX_ORDERS_SHOWN,
       enabled: true,
       position: 0,
       status: "connected",
@@ -66,6 +68,21 @@ function find(ctx: Ctx): TicketPanel {
 function audit(ws: WsData, action: string, p: TicketPanel) {
   ws.audit.unshift({ id: uuid(), actor: { type: "user", user: userRef(db.meId), api_key_id: null }, action, entity_type: "ticket_panel", entity_id: p.id,
     data: { kind: p.kind, host: p.host }, ip: "84.152.33.17", created_at: nowIso() });
+}
+
+/** A chosen list of fields, as the server checks it: from the catalogue, unit prices with their lines. */
+function fieldsOf(raw: unknown): ShopifyField[] {
+  if (!Array.isArray(raw)) throw invalid("fields is a list.");
+  const bad = raw.find((f) => !isShopifyField(f));
+  if (bad !== undefined) throw invalid(`Unknown field "${String(bad)}": choose from ${SHOPIFY_FIELDS.join(", ")}.`);
+  const list = raw as ShopifyField[];
+  if (list.includes("line_prices") && !list.includes("line_items")) throw invalid("line_prices needs line_items: a unit price shows on its line.");
+  return normalizeFields(list);
+}
+
+function ordersShownOf(raw: unknown): number {
+  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1 || raw > MAX_ORDERS_SHOWN) throw invalid("orders_shown is 1 to 5.");
+  return raw;
 }
 
 const SHOP = /^[a-z0-9][a-z0-9-]{0,59}\.myshopify\.com$/;
@@ -169,19 +186,26 @@ function dataFor(p: TicketPanel, t: { id: string; number: number; contact: { ema
     const found = ordersFor(email, p.host);
     if (!found) return { ...base, state: "empty" };
     const handle = p.host.replace(/\.myshopify\.com$/, "");
-    return {
-      ...base,
-      customer: {
-        name: t.contact?.name || email,
-        url: `https://admin.shopify.com/store/${handle}/customers/${7000 + (hash(email) % 900)}`,
-        orders_count: found.orders.length + (hash(email) % 4),
-        total_spent: found.spent.toFixed(2),
-        currency: "EUR",
-        // As stores tag customers: mostly marketing. Left out when the panel says so.
-        tags: !p.show_tags ? [] : hash(email) % 3 === 0 ? ["VIP", "newsletter"] : ["footer_signup", "Login with Shop"],
+    const { fields, ordersShown } = panelShows(p);
+    // Only what the panel shows, as the server asks Shopify for nothing else.
+    return shownData(
+      {
+        ...base,
+        customer: {
+          name: t.contact?.name || email,
+          url: `https://admin.shopify.com/store/${handle}/customers/${7000 + (hash(email) % 900)}`,
+          email,
+          orders_count: found.orders.length + (hash(email) % 4),
+          total_spent: found.spent.toFixed(2),
+          currency: "EUR",
+          // As stores tag customers: mostly marketing.
+          tags: hash(email) % 3 === 0 ? ["VIP", "newsletter"] : ["footer_signup", "Login with Shop"],
+        },
+        orders: found.orders,
       },
-      orders: found.orders,
-    };
+      fields,
+      ordersShown,
+    );
   }
   return {
     ...base,
@@ -212,11 +236,13 @@ export function registerTicketPanels() {
     if (kind === "shopify") {
       const host = shopOf(ctx.body.shop);
       const auth = shopifyAuth(ctx.body);
-      const show_tags = ctx.body.show_tags !== false;
-      p = { id: uuid(), kind, name: String(ctx.body.name ?? "").trim() || "Margin Store", host, ...auth, show_tags, enabled: true, position: list.length, status: "connected", last_error: "", created_at: at, updated_at: at };
+      const fields = ctx.body.fields === undefined ? [...DEFAULT_SHOPIFY_FIELDS] : fieldsOf(ctx.body.fields);
+      const orders_shown = ctx.body.orders_shown === undefined ? MAX_ORDERS_SHOWN : ordersShownOf(ctx.body.orders_shown);
+      p = { id: uuid(), kind, name: String(ctx.body.name ?? "").trim() || "Margin Store", host, ...auth, fields, orders_shown, enabled: true, position: list.length, status: "connected", last_error: "", created_at: at, updated_at: at };
     } else if (kind === "http") {
+      if (ctx.body.fields !== undefined || ctx.body.orders_shown !== undefined) throw invalid("Only a Shopify panel has fields to choose.");
       const url = urlOf(ctx.body.url);
-      p = { id: uuid(), kind, name: String(ctx.body.name ?? "").trim() || new URL(url).host, host: new URL(url).host, show_tags: true, enabled: true, position: list.length, status: "connected", last_error: "", created_at: at, updated_at: at };
+      p = { id: uuid(), kind, name: String(ctx.body.name ?? "").trim() || new URL(url).host, host: new URL(url).host, fields: [], enabled: true, position: list.length, status: "connected", last_error: "", created_at: at, updated_at: at };
       s = secret();
     } else throw invalid("A panel is shopify or http.");
     list.push(p);
@@ -232,9 +258,10 @@ export function registerTicketPanels() {
     if (typeof b.name === "string") p.name = b.name.trim().slice(0, 64) || p.name;
     if (typeof b.enabled === "boolean") p.enabled = b.enabled;
     if (typeof b.position === "number") p.position = b.position;
-    if (b.show_tags !== undefined) {
-      if (p.kind !== "shopify") throw invalid("Only a Shopify panel shows customer tags.");
-      p.show_tags = b.show_tags === true;
+    if (b.fields !== undefined || b.orders_shown !== undefined) {
+      if (p.kind !== "shopify") throw invalid("Only a Shopify panel has fields to choose.");
+      if (b.fields !== undefined) p.fields = fieldsOf(b.fields);
+      if (b.orders_shown !== undefined) p.orders_shown = ordersShownOf(b.orders_shown);
     }
     if (b.token !== undefined || b.client_id !== undefined || b.client_secret !== undefined) {
       if (p.kind !== "shopify") throw invalid("Only a Shopify panel has credentials.");

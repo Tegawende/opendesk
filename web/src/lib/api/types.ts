@@ -1032,6 +1032,20 @@ export type SupportChannelDelivery = {
   updated_at: string;
   delivered_at?: string;
 };
+/** A field of Shopify's answer a ticket panel can show (contracts/integrations.md "Ticket panels"). */
+export type ShopifyField =
+  | "tags"
+  | "email"
+  | "orders_count"
+  | "total_spent"
+  | "financial_status"
+  | "fulfillment_status"
+  | "line_items"
+  | "line_prices"
+  | "shipping"
+  | "discounts"
+  | "refunds"
+  | "tracking";
 /** A ticket panel (contracts/integrations.md "Ticket panels"): read-only data about a ticket's contact. */
 export type TicketPanel = {
   id: string;
@@ -1043,8 +1057,10 @@ export type TicketPanel = {
   auth?: "client_credentials" | "access_token";
   /** shopify client_credentials: the app's client ID (not a secret). */
   client_id?: string;
-  /** shopify: the customer's tags are read and shown (true unless an admin turned them off). */
-  show_tags: boolean;
+  /** shopify: the fields tickets show, in catalogue order (the defaults until an admin chooses); http: empty. */
+  fields: ShopifyField[];
+  /** shopify: how many of the last orders show, 1 to 5. */
+  orders_shown?: number;
   enabled: boolean;
   position: number;
   /** error: the last lookup found the credentials refused. */
@@ -1053,8 +1069,9 @@ export type TicketPanel = {
   created_at: string;
   updated_at: string;
 };
-/** `tags` is empty when the panel leaves them out. */
-export type PanelCustomer = { name: string; url: string; orders_count: number; total_spent: string; currency: string; tags: string[] };
+/** A field the panel does not show is left out, and `tags` is empty. */
+export type PanelCustomer = { name: string; url: string; email?: string; orders_count?: number; total_spent?: string; currency?: string; tags: string[] };
+/** A field the panel does not show is left out, and a list is empty. */
 export type PanelOrder = {
   id: string;
   number: string;
@@ -1063,8 +1080,8 @@ export type PanelOrder = {
   /** Decimal, after refunds. */
   total: string;
   currency: string;
-  financial_status: string;
-  fulfillment_status: string;
+  financial_status?: string;
+  fulfillment_status?: string;
   cancelled: boolean;
   cancelled_at?: string;
   /** Decimal, what was refunded; absent when nothing was. */
@@ -1073,7 +1090,7 @@ export type PanelOrder = {
   /** Where it goes (city and ISO country, never the street) and the shipping method; absent when there is neither. */
   shipping?: { city?: string; country?: string; method?: string };
   /** `price`: the unit price before discounts, decimal, in the order's currency. */
-  items: { title: string; variant?: string; quantity: number; price: string }[];
+  items: { title: string; variant?: string; quantity: number; price?: string }[];
   tracking: { company?: string; number?: string; url?: string }[];
 };
 export type PanelSection = { title: string; items: { label: string; value: string; url?: string }[] };
