@@ -24,6 +24,8 @@ const (
 	maxSubtitle    = 160
 	maxBadgeText   = 40
 	maxNote        = 280
+	maxLinks       = 5 // a card's links, a list row's
+	maxLinkLabel   = 40
 	// maxCacheSeconds bounds how long an answer may ask to be kept.
 	maxCacheSeconds = 600
 )
@@ -40,6 +42,7 @@ type PanelBlock struct {
 	URL      string       `json:"url,omitempty" doc:"card: https only"`
 	Subtitle string       `json:"subtitle,omitempty" doc:"card"`
 	Badges   []PanelBadge `json:"badges,omitempty" doc:"card: at most 4"`
+	Links    []PanelLink  `json:"links,omitempty" doc:"card: the same record in other tools, shown as small buttons beside the title, at most 5"`
 	Fields   []PanelItem  `json:"fields,omitempty" doc:"card: labelled values, at most 30"`
 	Lines    []PanelItem  `json:"lines,omitempty" doc:"card: rows such as an order's lines, at most 20"`
 	Footer   []PanelItem  `json:"footer,omitempty" doc:"card: labelled values under the lines, such as a total, at most 6"`
@@ -49,7 +52,7 @@ type PanelBlock struct {
 }
 
 // PanelItem is a field (label, value, url), a card's line (quantity, title, subtitle, value, url) or
-// a list's row (title, subtitle, value, badge, url).
+// a list's row (title, subtitle, value, badge, url, links).
 type PanelItem struct {
 	Label    string      `json:"label,omitempty"`
 	Quantity *float64    `json:"quantity,omitempty"`
@@ -58,6 +61,15 @@ type PanelItem struct {
 	Value    *PanelValue `json:"value,omitempty"`
 	Badge    *PanelBadge `json:"badge,omitempty"`
 	URL      string      `json:"url,omitempty" doc:"https only"`
+	Links    []PanelLink `json:"links,omitempty" doc:"list rows: at most 5"`
+}
+
+// PanelLink opens the record in another tool (the shop, the ERP, the carrier): a small button
+// with an icon the app draws itself, never a picture from elsewhere.
+type PanelLink struct {
+	Label string `json:"label" doc:"the button's name and tooltip, at most 40 characters"`
+	URL   string `json:"url" doc:"https only"`
+	Icon  string `json:"icon,omitempty" doc:"one of the link icons (contracts/integrations.md); absent: the label's first letter"`
 }
 
 // PanelBadge is a short word in a tone.
@@ -84,6 +96,16 @@ var (
 	currencyRe = regexp.MustCompile(`^[A-Z]{3}$`)
 )
 
+// linkIcons are the icons a link may name, all drawn by the app: generic marks, then the
+// products whose logo it ships (web/src/lib/appLogos.ts). Another name is left out.
+var linkIcons = map[string]bool{
+	"external-link": true, "store": true, "shopping-cart": true, "receipt": true, "file-text": true, "truck": true,
+	"package": true, "user": true, "building": true, "phone": true, "mail": true, "credit-card": true, "map-pin": true,
+	"shopify": true, "stripe": true, "paypal": true, "square": true, "linear": true, "github": true, "atlassian": true,
+	"sentry": true, "notion": true, "asana": true, "monday": true, "slack": true, "discord": true, "telegram": true,
+	"intercom": true, "close": true, "box": true, "zapier": true, "zendesk": true, "helpscout": true, "freshdesk": true,
+}
+
 func toneOf(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	if tones[s] {
@@ -100,6 +122,7 @@ type blockIn struct {
 	URL      string            `json:"url"`
 	Subtitle string            `json:"subtitle"`
 	Badges   []json.RawMessage `json:"badges"`
+	Links    []json.RawMessage `json:"links"`
 	Fields   []json.RawMessage `json:"fields"`
 	Lines    []json.RawMessage `json:"lines"`
 	Footer   []json.RawMessage `json:"footer"`
@@ -109,13 +132,14 @@ type blockIn struct {
 }
 
 type itemIn struct {
-	Label    string          `json:"label"`
-	Quantity json.RawMessage `json:"quantity"`
-	Title    string          `json:"title"`
-	Subtitle string          `json:"subtitle"`
-	Value    json.RawMessage `json:"value"`
-	Badge    json.RawMessage `json:"badge"`
-	URL      string          `json:"url"`
+	Label    string            `json:"label"`
+	Quantity json.RawMessage   `json:"quantity"`
+	Title    string            `json:"title"`
+	Subtitle string            `json:"subtitle"`
+	Value    json.RawMessage   `json:"value"`
+	Badge    json.RawMessage   `json:"badge"`
+	URL      string            `json:"url"`
+	Links    []json.RawMessage `json:"links"`
 }
 
 // cleanBlocks reads an answer's blocks: at most maxBlocks that have something to show, in order.
@@ -152,6 +176,7 @@ func (s *Service) cleanBlock(in blockIn) (PanelBlock, bool) {
 				b.Badges = append(b.Badges, *x)
 			}
 		}
+		b.Links = s.cleanLinks(in.Links)
 		b.Fields = s.cleanFields(in.Fields, maxBlockFields)
 		b.Lines = s.cleanRows(in.Lines, maxCardLines, true)
 		b.Footer = s.cleanFields(in.Footer, maxCardFooter)
@@ -209,9 +234,37 @@ func (s *Service) cleanRows(raw []json.RawMessage, max int, lines bool) []PanelI
 		if lines {
 			it.Quantity = cleanQuantity(in.Quantity)
 		} else {
-			it.Badge = cleanBadge(in.Badge)
+			it.Badge, it.Links = cleanBadge(in.Badge), s.cleanLinks(in.Links)
 		}
 		out = append(out, it)
+	}
+	return out
+}
+
+// cleanLinks reads a card's or a row's links: at most maxLinks with a label and an https url; an
+// icon that is not one of linkIcons is left out, and the app shows the label's first letter.
+func (s *Service) cleanLinks(raw []json.RawMessage) []PanelLink {
+	var out []PanelLink
+	for _, r := range raw {
+		if len(out) == maxLinks {
+			break
+		}
+		var in struct {
+			Label string `json:"label"`
+			URL   string `json:"url"`
+			Icon  string `json:"icon"`
+		}
+		if json.Unmarshal(r, &in) != nil {
+			continue
+		}
+		l := PanelLink{Label: cleanText(in.Label, maxLinkLabel), URL: s.cleanLink(in.URL), Icon: strings.ToLower(strings.TrimSpace(in.Icon))}
+		if l.Label == "" || l.URL == "" {
+			continue
+		}
+		if !linkIcons[l.Icon] {
+			l.Icon = ""
+		}
+		out = append(out, l)
 	}
 	return out
 }

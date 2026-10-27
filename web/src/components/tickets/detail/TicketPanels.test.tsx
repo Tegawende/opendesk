@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import "@/i18n";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { PanelBlock, PanelOrder, PanelValue, ShopifyField, TicketPanelData } from "@/lib/api/types";
 import { panelDate, relDay } from "@/lib/format";
 import { DEFAULT_SHOPIFY_FIELDS, normalizeFields, shownData } from "@/lib/panelFields";
@@ -241,6 +242,50 @@ describe("URL ticket panel", () => {
       />,
     );
     expect(text(html)).toBe("OddStill here.");
+  });
+
+  it("shows a card's links as small buttons by its title: a shipped logo, a drawn icon or the label's letter", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <PanelBody
+          data={httpData([
+            {
+              type: "card",
+              title: "Order #1042",
+              url: "https://erp.example.com/so/42",
+              links: [
+                { label: "Open in the shop", url: "https://admin.shopify.com/store/lumen-store/orders/1001", icon: "shopify" },
+                { label: "Open in the ERP", url: "https://erp.example.com/odoo/sales/42", icon: "receipt" },
+                { label: "carrier", url: "https://carrier.example/t/JD0123" },
+                { label: "Odd", url: "https://odd.example/x", icon: "rocket" },
+              ],
+            },
+            { type: "list", items: [{ title: "INV/2026/00012", links: [{ label: "PDF", url: "https://billing.example.com/inv/12.pdf", icon: "file-text" }] }] },
+          ])}
+        />
+      </TooltipProvider>,
+    );
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const links = [...doc.querySelectorAll("article a[aria-label]")];
+    expect(links.map((a) => a.getAttribute("aria-label"))).toEqual(["Open in the shop", "Open in the ERP", "carrier", "Odd"]);
+    for (const a of links) {
+      expect(a.getAttribute("target")).toBe("_blank");
+      expect(a.getAttribute("rel")).toBe("noopener noreferrer");
+    }
+    expect(links[0].getAttribute("href")).toBe("https://admin.shopify.com/store/lumen-store/orders/1001");
+    // The title keeps its own link.
+    expect(doc.querySelector('h4 a[href="https://erp.example.com/so/42"]')).not.toBeNull();
+    // Shopify's shipped logo, the receipt drawn as an icon, a letter for no icon or one the app does not know.
+    expect(links[0].querySelector("img")?.getAttribute("src")).toBe("/logos/apps/shopify.svg");
+    expect(links[1].querySelector("svg.lucide-receipt")).not.toBeNull();
+    expect(links[2].textContent).toBe("C");
+    expect(links[3].textContent).toBe("O");
+    expect(links[3].querySelector("img")).toBeNull();
+    // Nothing but the app's own pictures.
+    for (const img of doc.querySelectorAll("img")) expect(img.getAttribute("src")).toMatch(/^\/logos\/apps\//);
+    const row = doc.querySelector('a[aria-label="PDF"]');
+    expect(row?.getAttribute("href")).toBe("https://billing.example.com/inv/12.pdf");
+    expect(row?.querySelector("svg.lucide-file-text")).not.toBeNull();
   });
 
   it("says how far a day is", () => {

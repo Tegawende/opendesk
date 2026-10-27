@@ -224,6 +224,10 @@ function blocksFor(p: TicketPanel, t: { number: number; subject: string }): Pane
         { text: "Supplier late", tone: "warning" },
         { text: "Paid", tone: "success" },
       ],
+      links: [
+        { label: "Open in the shop", url: `https://admin.shopify.com/store/lumen-store/orders/${5000 + so}`, icon: "shopify" },
+        { label: "Open in the ERP", url: `https://erp.example.com/odoo/sales/${so}`, icon: "receipt" },
+      ],
       fields: [
         { label: "Promised", value: { type: "date", value: iso(2), relative: true } },
         { label: "Supplier date", value: { type: "date", value: iso(9), relative: true } },

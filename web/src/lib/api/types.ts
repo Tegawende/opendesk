@@ -1135,10 +1135,12 @@ export type PanelValue =
   | { type: "badge"; text: string; tone: PanelTone };
 export type PanelField = { label?: string; value: PanelValue; url?: string };
 export type PanelLine = { quantity?: number; title: string; subtitle?: string; value?: PanelValue; url?: string };
-export type PanelListItem = { title: string; subtitle?: string; value?: PanelValue; badge?: PanelBadge; url?: string };
+export type PanelListItem = { title: string; subtitle?: string; value?: PanelValue; badge?: PanelBadge; url?: string; links?: PanelLink[] };
+/** The record in another tool: a small button by the title. `icon` is one the app draws (TicketPanels' LINK_ICONS or a shipped logo), else the label's first letter shows. */
+export type PanelLink = { label: string; url: string; icon?: string };
 /** A block of an http panel's version 2 answer (contracts/integrations.md "The http answer"). */
 export type PanelBlock =
-  | { type: "card"; title: string; url?: string; subtitle?: string; badges?: PanelBadge[]; fields?: PanelField[]; lines?: PanelLine[]; footer?: PanelField[] }
+  | { type: "card"; title: string; url?: string; subtitle?: string; badges?: PanelBadge[]; links?: PanelLink[]; fields?: PanelField[]; lines?: PanelLine[]; footer?: PanelField[] }
   | { type: "fields"; title?: string; items: PanelField[] }
   | { type: "list"; title?: string; items: PanelListItem[] }
   | { type: "note"; text: string; tone: PanelTone };

@@ -3,7 +3,32 @@
 // each panel loads on its own, folds away, and a failure is one quiet line.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, BadgePercent, ChevronRight, CircleAlert, CircleCheck, Globe, Info, MapPin, RefreshCw, TriangleAlert, Truck, Undo2 } from "lucide-react";
+import {
+  ArrowUpRight,
+  BadgePercent,
+  Building,
+  ChevronRight,
+  CircleAlert,
+  CircleCheck,
+  CreditCard,
+  ExternalLink,
+  FileText,
+  Globe,
+  Info,
+  Mail,
+  MapPin,
+  Package,
+  Phone,
+  Receipt,
+  RefreshCw,
+  ShoppingCart,
+  Store,
+  TriangleAlert,
+  Truck,
+  Undo2,
+  User,
+  type LucideIcon,
+} from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -17,6 +42,7 @@ import type {
   PanelBlock,
   PanelField,
   PanelLine,
+  PanelLink,
   PanelListItem,
   PanelOrder,
   PanelSection,
@@ -26,6 +52,7 @@ import type {
   TicketPanel,
   TicketPanelData,
 } from "@/lib/api/types";
+import { appLogo } from "@/lib/appLogos";
 import { cn } from "@/lib/cn";
 import { countryName, fullDate, money, number, panelDate, relDay, shortDate } from "@/lib/format";
 import { ease } from "@/lib/motion";
@@ -498,27 +525,31 @@ function FieldList({ fields, className }: { fields: PanelField[]; className?: st
 function CardBlock({ block }: { block: Extract<PanelBlock, { type: "card" }> }) {
   const { t } = useTranslation("inbox");
   const badges = block.badges ?? [];
+  const links = block.links ?? [];
   const fields = block.fields ?? [];
   const lines = block.lines ?? [];
   const footer = block.footer ?? [];
   return (
     <article className="rounded-md border border-line-soft px-2.5 py-2" aria-label={block.title}>
-      <h4 className="min-w-0 text-[12px] font-medium text-fg">
-        {block.url ? (
-          <a
-            href={block.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={t("panels.openLink", { name: block.title })}
-            className="group inline-flex min-w-0 max-w-full items-center gap-0.5 outline-none hover:underline focus-visible:underline"
-          >
-            <span className="truncate">{block.title}</span>
-            <ArrowUpRight className="size-3 shrink-0 text-fg-4 group-hover:text-fg" aria-hidden />
-          </a>
-        ) : (
-          <span className="block truncate">{block.title}</span>
-        )}
-      </h4>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <h4 className="min-w-0 flex-1 text-[12px] font-medium text-fg">
+          {block.url ? (
+            <a
+              href={block.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={t("panels.openLink", { name: block.title })}
+              className="group inline-flex min-w-0 max-w-full items-center gap-0.5 outline-none hover:underline focus-visible:underline"
+            >
+              <span className="truncate">{block.title}</span>
+              <ArrowUpRight className="size-3 shrink-0 text-fg-4 group-hover:text-fg" aria-hidden />
+            </a>
+          ) : (
+            <span className="block truncate">{block.title}</span>
+          )}
+        </h4>
+        {links.length > 0 && <LinkButtons links={links} />}
+      </div>
       {block.subtitle && <p className="truncate text-[11.5px] text-fg-4">{block.subtitle}</p>}
       {badges.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1">
@@ -553,6 +584,59 @@ function CardBlock({ block }: { block: Extract<PanelBlock, { type: "card" }> }) 
   );
 }
 
+// A link's icon: a generic mark or a product's shipped logo, both drawn by the app (the server
+// lets no other name through, internal/integrations/panels linkIcons). Nothing is ever fetched
+// from the link's own site: no favicon, no remote picture.
+const LINK_ICONS: Record<string, LucideIcon> = {
+  "external-link": ExternalLink,
+  store: Store,
+  "shopping-cart": ShoppingCart,
+  receipt: Receipt,
+  "file-text": FileText,
+  truck: Truck,
+  package: Package,
+  user: User,
+  building: Building,
+  phone: Phone,
+  mail: Mail,
+  "credit-card": CreditCard,
+  "map-pin": MapPin,
+};
+
+/** What a link's button shows: its product's logo, its icon, or the first letter of its label. */
+export function LinkGlyph({ link }: { link: PanelLink }) {
+  const Icon = link.icon ? LINK_ICONS[link.icon] : undefined;
+  if (Icon) {
+    return (
+      <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-md border border-line-soft bg-surface text-fg-3 group-hover:text-fg">
+        <Icon className="size-3" />
+      </span>
+    );
+  }
+  return <AppMark app={appLogo(link.icon) ? link.icon : undefined} name={link.label} tint="gray" size="sm" />;
+}
+
+/** The record in other tools: small buttons, each named and tipped by its label, opening a new tab. */
+function LinkButtons({ links }: { links: PanelLink[] }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {links.map((l, i) => (
+        <Tooltip key={i} content={l.label}>
+          <a
+            href={l.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={l.label}
+            className="group flex rounded-md outline-none transition-opacity hover:opacity-80 focus-visible:shadow-[0_0_0_2px_var(--focus)]"
+          >
+            <LinkGlyph link={l} />
+          </a>
+        </Tooltip>
+      ))}
+    </span>
+  );
+}
+
 function LineRow({ line }: { line: PanelLine }) {
   return (
     <li className="flex gap-1.5">
@@ -580,8 +664,11 @@ function ListBlock({ title, items }: { title?: string; items: PanelListItem[] })
         {items.map((it, i) => (
           <li key={i} className="flex items-start gap-2 py-1 text-[12px] first:pt-0 last:pb-0">
             <div className="min-w-0 flex-1">
-              <div className="truncate text-fg-2" title={it.title}>
-                <Out url={it.url}>{it.title}</Out>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <div className="min-w-0 truncate text-fg-2" title={it.title}>
+                  <Out url={it.url}>{it.title}</Out>
+                </div>
+                {it.links && it.links.length > 0 && <LinkButtons links={it.links} />}
               </div>
               {it.subtitle && <div className="truncate text-[11.5px] text-fg-4">{it.subtitle}</div>}
             </div>

@@ -290,11 +290,17 @@ and answers `sections`, shown as they always were. Both are at most 64 KB.
 ```ts
 interface Answer { version?: 2; blocks: Block[]; cache_seconds?: number /* 0 to 600; 0: not kept */ }
 type Block =
-  | { type: "card"; title: string; url?: string; subtitle?: string; badges?: Badge[]; fields?: Field[]; lines?: Line[]; footer?: Field[] }
+  | { type: "card"; title: string; url?: string; subtitle?: string; badges?: Badge[]; links?: Link[]; fields?: Field[]; lines?: Line[]; footer?: Field[] }
   | { type: "fields"; title?: string; items: Field[] }
-  | { type: "list"; title?: string; items: { title: string; url?: string; subtitle?: string; value?: Value; badge?: Badge }[] }
+  | { type: "list"; title?: string; items: { title: string; url?: string; subtitle?: string; value?: Value; badge?: Badge; links?: Link[] }[] }
   | { type: "note"; text: string; tone?: Tone };
 interface Field { label: string; value: Value; url?: string }
+interface Link { label: string /* the button's name and tooltip */; url: string /* https */; icon?: LinkIcon }
+type LinkIcon = "external-link" | "store" | "shopping-cart" | "receipt" | "file-text" | "truck" | "package" | "user"
+  | "building" | "phone" | "mail" | "credit-card" | "map-pin" /* generic */
+  | "shopify" | "stripe" | "paypal" | "square" | "linear" | "github" | "atlassian" | "sentry" | "notion" | "asana"
+  | "monday" | "slack" | "discord" | "telegram" | "intercom" | "close" | "box" | "zapier" | "zendesk" | "helpscout"
+  | "freshdesk" /* the products whose logo the app ships */;
 interface Line { quantity?: number; title: string; subtitle?: string; value?: Value; url?: string }
 interface Badge { text: string; tone: Tone }
 type Tone = "neutral" | "info" | "success" | "warning" | "danger";
@@ -309,17 +315,23 @@ type Value = string | number | boolean
   subtitle, badges, labelled fields, lines (an order's products) and a footer (a total). `fields`:
   labelled values. `list`: rows (invoices, tickets, contracts). `note`: one short sentence ("No
   subscription.").
+- `links` on a card or a list row: the same record in other tools (the shop, the ERP, the carrier),
+  shown as small buttons after the title, which keeps its own `url`. Each button is named and
+  tipped by its `label` and opens a new tab. Its `icon` is drawn by the app: a generic mark or the
+  product's shipped logo; without one, or with a name this version does not know, the button shows
+  the label's first letter. Apps never load a picture or favicon from the link's site.
 - The app formats dates in the agent's locale and timezone (a day as it is, never shifted) and, with
   `relative`, adds "in 3 days" or "5 days ago"; money in the agent's locale; a badge's tone is the
   app's own colour (info blue, success green, warning amber, danger red).
 - What is shown: 10 blocks; 30 fields in a card or a `fields` block; 20 lines; 6 footer fields; 4
-  badges on a card; 20 list rows. Text is plain, control characters dropped: titles and labels 80
-  characters, line and row titles and subtitles 160, values 500, badges 40, notes 280. Never HTML.
+  badges on a card; 5 links on a card or a row; 20 list rows. Text is plain, control characters
+  dropped: titles and labels 80 characters, line and row titles and subtitles 160, values 500,
+  badges and link labels 40, notes 280. Never HTML.
 - What does not read is left out, never the whole answer: a block or value type this version does not
   know, a date or an amount that does not read, a currency that is not three letters, a field without
-  a value, a card, line or row without a title, an empty block. An unknown tone is `neutral`. A `url`
-  that is not https (http on a development instance) is dropped; links open in a new tab and are
-  never fetched.
+  a value, a card, line or row without a title, a link without a label or a url, an empty block. An
+  unknown tone is `neutral`; an unknown link icon is left out. A `url` that is not https (http on a
+  development instance) is dropped; links open in a new tab and are never fetched.
 - The server cleans the answer once: `TicketPanelData.blocks` has the shape above with every value an
   object (`{type: "text", text}` for a string, number or boolean, written as given), dates as
   `YYYY-MM-DD` or an RFC 3339 time in UTC, amounts as decimal strings, currencies in capitals and
@@ -336,6 +348,7 @@ type Value = string | number | boolean
 { "version": 2, "cache_seconds": 120, "blocks": [
   { "type": "card", "title": "Sales order S00042", "url": "https://erp.example/so/42",
     "badges": [ { "text": "Supplier late", "tone": "warning" } ],
+    "links": [ { "label": "Open in the shop", "url": "https://admin.shopify.com/store/lumen/orders/5042", "icon": "shopify" } ],
     "fields": [ { "label": "Supplier date", "value": { "type": "date", "value": "2026-11-12", "relative": true } } ],
     "lines": [ { "quantity": 2, "title": "Arco floor lamp", "value": { "type": "money", "amount": "1890.00", "currency": "EUR" } } ],
     "footer": [ { "label": "Total", "value": { "type": "money", "amount": "3780.00", "currency": "EUR" } } ] },

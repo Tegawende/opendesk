@@ -150,6 +150,56 @@ func TestCleanBlocks(t *testing.T) {
 	}
 }
 
+func TestCleanLinks(t *testing.T) {
+	s := &Service{guard: netsafe.Guard{}}
+	b := s.cleanBlocks(decodeList(t, `[
+		{"type":"card","title":"Order #1042","url":"https://shop.example/orders/1042","links":[
+			{"label":"Open in the shop","url":"https://admin.shopify.com/store/x/orders/1","icon":"Shopify"},
+			{"label":" Open in\tthe ERP ","url":"https://erp.example/so/42","icon":" receipt "},
+			{"label":"Carrier","url":"https://carrier.example/t/1","icon":"https://evil.example/favicon.ico"},
+			{"label":"Plain","url":"https://crm.example/a/7"},
+			{"label":"No url"},
+			{"label":"Script","url":"javascript:alert(1)","icon":"truck"},
+			{"label":"Insecure","url":"http://erp.example/so/42"},
+			{"label":"","url":"https://erp.example/blank"},
+			"not an object",
+			{"label":"`+strings.Repeat("x", 60)+`","url":"https://erp.example/long","icon":"package"},
+			{"label":"Sixth","url":"https://erp.example/6"}]},
+		{"type":"list","items":[{"title":"INV/1","links":[{"label":"PDF","url":"https://billing.example/inv/1.pdf","icon":"file-text"}]}]},
+		{"type":"card","title":"Lines","lines":[{"title":"Lamp","links":[{"label":"Shop","url":"https://shop.example/p/1"}]}]},
+		{"type":"fields","items":[{"label":"Plan","value":"Pro","links":[{"label":"Billing","url":"https://billing.example"}]}]}
+	]`))
+	want := []PanelLink{
+		{Label: "Open in the shop", URL: "https://admin.shopify.com/store/x/orders/1", Icon: "shopify"},
+		{Label: "Open in the ERP", URL: "https://erp.example/so/42", Icon: "receipt"},
+		{Label: "Carrier", URL: "https://carrier.example/t/1"},
+		{Label: "Plain", URL: "https://crm.example/a/7"},
+		{Label: clip(strings.Repeat("x", 60), maxLinkLabel), URL: "https://erp.example/long", Icon: "package"},
+	}
+	if !reflect.DeepEqual(b[0].Links, want) || len([]rune(b[0].Links[4].Label)) != maxLinkLabel {
+		t.Fatalf("card links = %+v", b[0].Links)
+	}
+	if got := b[1].Items[0].Links; !reflect.DeepEqual(got, []PanelLink{{Label: "PDF", URL: "https://billing.example/inv/1.pdf", Icon: "file-text"}}) {
+		t.Fatalf("row links = %+v", got)
+	}
+	// Lines and fields have no links.
+	if b[2].Lines[0].Links != nil || b[3].Items[0].Links != nil {
+		t.Fatalf("lines %+v, fields %+v", b[2].Lines[0].Links, b[3].Items[0].Links)
+	}
+	// A card without links answers none, and the icon of a cleaned link is always one the app draws.
+	if c := s.cleanBlocks(decodeList(t, `[{"type":"card","title":"Bare","links":[]}]`)); c[0].Links != nil {
+		t.Fatalf("bare = %+v", c[0].Links)
+	}
+	for _, l := range b[0].Links {
+		if l.Icon != "" && !linkIcons[l.Icon] {
+			t.Fatalf("icon %q", l.Icon)
+		}
+	}
+	if raw, _ := json.Marshal(want[2]); string(raw) != `{"label":"Carrier","url":"https://carrier.example/t/1"}` {
+		t.Fatalf("json = %s", raw)
+	}
+}
+
 func decodeList(t *testing.T, s string) []json.RawMessage {
 	t.Helper()
 	var out []json.RawMessage

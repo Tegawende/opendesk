@@ -142,9 +142,9 @@ A `POST`, signed like webhook deliveries (`OD-Signature: t=<unix>,v1=<hex>`, the
 
 At most 64 KB of JSON with `"version": 2` and a list of `blocks`. Four kinds:
 
-- **card**: one record, such as an order, an invoice, a subscription or a deal. A `title` (with an optional `url`), a `subtitle`, `badges`, labelled `fields`, `lines` (with a `quantity`) and a `footer` for totals.
+- **card**: one record, such as an order, an invoice, a subscription or a deal. A `title` (with an optional `url`), a `subtitle`, `badges`, `links`, labelled `fields`, `lines` (with a `quantity`) and a `footer` for totals.
 - **fields**: labelled values, `{ "label", "value", "url"? }`.
-- **list**: rows, `{ "title", "subtitle"?, "value"?, "badge"?, "url"? }`.
+- **list**: rows, `{ "title", "subtitle"?, "value"?, "badge"?, "url"?, "links"? }`.
 - **note**: one short sentence, `{ "text", "tone"? }`.
 
 A value is plain text or a number, or one of three typed values that opendesk writes in each agent's own language and timezone:
@@ -152,6 +152,8 @@ A value is plain text or a number, or one of three typed values that opendesk wr
 - `{ "type": "date", "value": "2026-11-12", "relative": true }`: a day, or a time such as `2026-11-12T09:30:00Z`. `relative` adds "in 3 days" or "5 days ago".
 - `{ "type": "money", "amount": "1890.00", "currency": "EUR" }`
 - `{ "type": "badge", "text": "Overdue", "tone": "danger" }`
+
+`links` open the same record in each tool that holds it, as small buttons after the title: up to 5 of `{ "label", "url", "icon"? }`. The label names the button and shows as its tooltip. The icon is one opendesk draws itself: `external-link`, `store`, `shopping-cart`, `receipt`, `file-text`, `truck`, `package`, `user`, `building`, `phone`, `mail`, `credit-card`, `map-pin`, or the logo of a product opendesk ships, such as `shopify`, `stripe` or `paypal`. Without one the button shows the label's first letter; opendesk never loads a picture from your link's site.
 
 Tones are `neutral`, `info`, `success`, `warning` and `danger`. Everything shows as plain text and https links, never HTML. Anything opendesk does not recognize, such as a block type from a later version, is skipped and the rest still shows. Up to 10 blocks show, with 30 fields, 20 lines and 20 rows each. An answer is kept for a minute unless it says otherwise with `"cache_seconds"` (0 to 600). Answer `204` or `404` when you know nothing about the contact.
 
@@ -171,6 +173,23 @@ Tones are `neutral`, `info`, `success`, `warning` and `danger`. Everything shows
       { "quantity": 2, "title": "Arco floor lamp", "subtitle": "Marble",
         "value": { "type": "money", "amount": "1890.00", "currency": "EUR" } } ],
     "footer": [ { "label": "Total", "value": { "type": "money", "amount": "3780.00", "currency": "EUR" } } ] } ] }
+```
+
+</Fold>
+
+<Fold>
+
+#### Example: an order in each tool that holds it
+
+```json
+{ "version": 2, "blocks": [
+  { "type": "card", "title": "Order #1042", "url": "https://erp.example.com/so/42",
+    "badges": [ { "text": "Shipped", "tone": "success" } ],
+    "links": [
+      { "label": "Open in the shop", "url": "https://admin.shopify.com/store/lumen/orders/5042", "icon": "shopify" },
+      { "label": "Open in the ERP", "url": "https://erp.example.com/so/42", "icon": "receipt" },
+      { "label": "Track the parcel", "url": "https://carrier.example.com/t/JD0123", "icon": "truck" } ],
+    "fields": [ { "label": "Shipped", "value": { "type": "date", "value": "2026-10-24" } } ] } ] }
 ```
 
 </Fold>
