@@ -113,6 +113,8 @@
       "team": "Équipe",
       "mailbox": "Boîte mail",
       "writtenTo": "Adresse destinataire",
+      "contact": "Contact",
+      "company": "Entreprise",
       "tag": "Étiquette",
       "channel": "Canal",
       "keyword": "Mot-clé"
@@ -139,6 +141,8 @@
     "unknown": "inconnu",
     "inMailbox": "Dans {{name}}",
     "aMailbox": "une boîte mail",
+    "aContact": "un contact",
+    "aCompany": "une entreprise",
     "writtenTo": "Envoyé à {{address}}",
     "matching": "Correspondant à « {{q}} »",
     "ops": {
@@ -154,12 +158,16 @@
       "tag": "Choisir des étiquettes",
       "team": "Choisir des équipes",
       "mailbox": "Choisir des boîtes mail",
+      "contact": "Choisir des contacts",
+      "company": "Choisir des entreprises",
       "channel": "Choisir des canaux"
     },
     "myTeams": "mes équipes",
     "noTeam": "aucune équipe",
     "notTeamNamed": "Pas l’équipe {{name}}",
     "notInMailbox": "Pas dans {{name}}",
+    "notContact": "Sauf {{name}}",
+    "notCompany": "Sauf {{name}}",
     "withoutLabels": "Sans {{labels}}",
     "noLabel": "Aucune étiquette",
     "notChannel": "Pas {{channel}}",
@@ -311,6 +319,7 @@
     "chooseTeammate": "Choisir un collègue",
     "chooseTeam": "Choisir une équipe",
     "markSpamHint": "Déplace le ticket dans les indésirables. Aucune réponse n’est envoyée.",
+    "deleteTicketHint": "Supprime le ticket : il quitte toutes les vues et plus rien ne s’exécute dessus.",
     "replyPlaceholder": "Merci de nous avoir écrit. Nous avons bien reçu votre message…",
     "notePlaceholder": "Note interne pour l’équipe",
     "replyText": "Texte de la réponse",
@@ -375,6 +384,7 @@
     "send_reply": "Envoyer une réponse",
     "add_note": "Ajouter une note interne",
     "mark_spam": "Marquer comme spam",
+    "delete_ticket": "Supprimer le ticket",
     "set_field": "Définir un champ",
     "set_reply_address": "Définir l’adresse de réponse"
   },
@@ -386,6 +396,8 @@
   },
   "pickers": {
     "search": "Rechercher",
+    "searchContacts": "Rechercher un nom ou un e-mail",
+    "searchCompanies": "Rechercher un nom ou un domaine",
     "andMore": "{{first}} et {{count}} de plus"
   },
   "customFields": {
