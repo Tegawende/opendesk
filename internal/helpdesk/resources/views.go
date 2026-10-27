@@ -28,6 +28,7 @@ type View struct {
 	Filters  hd.TicketFilters `json:"filters"`
 	Position int              `json:"position"`
 	TeamID   *uuid.UUID       `json:"team_id" doc:"Shared with this team's members; shared is then false"`
+	Icon     *ViewIcon        `json:"icon" doc:"What the sidebar shows beside the name; null shows the default icon"`
 
 	owner *uuid.UUID
 }
@@ -38,22 +39,42 @@ type viewWriteBody struct {
 	Shared   *bool             `json:"shared,omitempty"`
 	Position *int              `json:"position,omitempty" minimum:"0" maximum:"100000"`
 	TeamID   Nullable[string]  `json:"team_id,omitempty" doc:"Share with a team's members (admins and the team's leads); null makes it a personal or shared view again"`
+	Icon     viewIconIn        `json:"icon,omitempty"`
 }
 
 type viewOut struct{ Body View }
 
 func scanView(r pgx.Row) (View, error) {
 	var v View
-	var raw []byte
-	if err := r.Scan(&v.ID, &v.Name, &v.owner, &raw, &v.Position, &v.TeamID); err != nil {
+	var raw, icon []byte
+	if err := r.Scan(&v.ID, &v.Name, &v.owner, &raw, &v.Position, &v.TeamID, &icon); err != nil {
 		return v, err
 	}
 	v.Shared = v.owner == nil && v.TeamID == nil
 	_ = json.Unmarshal(raw, &v.Filters)
+	if len(icon) > 0 {
+		var i ViewIcon
+		if json.Unmarshal(icon, &i) == nil && i.Kind != "" {
+			v.Icon = &i
+		}
+	}
 	return v, nil
 }
 
-const viewSelect = `SELECT v.id, v.name, v.user_id, v.filters, v.position, v.team_id FROM views v`
+const viewSelect = `SELECT v.id, v.name, v.user_id, v.filters, v.position, v.team_id, v.icon FROM views v`
+
+// applyViewIcon sets the view's icon from the body; null clears it.
+func applyViewIcon(b viewWriteBody, v *View) error {
+	if !b.Icon.Set {
+		return nil
+	}
+	icon, err := cleanViewIcon(b.Icon)
+	if err != nil {
+		return err
+	}
+	v.Icon = icon
+	return nil
+}
 
 // visibleView loads a view the caller can see: shared, their own personal view, a view of
 // their team, or (for admins and the team's leads, who manage them) any team view.
@@ -242,6 +263,9 @@ func registerViews(d *deps.Deps, api huma.API) {
 				return nil, err
 			}
 			v := View{ID: ids.New(), Name: name, Shared: shared}
+			if err := applyViewIcon(in.Body, &v); err != nil {
+				return nil, err
+			}
 			if !shared && !team {
 				v.owner = &p.UserID
 			}
@@ -261,8 +285,8 @@ func registerViews(d *deps.Deps, api huma.API) {
 					p.WorkspaceID, viewer(p)).Scan(&v.Position); err != nil {
 					return err
 				}
-				if _, err := tx.Exec(ctx, `INSERT INTO views (id, workspace_id, user_id, name, filters, position, team_id) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-					v.ID, p.WorkspaceID, v.owner, v.Name, v.Filters, v.Position, v.TeamID); err != nil {
+				if _, err := tx.Exec(ctx, `INSERT INTO views (id, workspace_id, user_id, name, filters, position, team_id, icon) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+					v.ID, p.WorkspaceID, v.owner, v.Name, v.Filters, v.Position, v.TeamID, v.Icon); err != nil {
 					return err
 				}
 				return publishView(ctx, tx, p.WorkspaceID, "view.created", v, map[string]any{"view": v})
@@ -346,8 +370,11 @@ func registerViews(d *deps.Deps, api huma.API) {
 				if in.Body.Position != nil {
 					v.Position = *in.Body.Position
 				}
-				if _, err := tx.Exec(ctx, `UPDATE views SET name = $3, filters = $4, position = $5, user_id = $6, team_id = $7, updated_at = now()
-					WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id, v.Name, v.Filters, v.Position, v.owner, v.TeamID); err != nil {
+				if err := applyViewIcon(in.Body, &v); err != nil {
+					return err
+				}
+				if _, err := tx.Exec(ctx, `UPDATE views SET name = $3, filters = $4, position = $5, user_id = $6, team_id = $7, icon = $8, updated_at = now()
+					WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id, v.Name, v.Filters, v.Position, v.owner, v.TeamID, v.Icon); err != nil {
 					return err
 				}
 				return publishView(ctx, tx, p.WorkspaceID, "view.updated", v, map[string]any{"view": v})

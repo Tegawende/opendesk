@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowUpRight, AtSign, Globe, Inbox, Layers, Lock, MoreHorizontal, Pencil, Plus, Search, Tag, Trash2, UserRound, Users, UsersRound, X } from "lucide-react";
+import { ArrowUpRight, AtSign, Globe, Inbox, Lock, MoreHorizontal, Pencil, Plus, Search, Tag, Trash2, UserRound, Users, UsersRound, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsPage, Section, ListRow } from "@/components/layout";
@@ -20,6 +20,8 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { orderBy, useListMutation } from "@/components/settings2/optimistic";
 import { SortableList } from "@/components/settings2/Sortable";
 import { TeamChip, TeamPick, useTeams } from "@/components/settings2/teams";
+import { ViewIconField } from "@/components/settings2/ViewIconField";
+import { ViewIcon, viewIconTone, viewName } from "@/components/tickets/ViewIcon";
 import { Segmented } from "@/components/ui/tabs";
 import { viewAudience, viewAudienceHint, viewDeleteBody } from "@/components/settings2/viewAudience";
 import { cleanFilters, clearField, fieldOps, filterOp, hasFilter, joinList, splitList, withOp, type FilterOp, type OpField } from "@/components/settings2/viewFilters";
@@ -38,7 +40,7 @@ import {
 import { ChannelIcon, PriorityIcon, SeverityChip, StatusIcon, channelLabel, priorityLabel, severityLabel, statusLabel } from "@/components/tickets/bits";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
-import type { Channel, Priority, Severity, TicketFilters, TicketStatus, View } from "@/lib/api/types";
+import type { Channel, Priority, Severity, TicketFilters, TicketStatus, View, ViewIcon as ViewIconValue } from "@/lib/api/types";
 import { q, qk, upsertInList } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { cn } from "@/lib/cn";
@@ -188,6 +190,9 @@ function FilterChips({ f }: { f: TicketFilters }) {
   return <div className="mt-1.5 flex flex-wrap items-center gap-1">{out}</div>;
 }
 
+// A view's tile: its colour, else blue when shared, as before icons.
+const viewTile = (v: View) => viewIconTone(v.icon) ?? (v.shared ? "blue" : "gray");
+
 export default function Views() {
   const { data: views, isLoading } = useQuery(q.views());
   const role = useRole();
@@ -258,12 +263,12 @@ export default function Views() {
             renderRow={(v, handle) => (
                 <ListRow onClick={canEdit ? () => setEditing(v) : undefined} className="items-start py-3">
                   {handle}
-                  <IconTile tone={v.shared ? "blue" : "gray"} className="mt-0.5">
-                    <Layers />
+                  <IconTile tone={viewTile(v)} className="mt-0.5">
+                    {v.icon?.kind === "text" ? <span className="text-[12px] font-semibold leading-none">{v.icon.value}</span> : <ViewIcon icon={v.icon} size={20} />}
                   </IconTile>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-[13px] font-medium">{v.name}</span>
+                      <span className="truncate text-[13px] font-medium">{viewName(v)}</span>
                       {v.team_id && teamById.get(v.team_id) ? (
                         <TeamChip team={teamById.get(v.team_id)!} size="xs" />
                       ) : (
@@ -358,6 +363,7 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
   const [name, setName] = useState(view?.name ?? "");
   const [shared, setShared] = useState(view?.shared ?? true);
   const [teamId, setTeamId] = useState<string | null>(view?.team_id ?? null);
+  const [icon, setIcon] = useState<ViewIconValue | null>(view?.icon ?? null);
   const { teams: allTeams } = useTeams();
   const { t: tt } = useTranslation("settingsTeams");
   const [f, setF] = useState<TicketFilters>(view?.filters ?? { status: ["open"] });
@@ -385,8 +391,9 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
     shared: view?.shared ?? true,
     teamId: view?.team_id ?? null,
     f: view?.filters ?? { status: ["open"] },
+    icon: view?.icon ?? null,
   });
-  const dirty = JSON.stringify({ name, shared, teamId, f }) !== initial;
+  const dirty = JSON.stringify({ name, shared, teamId, f, icon }) !== initial;
   const audience = viewAudience({ shared, team_id: teamId });
 
   const requestClose = () => {
@@ -402,12 +409,13 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
     mutationFn: () => {
       const filters = cleanFilters(f);
       return view
-        ? api.views.update(view.id, { name: name.trim(), shared: teamId ? false : shared, team_id: teamId, filters })
+        ? api.views.update(view.id, { name: name.trim(), shared: teamId ? false : shared, team_id: teamId, filters, icon })
         : api.views.create({
             name: name.trim(),
             shared: teamId ? false : shared,
             team_id: teamId,
             filters,
+            icon,
             position: nextPosition,
           });
     },
@@ -473,6 +481,7 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
               <TextInput {...p} autoFocus value={name} maxLength={60} placeholder={t("views.namePlaceholder")} onChange={(e) => setName(e.target.value)} />
             )}
           </Field>
+          <ViewIconField value={icon} onChange={setIcon} name={name} />
           {allTeams.length > 0 || teamId ? (
             <div className="flex flex-col gap-2.5 rounded-lg border border-line px-3 py-2.5">
               <div className="flex items-center justify-between gap-3">

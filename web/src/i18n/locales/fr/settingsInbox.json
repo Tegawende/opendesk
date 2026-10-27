@@ -81,6 +81,27 @@
     "nameLabel": "Nom",
     "namePlaceholder": "File de facturation",
     "needName": "Donnez un nom à la vue.",
+    "icon": {
+      "label": "Icône",
+      "change": "Modifier",
+      "preview": "Dans la barre latérale",
+      "none": "Aucune",
+      "tabs": {
+        "emoji": "Emoji",
+        "icon": "Icône",
+        "text": "Texte"
+      },
+      "searchEmoji": "Rechercher ou coller un emoji",
+      "searchIcon": "Rechercher une icône",
+      "noMatch": "Aucun résultat.",
+      "textLabel": "Lettres ou chiffres",
+      "textPlaceholder": "PO",
+      "textHint": "Une ou deux lettres ou chiffres, affichés sur une petite pastille.",
+      "colour": "Couleur",
+      "colourEmoji": "Un emoji garde ses propres couleurs.",
+      "done": "Terminé",
+      "hint": "Affichée à côté du nom dans la barre latérale, pour que vous repériez la vue d’un coup d’œil."
+    },
     "visibleTitle": "Visible par tout le monde",
     "audience": {
       "me": "Vous seul la voyez dans votre barre latérale.",

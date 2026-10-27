@@ -17,7 +17,11 @@ import type {
   SlaPolicy,
   TicketFilters,
   View,
+  ViewIcon,
 } from "@/lib/api/types";
+import { isTone } from "@/lib/tones";
+import { isOneEmoji } from "@/components/tickets/ViewIcon";
+import { viewIconDef } from "@/components/tickets/viewIcons";
 import { db, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
 import { HttpError, del, get, invalid, notFound, paginate, patch, post, required, respond, s, strArr, type Ctx } from "../router";
@@ -191,6 +195,29 @@ export function registerResources() {
     },
   });
 
+  // A view's icon, as the API takes it: one emoji, an icon of the list or one or two
+  // letters or digits, the last two with an optional palette colour; null is none.
+  const viewIcon = (v: unknown): ViewIcon | null => {
+    if (v === null || v === undefined) return null;
+    if (!isRecord(v) || typeof v.value !== "string") throw invalid("icon must be an object with kind and value");
+    const value = v.value.trim();
+    const color = v.color === null || v.color === undefined || v.color === "" ? null : v.color;
+    if (color !== null && !isTone(color)) throw invalid("icon.color must be a palette colour");
+    switch (v.kind) {
+      case "emoji":
+        if (!isOneEmoji(value)) throw invalid("icon.value must be one emoji");
+        return { kind: "emoji", value, color: null };
+      case "icon":
+        if (!viewIconDef(value)) throw invalid("icon.value is not an icon of the list");
+        return { kind: "icon", value, color };
+      case "text":
+        if (!/^[\p{L}\p{N}]{1,2}$/u.test(value)) throw invalid("icon.value must be one or two letters or digits");
+        return { kind: "text", value, color };
+      default:
+        throw invalid("icon.kind must be emoji, icon or text");
+    }
+  };
+
   crud<View>({
     path: "/v1/views",
     resource: "view",
@@ -200,13 +227,14 @@ export function registerResources() {
     filter: (ctx, rows) => rows.filter((v) => !v.team_id || isAdmin(ctx.ws, db.meId) || !!teamOfId(ctx.ws, v.team_id, db.meId)),
     create: (ctx, id) => {
       const team_id = teamRef(ctx, ctx.body.team_id);
-      return { id, name: required(ctx, "name").slice(0, 60), shared: team_id ? false : ctx.body.shared === true, team_id, filters: isRecord(ctx.body.filters) ? (ctx.body.filters as TicketFilters) : {}, position: typeof ctx.body.position === "number" ? ctx.body.position : ctx.ws.views.length };
+      return { id, name: required(ctx, "name").slice(0, 60), shared: team_id ? false : ctx.body.shared === true, team_id, filters: isRecord(ctx.body.filters) ? (ctx.body.filters as TicketFilters) : {}, position: typeof ctx.body.position === "number" ? ctx.body.position : ctx.ws.views.length, icon: viewIcon(ctx.body.icon) };
     },
     update: (ctx, row) => {
       assign(row, ctx.body, ["name", "shared", "position"]);
       if ("team_id" in ctx.body) row.team_id = teamRef(ctx, ctx.body.team_id);
       if (row.team_id) row.shared = false;
       if (isRecord(ctx.body.filters)) row.filters = ctx.body.filters as TicketFilters;
+      if ("icon" in ctx.body) row.icon = viewIcon(ctx.body.icon);
     },
   });
 

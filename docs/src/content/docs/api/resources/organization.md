@@ -20,6 +20,11 @@ type View = {
   name: string;
   shared: boolean;
   position: number;
+  icon: {
+    kind: "emoji" | "icon" | "text";
+    value: string; // the emoji, the icon's name, or one or two letters or digits
+    color: LabelColor | null; // tints an icon or text; null for an emoji
+  } | null; // null: the default icon
   filters: {
     status?: TicketStatus[];
     priority?: Priority[];
@@ -47,6 +52,8 @@ curl https://api.opendesk.sh/v1/views \
 ```
 
 List tickets in a view with `GET /v1/tickets?view_id=<id>`.
+
+`icon` is written whole: `{ "kind": "emoji", "value": "🔥" }`, `{ "kind": "icon", "value": "truck", "color": "teal" }` or `{ "kind": "text", "value": "PO", "color": "violet" }`. An icon is one of the names the app offers in its picker, the lucide names listed in [`viewIcons.ts`](https://github.com/useopendesk/opendesk/blob/main/web/src/components/tickets/viewIcons.ts); text is one or two letters or digits; `color` is a [label colour](/api/resources/labels-fields/) and is dropped for an emoji. Anything else is `422 validation_failed`. Send `null` to go back to the default icon; a `PATCH` without `icon` keeps it.
 
 ## Create a saved reply
 

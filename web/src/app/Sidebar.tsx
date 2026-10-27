@@ -4,7 +4,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, EyeOff, Inbox, Keyboard, Layers, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
+import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, EyeOff, Inbox, Keyboard, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -19,6 +19,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuTrigger } from "@/components/ui/menu";
 import { Picker } from "@/components/ui/picker";
 import { sortTeams, TeamDot, useTeamsCtx } from "@/components/tickets/teams";
+import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { useHotkeys } from "@/lib/hotkeys";
 import type { Team, TicketCounts } from "@/lib/api/types";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -385,7 +386,7 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
               .map((v) => {
                 const nums = ticketRowNumbers(counts, hid.view(v.id));
                 return (
-                <NavTip key={v.id} rail={rail} label={v.name}>
+                <NavTip key={v.id} rail={rail} label={viewName(v)}>
                   <RowMenu
                     enabled={collab.enabled}
                     prefs={prefs}
@@ -393,17 +394,17 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                     pin={{ kind: "view", id: v.id }}
                     hideId={hid.view(v.id)}
                     rail={rail}
-                    label={v.name}
+                    label={viewName(v)}
                   >
                   <Link
                     to="/views/$viewId/{-$ticketId}"
                     params={{ viewId: v.id, ticketId: undefined }}
                     className={cn(rowBase, rowShape(rail), rowIdle)}
                     activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
-                    aria-label={rail ? v.name : undefined}
+                    aria-label={rail ? viewName(v) : undefined}
                   >{withPill(<>
-                    <Layers />
-                    <Label rail={rail}>{v.name}</Label>
+                    <ViewIcon icon={v.icon} />
+                    <Label rail={rail}>{viewName(v)}</Label>
                     <WaitingBadge n={waitingFor({ kind: "view", id: v.id })} rail={rail} />
                     <Count n={shown(hid.view(v.id), "views", nums)} rail={rail} />
                   </>)}</Link>
