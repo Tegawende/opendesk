@@ -309,7 +309,7 @@ export default function InboxPage() {
     }
     update.mutate({ id: t.id, patch: { status: done ? "open" : display.finish } });
     toast.success(
-      done ? tr("toast.reopened", { number: t.number }) : tr("toast.solved", { number: t.number }),
+      done ? tr("toast.reopened", { number: t.number }) : display.finishWords.toast(t.number),
       done ? undefined : { action: { label: tr("toast.undo"), onClick: () => update.mutate({ id: t.id, patch: { status: t.status } }) } },
     );
   }

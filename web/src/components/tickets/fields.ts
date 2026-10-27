@@ -5,6 +5,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
+import { i18n } from "@/i18n";
 import { isApiError } from "@/lib/api/client";
 import type { CustomField, FieldValue, Priority, Tag, TagGroup, Ticket, TicketPatch, TicketStatus } from "@/lib/api/types";
 import { q } from "@/lib/queries";
@@ -51,6 +52,46 @@ export function useDisplay() {
     statuses: (current?: TicketStatus) => offeredStatuses(s.status_labels, current),
     /** What solving a ticket sets: solved, or closed where solved is hidden. */
     finish: finishStatus(s.status_labels),
+    /** The words for that action wherever it is offered. */
+    finishWords: finishWords(s.status_labels),
+  };
+}
+
+/**
+ * How the UI names finishing a ticket: "solve" where it sets solved; "close" where it sets
+ * closed under its own name; "mark" (as the workspace's name for it) where closed was renamed.
+ */
+export type FinishVerb = "solve" | "close" | "mark";
+
+export function finishVerb(labels: Record<string, Override> | undefined): FinishVerb {
+  if (finishStatus(labels) === "solved") return "solve";
+  const name = labels?.closed?.label?.trim().toLowerCase();
+  // A label that only spells the built-in name, in the agent's language or English, is no rename.
+  const builtIn = [statusLabel("closed"), i18n.t("indicators:status.closed", { lng: "en" })].map((n) => n.toLowerCase());
+  return !name || builtIn.includes(name) ? "close" : "mark";
+}
+
+/** The finishing action's words at each place it shows, after finishVerb; solving keeps its own. */
+export function finishWords(labels: Record<string, Override> | undefined) {
+  const verb = finishVerb(labels);
+  const status = labels?.closed?.label?.trim() ?? "";
+  const say = (solve: () => string, close: () => string, mark: () => string) => (verb === "solve" ? solve : verb === "close" ? close : mark)();
+  return {
+    verb,
+    /** The ticket header's button. */
+    button: () => say(() => i18n.t("inbox:detail.solve"), () => i18n.t("inbox:finish.close.button"), () => i18n.t("inbox:finish.mark.button", { status })),
+    /** The command menu, and the header button's tooltip once it no longer says solve. */
+    command: () => say(() => i18n.t("inbox:commands.solve"), () => i18n.t("inbox:finish.close.command"), () => i18n.t("inbox:finish.mark.command", { status })),
+    toast: (number: number) => say(() => i18n.t("inbox:toast.solved", { number }), () => i18n.t("inbox:finish.close.toast", { number }), () => i18n.t("inbox:finish.mark.toast", { number, status })),
+    /** A list row's hover action. */
+    quick: (number: number) => say(() => i18n.t("inbox:quick.solve", { number }), () => i18n.t("inbox:finish.close.quick", { number }), () => i18n.t("inbox:finish.mark.quick", { number, status })),
+    /** Empty list tips: finish the focused ticket, and send and finish. */
+    tip: () => say(() => i18n.t("inbox:empty.tips.solve"), () => i18n.t("inbox:finish.close.tip"), () => i18n.t("inbox:finish.mark.tip", { status })),
+    sendTip: () => say(() => i18n.t("inbox:empty.tips.sendSolve"), () => i18n.t("inbox:finish.close.sendTip"), () => i18n.t("inbox:finish.mark.sendTip", { status })),
+    /** The keyboard shortcuts sheet, in the ticket list and in a ticket. */
+    listShortcut: () =>
+      say(() => i18n.t("navigation:shortcuts.solveFocusedTicket"), () => i18n.t("navigation:shortcuts.closeFocusedTicket"), () => i18n.t("navigation:shortcuts.markFocusedTicket", { status })),
+    shortcut: () => say(() => i18n.t("navigation:shortcuts.solve"), () => i18n.t("navigation:shortcuts.closeTicket"), () => i18n.t("navigation:shortcuts.markTicket", { status })),
   };
 }
 

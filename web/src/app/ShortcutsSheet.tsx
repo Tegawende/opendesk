@@ -6,9 +6,11 @@ import { shell, useShell } from "./shellStore";
 import { quickSwitchKeys } from "./useAccounts";
 import { useCollab } from "@/lib/collab/hooks";
 import { spaceKeys } from "@/components/spaces/actions";
+import { useDisplay } from "@/components/tickets/fields";
 
 export function ShortcutsSheet() {
   const { t: tNav } = useTranslation("navigation");
+  const finish = useDisplay().finishWords;
   const open = useShell((s) => s.shortcutsOpen);
   const { t } = useTranslation("shell");
   const { t: ts } = useTranslation("spaces");
@@ -30,7 +32,8 @@ export function ShortcutsSheet() {
       id: g.title,
       title: tNav(`shortcuts.${g.title}`),
       items: [
-        ...g.items.map((i) => ({ ...i, label: tNav(`shortcuts.${i.label}`) })),
+        // e finishes a ticket: its words follow the status it sets.
+        ...g.items.map((i) => ({ ...i, label: i.label === "solveFocusedTicket" ? finish.listShortcut() : i.label === "solve" ? finish.shortcut() : tNav(`shortcuts.${i.label}`) })),
         ...(extra[g.title] ?? []).filter((i) => !have.has(i.keys)),
       ],
     };
