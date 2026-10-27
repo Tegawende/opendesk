@@ -255,8 +255,11 @@ type facts struct {
 
 // callFacts are what call conditions read (contracts/phone.md "Automations").
 type callFacts struct {
-	outcome, direction, missedReason, time, line string
-	tags                                         []string
+	outcome, direction, missedReason, time string
+	// lineID is the provider's id of the line, which equals and not_equals compare;
+	// line is its name, which contains and not_contains read.
+	lineID, line string
+	tags         []string
 }
 
 func (r *triggerRun) facts(ctx context.Context, messageID *uuid.UUID) (facts, error) {
@@ -307,8 +310,8 @@ func (r *triggerRun) facts(ctx context.Context, messageID *uuid.UUID) (facts, er
 	} else if r.callID != nil {
 		var c callFacts
 		var outside bool
-		err := r.tx.QueryRow(ctx, `SELECT outcome, direction, missed_reason, outside_hours, line_name, tags FROM phone_calls
-			WHERE workspace_id = $1 AND id = $2`, r.wid, *r.callID).Scan(&c.outcome, &c.direction, &c.missedReason, &outside, &c.line, &c.tags)
+		err := r.tx.QueryRow(ctx, `SELECT outcome, direction, missed_reason, outside_hours, line_id, line_name, tags FROM phone_calls
+			WHERE workspace_id = $1 AND id = $2`, r.wid, *r.callID).Scan(&c.outcome, &c.direction, &c.missedReason, &outside, &c.lineID, &c.line, &c.tags)
 		if err != nil && !db.IsNotFound(err) {
 			return f, err
 		}
@@ -431,6 +434,11 @@ func matchCall(c hd.Condition, call *callFacts) bool {
 	case "call_time":
 		return compare(c.Op, call.time, c.Value)
 	case "call_line":
+		// A line is picked by its id, which stays when the line is renamed; its name is
+		// for contains and not_contains.
+		if c.Op == "equals" || c.Op == "not_equals" {
+			return compare(c.Op, call.lineID, c.Value)
+		}
 		return compare(c.Op, call.line, c.Value)
 	case "call_tag":
 		return matchTags(c, call.tags)

@@ -391,9 +391,11 @@ type PhoneLine struct {
 func (s *Service) lines(ctx context.Context, wid uuid.UUID) ([]PhoneLine, error) {
 	out := []PhoneLine{}
 	seen := map[string]bool{}
+	// A line is known by its id, the value of call_line conditions; one without an id
+	// can't be picked.
 	add := func(l PhoneLine) {
-		key := l.Provider + "\x00" + strings.ToLower(l.Name)
-		if l.Name != "" && !seen[key] {
+		key := l.Provider + "\x00" + l.ID
+		if l.ID != "" && l.Name != "" && !seen[key] {
 			seen[key] = true
 			out = append(out, l)
 		}
@@ -416,8 +418,8 @@ func (s *Service) lines(ctx context.Context, wid uuid.UUID) ([]PhoneLine, error)
 			add(PhoneLine{ID: l.ID, Name: displayname.CleanOr(l.Name, displayname.Workspace, l.Name), Provider: c.Provider})
 		}
 	}
-	rows, err := s.d.DB.Pool.Query(ctx, `SELECT DISTINCT ON (provider, lower(line_name)) line_id, line_name, provider FROM phone_calls
-		WHERE workspace_id = $1 AND line_name <> '' ORDER BY provider, lower(line_name), created_at DESC LIMIT 200`, wid)
+	rows, err := s.d.DB.Pool.Query(ctx, `SELECT DISTINCT ON (provider, line_id) line_id, line_name, provider FROM phone_calls
+		WHERE workspace_id = $1 AND line_id <> '' AND line_name <> '' ORDER BY provider, line_id, created_at DESC LIMIT 200`, wid)
 	if err != nil {
 		return nil, err
 	}

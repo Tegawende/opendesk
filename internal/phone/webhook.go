@@ -29,6 +29,10 @@ const (
 	// before any work. They count apart from the connection's limit, so they cannot use it
 	// up and keep the provider's own events out.
 	badHooksPerMinute = 30
+	// eventRetention is how long an applied event's id is kept to recognize the provider's
+	// retries (the prune job), so an event older than that is dropped: once its id is gone
+	// a replay could not be told from a new event.
+	eventRetention = 7 * 24 * time.Hour
 )
 
 // webhook receives a provider's events. The connection is found by its opaque id and
@@ -91,6 +95,12 @@ func (s *Service) webhook(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Verified but not understood: acknowledged, so the provider keeps the webhook on.
 		s.d.Log.Warn("phone event not understood", "provider", c.Provider, "connection_id", c.ID, "err", err)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if time.Since(ev.At) > eventRetention {
+		// Acknowledged like an ignored event, and dropped.
+		s.d.Log.Info("phone event too old", "provider", c.Provider, "connection_id", c.ID, "event", ev.Type)
 		w.WriteHeader(http.StatusOK)
 		return
 	}

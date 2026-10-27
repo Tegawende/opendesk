@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
@@ -69,8 +70,50 @@ func (h *harness) token(t *testing.T) string {
 	return ""
 }
 
-// recorded reads a recorded lifecycle, signed with our token, with the agent's email
-// set to the workspace agent's.
+// fixtureBase is the earliest time in the fixtures (Tuesday 27 October 2026, 10:00 UTC).
+const fixtureBase = 1793095200
+
+// recent moves the fixtures' times by whole weeks to within the last seven days, where the
+// webhook takes events, keeping their weekday and time of day.
+func recent(t *testing.T, body []byte) []byte {
+	t.Helper()
+	week := int64(7 * 24 * 3600)
+	shift := (time.Now().Unix() - fixtureBase) / week * week
+	var v any
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	if err := dec.Decode(&v); err != nil {
+		t.Fatal(err)
+	}
+	var walk func(any)
+	walk = func(x any) {
+		switch m := x.(type) {
+		case map[string]any:
+			for k, val := range m {
+				if n, ok := val.(json.Number); ok && slices.Contains([]string{"timestamp", "started_at", "answered_at", "ended_at", "posted_at"}, k) {
+					if i, err := n.Int64(); err == nil && i > 0 {
+						m[k] = i + shift
+					}
+					continue
+				}
+				walk(val)
+			}
+		case []any:
+			for _, e := range m {
+				walk(e)
+			}
+		}
+	}
+	walk(v)
+	out, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// recorded reads a lifecycle fixture, signed with our token, with the agent's email set to
+// the workspace agent's and its times moved to this week.
 func (h *harness) recorded(t *testing.T, name string) [][]byte {
 	t.Helper()
 	raw, err := os.ReadFile("provider/aircall/testdata/" + name + ".json")
@@ -85,7 +128,7 @@ func (h *harness) recorded(t *testing.T, name string) [][]byte {
 	out := make([][]byte, len(list))
 	for i, m := range list {
 		s := strings.ReplaceAll(string(m), `"hook-token-1"`, `"`+tok+`"`)
-		out[i] = []byte(strings.ReplaceAll(s, "anna@example.com", h.ws.Agent.Email))
+		out[i] = recent(t, []byte(strings.ReplaceAll(s, "anna@example.com", h.ws.Agent.Email)))
 	}
 	return out
 }
@@ -327,6 +370,15 @@ func TestWebhookVerification(t *testing.T) {
 		t.Fatalf("the provider's event after a flood from elsewhere: %d", got)
 	}
 
+	// An event older than the week its id would be kept is acknowledged and dropped.
+	old := bytes.Replace(h.recorded(t, "answered")[1], []byte(`"timestamp":`), []byte(`"timestamp":1,"was":`), 1)
+	if got := h.send(t, old); got != 200 {
+		t.Fatalf("an old event: %d", got)
+	}
+	if n := len(h.e.Jobs(jobs.PhoneInboundArgs{}.Kind(), h.ws.ID)); n != 0 {
+		t.Fatalf("an event more than a week old was queued: %d", n)
+	}
+
 	// A retry of the same event is stored and queued once.
 	h.send(t, body)
 	h.send(t, body)
@@ -460,6 +512,15 @@ func TestMissedCallOutsideHoursReopensTheTicket(t *testing.T) {
 		"conditions": []map[string]any{{"field": "call_missed_reason", "op": "equals", "value": "out_of_opening_hours"},
 			{"field": "call_line", "op": "contains", "value": "support"}},
 		"actions": []map[string]any{{"type": "add_tag", "value": "after-hours"}}}).Want(t, 201)
+	// A line is picked by its id (Aircall's number 501 is "FR - Support"), not its name.
+	h.e.Do("POST", "/v1/automations", h.ws.Admin.As(h.ws), map[string]any{"name": "By name", "trigger": "call_ended",
+		"conditions": []map[string]any{{"field": "call_line", "op": "equals", "value": "FR - Support"}},
+		"actions":    []map[string]any{{"type": "add_tag", "value": "by-name"}}}).Want(t, 422)
+	for line, tag := range map[string]string{"501": "support-line", "502": "b2b-line"} {
+		h.e.Do("POST", "/v1/automations", h.ws.Admin.As(h.ws), map[string]any{"name": "Line " + line, "trigger": "call_ended",
+			"conditions": []map[string]any{{"field": "call_line", "op": "equals", "value": line}},
+			"actions":    []map[string]any{{"type": "add_tag", "value": tag}}}).Want(t, 201)
+	}
 	// An answered-call rule must not fire.
 	h.e.Do("POST", "/v1/automations", h.ws.Admin.As(h.ws), map[string]any{"name": "Answered", "trigger": "call_ended",
 		"conditions": []map[string]any{{"field": "call_outcome", "op": "equals", "value": "answered"}},
@@ -478,7 +539,7 @@ func TestMissedCallOutsideHoursReopensTheTicket(t *testing.T) {
 	for _, tg := range got.Tags {
 		tags = append(tags, tg.Name)
 	}
-	if !slices.Contains(tags, "after-hours") || slices.Contains(tags, "answered") {
+	if !slices.Contains(tags, "after-hours") || slices.Contains(tags, "answered") || !slices.Contains(tags, "support-line") || slices.Contains(tags, "b2b-line") {
 		t.Fatalf("tags %v", tags)
 	}
 	var notes int
@@ -532,8 +593,8 @@ func TestVoicemailOutboundAndPlacement(t *testing.T) {
 	}
 
 	// A withheld number opens a ticket without a contact.
-	anon := []byte(`{"resource":"call","event":"call.ended","timestamp":1793095200,"token":"` + h.token(t) +
-		`","data":{"id":1290006,"direction":"inbound","raw_digits":"anonymous","started_at":1793095200,"ended_at":1793095210}}`)
+	anon := recent(t, []byte(`{"resource":"call","event":"call.ended","timestamp":1793095200,"token":"`+h.token(t)+
+		`","data":{"id":1290006,"direction":"inbound","raw_digits":"anonymous","started_at":1793095200,"ended_at":1793095210}}`))
 	h.sendAll(t, [][]byte{anon})
 	if tk := h.ticketOfCall(t, "1290006"); tk.Contact != nil || tk.Subject != "Call from a withheld number" {
 		t.Fatalf("anonymous %+v", tk)

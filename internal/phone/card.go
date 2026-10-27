@@ -131,9 +131,12 @@ type pruneWorker struct {
 	s *Service
 }
 
-// Work removes provider events applied more than a week ago, and any older than 30 days.
+// Work removes provider events applied more than eventRetention ago (a week), and any
+// older than 30 days. The webhook drops events older than eventRetention, so a retry is
+// always recognized while it is accepted.
 func (w *pruneWorker) Work(ctx context.Context, _ *river.Job[jobs.PhonePruneArgs]) error {
 	_, err := w.s.d.DB.Pool.Exec(ctx, `DELETE FROM phone_inbound_events
-		WHERE (processed_at IS NOT NULL AND processed_at < now() - interval '7 days') OR received_at < now() - interval '30 days'`)
+		WHERE (processed_at IS NOT NULL AND processed_at < now() - make_interval(secs => $1)) OR received_at < now() - interval '30 days'`,
+		eventRetention.Seconds())
 	return err
 }

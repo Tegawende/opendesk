@@ -31,7 +31,7 @@ type PhoneConnection = { id: string; provider: string; name: string; account_nam
   last_event_at: string | null;
   webhook_url?: string;        // admins only: people with the admin role, API keys and AI clients with settings:write
   created_at: string };
-type PhoneLine = { id: string; name: string; provider: string };
+type PhoneLine = { id: string; name: string; provider: string }; // id: the provider's, what call_line conditions compare
 ```
 
 | method | path | role | body → response |
@@ -182,7 +182,7 @@ trigger takes them; another trigger with one is refused):
 | `call_direction` | equals, not_equals | inbound, outbound |
 | `call_missed_reason` | equals, not_equals | the provider's reason, `[a-z0-9_]` (Aircall: `out_of_opening_hours`, `short_abandoned`, `abandoned_in_ivr`, `abandoned_in_classic`, `no_available_agent`, `agents_did_not_answer`) |
 | `call_time` | equals, not_equals | business_hours, outside_business_hours: the call's start against the business hours of the ticket's team, else the workspace's; hours that are off are never outside |
-| `call_line` | equals, not_equals, contains, not_contains | the line's name |
+| `call_line` | equals, not_equals, contains, not_contains | equals and not_equals: the line's id (`PhoneLine.id`, which stays when the line is renamed); contains and not_contains: words of its name |
 | `call_tag` | equals, not_equals, contains, not_contains | the call's tags, like `tag` |
 
 Every other condition and every action works as on other triggers, so "a missed inbound
@@ -258,7 +258,9 @@ Docs: [API reference](https://developers.aircall.io/api-references),
   connection add no limiter keys. Nothing in a payload
   decides the workspace, the ticket or anyone's access: the connection does. The stored
   event and its job are written in one transaction, and the event id (a hash of the body)
-  makes a provider's retry a no-op.
+  makes a provider's retry a no-op. Applied events' ids are kept a week, so an event whose
+  own time (Aircall's `timestamp`) is more than a week old is acknowledged and dropped: a
+  replay of it could no longer be recognized.
 - Provider API clients have a 15-second timeout and do not follow redirects. Their base
   URL is an adapter constant, never user input.
 - Logs carry ids, event names and errors, never numbers, names or call content.

@@ -210,7 +210,17 @@ func ValidateConditions(ctx context.Context, q db.Querier, wid uuid.UUID, cs []C
 			if !exact || !callReason.MatchString(c.Value) {
 				return nil, httpx.Validation("call_missed_reason conditions use equals or not_equals with a reason such as out_of_opening_hours")
 			}
-		case "call_line", "call_tag":
+		case "call_line":
+			// equals and not_equals name a line by its provider id (GET /v1/phone/lines),
+			// contains and not_contains read its name.
+			c.Value = strings.TrimSpace(c.Value)
+			if exact && !lineID.MatchString(c.Value) {
+				return nil, httpx.Validation("call_line conditions with equals or not_equals take a line's id, as GET /v1/phone/lines lists it")
+			}
+			if !exact && (!slices.Contains([]string{"contains", "not_contains"}, c.Op) || c.Value == "") {
+				return nil, httpx.Validation("call_line conditions use equals or not_equals with a line's id, or contains or not_contains with words of its name")
+			}
+		case "call_tag":
 			if !slices.Contains([]string{"equals", "not_equals", "contains", "not_contains"}, c.Op) || strings.TrimSpace(c.Value) == "" {
 				return nil, httpx.Validation(c.Field + " conditions use equals, not_equals, contains or not_contains with a name")
 			}
@@ -227,7 +237,11 @@ func ValidateConditions(ctx context.Context, q db.Querier, wid uuid.UUID, cs []C
 	return out, nil
 }
 
-var callReason = regexp.MustCompile(`^[a-z][a-z0-9_]{0,59}$`)
+var (
+	callReason = regexp.MustCompile(`^[a-z][a-z0-9_]{0,59}$`)
+	// lineID is a provider's id for a line (Aircall: a number's id).
+	lineID = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,60}$`)
+)
 
 // UsesCallFields reports whether conditions read the facts of a call.
 func UsesCallFields(cs []Condition) bool {

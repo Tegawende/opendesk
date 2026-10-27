@@ -792,14 +792,15 @@ function ConditionValue({ c, invalid, onChange }: { c: Condition; invalid: boole
   }
 }
 
-/** call_line: the provider's numbers, with any already in the condition. */
+/** call_line equals: a provider number, kept by its id and shown by its name (an id no longer listed shows as is). */
 function LinePick({ value, invalid, onChange }: { value: string; invalid: boolean; onChange: (v: string) => void }) {
   const { t } = useTranslation("settingsInbox");
   const { data: lines } = useQuery(q.phoneLines());
-  const names = [...new Set([...(lines ?? []).map((l) => l.name), ...(value ? [value] : [])])];
+  const items = (lines ?? []).map((l) => ({ value: l.id, label: l.name }));
+  if (value && !items.some((i) => i.value === value)) items.push({ value, label: value });
   return (
     <SinglePick
-      items={names.map((n) => ({ value: n, label: n }))}
+      items={items}
       value={value}
       onChange={onChange}
       placeholder={t("edit.chooseLine")}
