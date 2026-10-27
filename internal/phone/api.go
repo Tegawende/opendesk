@@ -2,6 +2,7 @@ package phone
 
 import (
 	"context"
+	"crypto/sha256"
 	"net/http"
 	"sort"
 	"strings"
@@ -328,6 +329,7 @@ func (s *Service) Register(api huma.API, r chi.Router) {
 						}
 					}
 				}
+				s.lineCache.Delete(c.ID)
 				tag, err := tx.Exec(ctx, `DELETE FROM phone_connections WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, c.ID)
 				if err != nil {
 					return err
@@ -405,11 +407,7 @@ func (s *Service) lines(ctx context.Context, wid uuid.UUID) ([]PhoneLine, error)
 		if !ok {
 			continue
 		}
-		creds, err := s.credentials(c)
-		if err != nil {
-			return nil, err
-		}
-		list, err := a.Lines(ctx, s.http, creds)
+		list, err := s.providerLines(ctx, a, c)
 		if err != nil {
 			s.d.Log.Info("phone lines not listed", "provider", c.Provider, "connection_id", c.ID, "err", err)
 			continue
@@ -435,6 +433,27 @@ func (s *Service) lines(ctx context.Context, wid uuid.UUID) ([]PhoneLine, error)
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
 	return out, nil
+}
+
+// providerLines is the connection's numbers at the provider, listed at most once every
+// linesTTL per connection and set of credentials.
+func (s *Service) providerLines(ctx context.Context, a provider.Adapter, c PhoneConnection) ([]provider.Line, error) {
+	key := sha256.Sum256(c.credentialsEnc)
+	if v, ok := s.lineCache.Load(c.ID); ok {
+		if e := v.(cachedLines); e.creds == key && time.Since(e.at) < linesTTL {
+			return e.lines, nil
+		}
+	}
+	creds, err := s.credentials(c)
+	if err != nil {
+		return nil, err
+	}
+	list, err := a.Lines(ctx, s.http, creds)
+	if err != nil {
+		return nil, err
+	}
+	s.lineCache.Store(c.ID, cachedLines{creds: key, at: time.Now(), lines: list})
+	return list, nil
 }
 
 // requireAdminUser admits a workspace admin signed in as a person: connecting a phone

@@ -42,7 +42,7 @@ type PhoneLine = { id: string; name: string; provider: string };
 | PATCH | `/v1/phone/connections/{id}` | admin user | `{name?, reuse_days?, assign_answered?, insight_cards?, credentials?}` → `PhoneConnection` |
 | POST | `/v1/phone/connections/{id}/test` | admin user | checks credentials and webhook, registers the webhook again when it is gone or disabled → `PhoneConnection` |
 | DELETE | `/v1/phone/connections/{id}` | admin user | removes opendesk's webhook at the provider, then the connection → 204. Calls already on tickets stay |
-| GET | `/v1/phone/lines` | admin, `settings:read` | → `{data: PhoneLine[]}`: the provider's numbers and the lines calls came in on, for `call_line` conditions |
+| GET | `/v1/phone/lines` | admin, `settings:read` | → `{data: PhoneLine[]}`: the provider's numbers (asked at most every 10 minutes per connection, and again after new credentials) and the lines calls came in on, for `call_line` conditions |
 | POST | `/v1/phone/hooks/{provider}/{connectionId}` | provider | the provider's webhook (Security) |
 
 "Admin user" routes need a person signed in as an admin: connecting a phone system hands

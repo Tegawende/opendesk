@@ -806,3 +806,34 @@ func TestConcurrentTestsReplaceTheWebhookOnce(t *testing.T) {
 		t.Fatalf("webhooks after concurrent tests %+v", now)
 	}
 }
+
+// The provider's numbers are asked at most every ten minutes per connection, and again
+// once the credentials change.
+func TestLinesAreCached(t *testing.T) {
+	h := newHarness(t)
+	numbers := func() int {
+		n := 0
+		for _, r := range h.f.Requests() {
+			if r == "GET /v1/numbers" {
+				n++
+			}
+		}
+		return n
+	}
+	var lines struct {
+		Data []phone.PhoneLine `json:"data"`
+	}
+	for i := 0; i < 3; i++ {
+		h.e.Do("GET", "/v1/phone/lines", h.ws.Admin.As(h.ws), nil).Want(t, 200).JSON(t, &lines)
+	}
+	if numbers() != 1 || len(lines.Data) != 2 {
+		t.Fatalf("numbers asked %d times, lines %+v", numbers(), lines)
+	}
+	h.f.AddAccount("id-1", "token-1b", "LampTwist")
+	h.e.Do("PATCH", "/v1/phone/connections/"+h.conn.ID.String(), h.ws.Admin.As(h.ws),
+		map[string]any{"credentials": map[string]string{"api_id": "id-1", "api_token": "token-1b"}}).Want(t, 200)
+	h.e.Do("GET", "/v1/phone/lines", h.ws.Admin.As(h.ws), nil).Want(t, 200).JSON(t, &lines)
+	if numbers() != 2 {
+		t.Fatalf("new credentials did not list the numbers again: %d", numbers())
+	}
+}

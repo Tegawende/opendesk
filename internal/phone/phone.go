@@ -28,6 +28,20 @@ type Service struct {
 	d        *deps.Deps
 	adapters map[string]provider.Adapter
 	http     *http.Client
+	// lineCache holds each connection's provider numbers for linesTTL (by connection id).
+	lineCache sync.Map
+}
+
+// linesTTL is how long a connection's numbers are reused before the provider is asked
+// again: the automation editor asks for them on every open, and numbers rarely change.
+const linesTTL = 10 * time.Minute
+
+// cachedLines is a connection's numbers as the provider listed them, for the credentials
+// they were listed with (a hash of the sealed credentials, so new ones list again).
+type cachedLines struct {
+	creds [32]byte
+	at    time.Time
+	lines []provider.Line
 }
 
 var services sync.Map
