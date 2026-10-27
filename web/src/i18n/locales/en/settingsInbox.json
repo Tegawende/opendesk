@@ -92,6 +92,14 @@
     "create": "Create view",
     "saved": "View saved",
     "created": "View created",
+    "duplicate": "Duplicate",
+    "duplicateTitle": "Duplicate view",
+    "copyName": "{{name}} (copy)",
+    "copyPersonal": {
+      "everyone": "This copy is yours alone, since only admins create views for everyone.",
+      "team": "This copy is yours alone, since only admins and the leads of {{team}} create its views.",
+      "anyTeam": "This copy is yours alone, since only admins and the team's leads create its views."
+    },
     "clear": "Clear {{field}}",
     "allTickets": "All tickets",
     "filters": {

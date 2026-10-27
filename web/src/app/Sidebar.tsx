@@ -4,7 +4,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, EyeOff, Inbox, Keyboard, Layers, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
+import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, Copy, EyeOff, Inbox, Keyboard, Layers, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -304,6 +304,7 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
   const { data: counts } = useQuery(q.counts());
   const { data: views } = useQuery(q.views());
   const role = useRole();
+  const navigate = useNavigate();
   const { t } = useTranslation("shell");
   // With Collab the member's hidden rows, numbers and menus apply; without it the rows are the classic ones.
   const collab = useCollab();
@@ -392,6 +393,11 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                     badge={{ key: hid.view(v.id), kind: "ticket", sections: ["views"], numbers: nums }}
                     pin={{ kind: "view", id: v.id }}
                     hideId={hid.view(v.id)}
+                    items={
+                      atLeast(role, "agent")
+                        ? [{ label: t("nav.duplicateView"), icon: <Copy />, onSelect: () => void navigate({ to: "/settings/views", search: { duplicate: v.id } }) }]
+                        : undefined
+                    }
                     rail={rail}
                     label={v.name}
                   >

@@ -11,6 +11,7 @@
     "settings": "Settings",
     "manageViews": "Manage views",
     "createView": "Create a view",
+    "duplicateView": "Duplicate",
     "collapse": "Collapse",
     "expand": "Expand sidebar",
     "open": "Open navigation",
