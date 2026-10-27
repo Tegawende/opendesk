@@ -44,7 +44,7 @@ import type { Channel, Priority, Severity, TicketFilters, TicketStatus, View } f
 import { q, qk, upsertInList } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { cn } from "@/lib/cn";
-import { cleanSection, matchSection, MAX_VIEW_SECTION, orderViews, sectionKey, viewSections } from "@/lib/viewSections";
+import { cleanSection, clipSection, groupViews, matchSection, orderViews, sectionKey, sectionProblem, viewSections, type ViewEntry } from "@/lib/viewSections";
 
 const chip =
   "inline-flex h-5 max-w-[220px] shrink-0 items-center gap-1 rounded-sm bg-sunken px-1.5 text-[11px] text-fg-2 ring-1 ring-inset ring-line-soft [&_svg]:size-3 [&_svg]:shrink-0";
@@ -202,6 +202,9 @@ export default function Views() {
 
   // In the sidebar's order: a section's views together, at its first view's place.
   const sorted = useMemo(() => orderViews(views ?? []), [views]);
+  // What drags: a view on its own or a whole section; a section's views drag inside it.
+  const entries = useMemo(() => groupViews(views ?? []).map((e) => ({ id: e.kind === "view" ? e.view.id : `section:${e.key}`, entry: e })), [views]);
+  const idsOf = (e: ViewEntry) => (e.kind === "view" ? [e.view.id] : e.views.map((v) => v.id));
   const { teams } = useTeams();
   const teamById = new Map(teams.map((x) => [x.id, x]));
 
@@ -255,11 +258,41 @@ export default function Views() {
           />
         ) : (
           <SortableList
-            items={sorted}
+            items={entries}
             disabled={!canEdit}
-            onReorder={(ids) => reorder.mutate(ids)}
-            handleLabel={(v) => t("views.reorderAria", { name: v.name })}
-            renderRow={(v, handle) => (
+            onReorder={(ids) => reorder.mutate(ids.flatMap((id) => idsOf(entries.find((x) => x.id === id)!.entry)))}
+            handleLabel={({ entry: e }) => (e.kind === "view" ? t("views.reorderAria", { name: e.view.name }) : t("views.reorderSectionAria", { name: e.name }))}
+            renderRow={({ entry: e }, handle) =>
+              e.kind === "view" ? (
+                viewRow(e.view, handle)
+              ) : (
+                <div role="group" aria-label={t("views.inSection", { name: e.name })}>
+                  <div className="group relative flex h-9 items-center gap-2 border-b border-line-soft bg-sunken/60 px-4 text-[12.5px] font-medium text-fg-2">
+                    {handle}
+                    <FolderClosed className="size-3.5 shrink-0 text-fg-3" />
+                    <span className="min-w-0 truncate">{e.name}</span>
+                    <span className="mono text-[11px] font-normal text-fg-4">{e.views.length}</span>
+                  </div>
+                  <SortableList
+                    items={e.views}
+                    disabled={!canEdit}
+                    // Inside a section only: the section keeps its place among the others.
+                    onReorder={(ids) => reorder.mutate(entries.flatMap((x) => (x.entry === e ? ids : idsOf(x.entry))))}
+                    handleLabel={(v) => t("views.reorderAria", { name: v.name })}
+                    renderRow={(v, h) => viewRow(v, h)}
+                  />
+                </div>
+              )
+            }
+          />
+        )}
+      </Section>
+      {editing && <ViewDrawer view={editing === "new" ? null : editing} nextPosition={sorted.length} onClose={() => setEditing(null)} />}
+    </SettingsPage>
+  );
+
+  function viewRow(v: View, handle: ReactNode) {
+    return (
                 <ListRow onClick={canEdit ? () => setEditing(v) : undefined} className="items-start py-3">
                   {handle}
                   <IconTile tone={v.shared ? "blue" : "gray"} className="mt-0.5">
@@ -277,12 +310,6 @@ export default function Views() {
                             {v.shared ? t("views.shared") : t("views.personal")}
                           </span>
                         </Tooltip>
-                      )}
-                      {cleanSection(v.section) && (
-                        <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-fg-4" title={t("views.inSection", { name: cleanSection(v.section) })}>
-                          <FolderClosed className="size-3 shrink-0" />
-                          <span className="truncate">{cleanSection(v.section)}</span>
-                        </span>
                       )}
                     </div>
                     <FilterChips f={v.filters} />
@@ -351,13 +378,8 @@ export default function Views() {
                     </div>
                   )}
                 </ListRow>
-            )}
-          />
-        )}
-      </Section>
-      {editing && <ViewDrawer view={editing === "new" ? null : editing} nextPosition={sorted.length} onClose={() => setEditing(null)} />}
-    </SettingsPage>
-  );
+    );
+  }
 }
 
 function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPosition: number; onClose: () => void }) {
@@ -499,7 +521,12 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
                 value={section}
                 onSelect={setSection}
                 // A typed name joins the section it names in any case.
-                onCreate={(typed) => setSection(matchSection(cleanSection(typed).slice(0, MAX_VIEW_SECTION), inUse))}
+                onCreate={(typed) => {
+                  // The API's rule for names: no angle brackets or control characters, at most 60 characters.
+                  if (sectionProblem(typed)) return setError(t("views.sectionChars"));
+                  setError(null);
+                  setSection(matchSection(clipSection(typed), inUse));
+                }}
                 createLabel={t("views.newSection")}
                 placeholder={t("views.sectionSearch")}
                 emptyText={t("views.sectionEmpty")}

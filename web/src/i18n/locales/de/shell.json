@@ -12,6 +12,7 @@
     "manageViews": "Ansichten verwalten",
     "createView": "Ansicht erstellen",
     "viewSection": "Ansichten im Abschnitt {{name}}",
+    "viewSectionCurrent": "enthält die geöffnete Ansicht",
     "collapse": "Einklappen",
     "expand": "Seitenleiste ausklappen",
     "open": "Navigation öffnen",

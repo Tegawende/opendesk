@@ -584,12 +584,14 @@ export function registerResources() {
   });
 }
 
-/** A view's section as the API keeps it: spaces collapsed, at most 60 characters, blank for none. */
+/** A view's section as the API keeps it: spaces collapsed, at most 60 characters, no angle brackets or control characters, blank for none. */
 function viewSection(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   if (typeof v !== "string") throw invalid("section must be a string");
   const name = v.split(/\s+/).filter(Boolean).join(" ");
   if ([...name].length > 60) throw invalid("section is too long");
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f-\u009f<>]/.test(name)) throw invalid("section contains characters that are not allowed");
   return name || null;
 }
 

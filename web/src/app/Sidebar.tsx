@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, EyeOff, Inbox, Keyboard, Layers, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
-import { Fragment, lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { Fragment, lazy, Suspense, useEffect, useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ChecklistMini } from "@/components/onboarding/Checklist";
 import { useUrgentChats, useWaitingFor } from "@/components/tickets/useUrgentChats";
@@ -321,6 +321,7 @@ function ViewList({ views, rail, row, count, waiting }: {
   }
   // The open view, so a folded section that holds it reads as current.
   const openView = useRouterState({ select: (s) => { const p = s.location.pathname.split("/").filter(Boolean); return p[0] === "views" ? p[1] : undefined; } });
+  const idBase = useId();
   const toggle = (key: string) => {
     const next = new Set(folded);
     if (!next.delete(key)) next.add(key);
@@ -333,6 +334,7 @@ function ViewList({ views, rail, row, count, waiting }: {
     const nums = e.views.map(count).filter((n): n is number => n !== undefined);
     const sum = nums.length ? nums.reduce((a, b) => a + b, 0) : undefined;
     const current = shut && e.views.some((v) => v.id === openView);
+    const listId = `${idBase}-section-${i}`;
     return (
       <div key={`section:${e.key}`} role="group" aria-label={t("nav.viewSection", { name: e.name })} className="flex flex-col gap-px">
         {rail ? (
@@ -341,18 +343,22 @@ function ViewList({ views, rail, row, count, waiting }: {
           <button
             type="button"
             aria-expanded={!shut}
+            aria-controls={listId}
             onClick={() => toggle(e.key)}
             title={e.name}
             className={cn(rowBase, rowShape(rail), rowIdle, current && "font-medium text-fg")}
           >
             <ChevronRight className={cn("transition-transform duration-150 motion-reduce:transition-none", !shut && "rotate-90")} />
             <Label rail={rail}>{e.name}</Label>
+            {current && <span className="sr-only">{t("nav.viewSectionCurrent")}</span>}
             {/* Folded away: what its views would show, here. */}
             {shut && <WaitingBadge n={e.views.reduce((a, v) => a + waiting(v), 0)} rail={rail} />}
             {shut && <Count n={sum} rail={rail} />}
           </button>
         )}
-        {!shut && e.views.map((v) => <Fragment key={v.id}>{row(v, !rail)}</Fragment>)}
+        <div id={listId} className="flex flex-col gap-px">
+          {!shut && e.views.map((v) => <Fragment key={v.id}>{row(v, !rail)}</Fragment>)}
+        </div>
       </div>
     );
   });

@@ -12,6 +12,7 @@
     "manageViews": "Manage views",
     "createView": "Create a view",
     "viewSection": "Views in {{name}}",
+    "viewSectionCurrent": "contains the open view",
     "collapse": "Collapse",
     "expand": "Expand sidebar",
     "open": "Open navigation",

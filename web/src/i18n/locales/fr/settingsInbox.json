@@ -87,6 +87,8 @@
     "sectionSearch": "Chercher ou nommer une section",
     "sectionEmpty": "Aucune section ne correspond",
     "inSection": "Dans la section {{name}}",
+    "reorderSectionAria": "Réorganiser la section {{name}}. Maintenez Alt et appuyez sur les touches fléchées pour la déplacer avec ses vues.",
+    "sectionChars": "Un nom de section ne peut pas contenir < ou >.",
     "needName": "Donnez un nom à la vue.",
     "visibleTitle": "Visible par tout le monde",
     "audience": {

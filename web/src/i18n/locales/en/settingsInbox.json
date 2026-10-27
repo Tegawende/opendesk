@@ -85,6 +85,8 @@
     "sectionSearch": "Find or name a section",
     "sectionEmpty": "No section matches",
     "inSection": "In section {{name}}",
+    "reorderSectionAria": "Reorder the {{name}} section. Hold Alt and press the arrow keys to move it with its views.",
+    "sectionChars": "Section names can't contain < or >.",
     "needName": "Give the view a name.",
     "visibleTitle": "Visible to everyone",
     "audience": {

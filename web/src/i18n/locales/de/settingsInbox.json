@@ -85,6 +85,8 @@
     "sectionSearch": "Abschnitt suchen oder benennen",
     "sectionEmpty": "Kein Abschnitt passt",
     "inSection": "Im Abschnitt {{name}}",
+    "reorderSectionAria": "Abschnitt {{name}} neu anordnen. Halte Alt gedrückt und bewege ihn mit seinen Ansichten über die Pfeiltasten.",
+    "sectionChars": "Ein Abschnittsname darf weder < noch > enthalten.",
     "needName": "Gib der Ansicht einen Namen.",
     "visibleTitle": "Für alle sichtbar",
     "audience": {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { View } from "@/lib/api/types";
-import { cleanSection, groupViews, matchSection, orderViews, readFolded, viewSections, writeFolded } from "./viewSections";
+import { cleanSection, clipSection, groupViews, matchSection, orderViews, readFolded, sectionProblem, viewSections, writeFolded } from "./viewSections";
 
 const view = (name: string, position: number, section?: string | null): View => ({ id: name, name, shared: true, filters: {}, position, section });
 const names = (vs: View[]) => vs.map((v) => v.name);
@@ -56,6 +56,16 @@ describe("section names", () => {
     expect(cleanSection("  After \t sales ")).toBe("After sales");
     expect(cleanSection("   ")).toBe("");
     expect(cleanSection(null)).toBe("");
+  });
+  it("cuts at 60 characters as the API counts them", () => {
+    expect(clipSection(" a ".repeat(40))).toHaveLength(59);
+    expect([...clipSection("😀".repeat(70))]).toHaveLength(60);
+  });
+  it("refuses what the API refuses: angle brackets and control characters", () => {
+    expect(sectionProblem("<b>x</b>")).toBe(true);
+    expect(sectionProblem("a\u0007b")).toBe(true);
+    expect(sectionProblem("After\tsales\n")).toBe(false);
+    expect(sectionProblem("Billing & plans")).toBe(false);
   });
   it("joins the section a typed name names in any case", () => {
     expect(matchSection("after SALES ", ["Escalations", "After sales"])).toBe("After sales");

@@ -16,6 +16,16 @@ export type ViewEntry =
 /** A section's name as typed: spaces collapsed, blank for none. */
 export const cleanSection = (s: string | null | undefined) => (s ?? "").split(/\s+/).filter(Boolean).join(" ");
 
+/** A typed section cut to what the API keeps: at most 60 characters, counted as the API counts them. */
+export const clipSection = (s: string) => cleanSection([...cleanSection(s)].slice(0, MAX_VIEW_SECTION).join(""));
+
+/** Characters the API refuses in a name (displayname rules): control characters and angle brackets. */
+// eslint-disable-next-line no-control-regex
+const REFUSED = /[\u0000-\u001f\u007f-\u009f<>]/;
+
+/** True when the API would refuse the section's characters (spaces aside, which collapse). */
+export const sectionProblem = (s: string) => REFUSED.test(cleanSection(s));
+
 /** What views of one section share: the name in any case. */
 export const sectionKey = (s: string) => cleanSection(s).toLocaleLowerCase();
 
