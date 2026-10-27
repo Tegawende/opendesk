@@ -583,6 +583,9 @@ Tools (offered only when the key has the scope):
 | `create_wiki_page` | `wiki:write` | a page (`body` markdown), optionally under `parent` |
 | `update_wiki_page` | `wiki:write` | a new title or text (`body` markdown replaces it); with `version`, a page changed since is refused (`page_changed`). Marked destructive |
 | `get_report` | `tickets:read` + `settings:read` | the overview report for a range |
+| `list_collab_conversations` | `collab:draft` (API keys only) | the Collab conversations of the key's creator (box, account, text), at most 50; reading changes no read state |
+| `get_collab_conversation` | `collab:draft` (API keys only) | a conversation with its messages and internal comments, as the creator sees it |
+| `draft_collab_reply` | `collab:draft` (API keys only) | saves a reply (or reply-all) draft to a message, `body` markdown, labelled "AI draft by" the key's name; never sends (contracts/collab.md "AI drafts") |
 
 Tool annotations mark read-only and destructive tools. Output is JSON text. No `Mcp-Session-Id` is
 issued. The server checks `Origin` (browser requests must come from
@@ -639,10 +642,11 @@ token, secret or verifier.
   narrow `scope`, never widen it. Connecting the same client to the same workspace again replaces
   the earlier grant.
 - **Scopes**: `tickets:read`, `tickets:write`, `contacts:read`, `contacts:write`, `kb:read`,
-  `kb:write`, `wiki:read`, `wiki:write`, `settings:read` (never `settings:write` or `realtime`). On every MCP request the
-  grant is loaded: the tools offered and the API checks use the user's **current** role and the
-  granted scopes together (viewers read only; agents and up also write tickets, contacts,
-  articles and wiki pages). Account routes and routes API keys may not call refuse a grant.
+  `kb:write`, `wiki:read`, `wiki:write`, `settings:read` (never `settings:write`, `realtime` or,
+  for now, `collab:draft`). On every MCP request the grant is loaded: the tools offered and the
+  API checks use the user's **current** role and the granted scopes together (viewers read only;
+  agents and up also write tickets, contacts, articles and wiki pages). Account routes and routes
+  API keys may not call refuse a grant.
 - **Revocation**: the user (or an admin) disconnects the client in Settings > AI clients, the client
   calls `/oauth/revoke` with its refresh or access token, the member is removed from the
   workspace, or the user's password changes or is reset (every grant of the user ends, like their

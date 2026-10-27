@@ -18,6 +18,7 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/deps"
 	"github.com/useopendesk/opendesk/internal/email"
 	"github.com/useopendesk/opendesk/internal/jobs"
@@ -173,3 +174,41 @@ func (s *service) member(ctx context.Context, min auth.Role) (*auth.Principal, e
 	}
 	return p, nil
 }
+
+// requireDrafter is the gate of the few routes an AI credential may also call (contracts/
+// collab.md "AI drafts"): listing and reading conversations and saving its own drafts.
+// A person passes as with require. An API key with collab:draft acts as the member who
+// created it, with their role now: it sees exactly what they see, and stops working the
+// moment they leave the workspace, are suspended or fall below min. OAuth clients and
+// the assistant stay refused. Every other Collab route keeps require, so a credential
+// never sends, changes read or folder state, assigns, shares or comments.
+func (s *service) requireDrafter(ctx context.Context, min auth.Role) (*auth.Principal, error) {
+	p := auth.FromContext(ctx)
+	if p == nil || p.Kind != auth.KindAPIKey {
+		return s.require(ctx, min)
+	}
+	if _, err := auth.RequireWorkspace(ctx, min, auth.ScopeCollabDraft); err != nil {
+		return nil, err
+	}
+	var member uuid.UUID
+	var role string
+	err := s.d.DB.Pool.QueryRow(ctx, `SELECT m.user_id, m.role FROM api_keys k
+		JOIN members m ON m.workspace_id = k.workspace_id AND m.user_id = k.created_by
+		JOIN users u ON u.id = m.user_id AND u.suspended_at IS NULL
+		WHERE k.id = $1 AND k.workspace_id = $2`, p.APIKeyID, p.WorkspaceID).Scan(&member, &role)
+	if db.IsNotFound(err) || (err == nil && !auth.Role(role).AtLeast(min)) {
+		return nil, auth.ErrForbidden
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := s.d.Plan.RequireCollab(ctx, s.d.DB.Pool, p.WorkspaceID); err != nil {
+		return nil, err
+	}
+	// The member, reached through the key: Collab's visibility follows UserID and Role.
+	return &auth.Principal{Kind: auth.KindUser, UserID: member, Role: auth.Role(role), WorkspaceID: p.WorkspaceID,
+		APIKeyID: p.APIKeyID, Scopes: p.Scopes, IP: p.IP, UserAgent: p.UserAgent, ResolvedAt: p.ResolvedAt}, nil
+}
+
+// viaAIClient reports a request an AI credential makes as a member (requireDrafter).
+func viaAIClient(p *auth.Principal) bool { return p.Kind == auth.KindUser && p.APIKeyID != uuid.Nil }
