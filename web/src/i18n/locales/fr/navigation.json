@@ -22,6 +22,8 @@
     "companies": "Entreprises",
     "knowledgeBase": "Base de connaissances",
     "article": "Article",
+    "wiki": "Wiki",
+    "wikiPage": "Page du wiki",
     "reports": "Rapports",
     "settings": "Paramètres",
     "brand": "Marque",
@@ -72,6 +74,9 @@
     "agentPlayground": "Espace d’essai de l’agent",
     "agentTests": "Tests de l’agent",
     "newArticle": "Nouvel article",
+    "changelog": "Journal des modifications",
+    "changelogEntry": "Mise à jour",
+    "newUpdate": "Nouvelle mise à jour",
     "myTeams": "Mes équipes"
   },
   "folders": {
@@ -140,6 +145,8 @@
     "noResultsHelp": "Essayez un autre mot, un numéro de ticket ou une adresse e-mail.",
     "tickets": "Tickets",
     "articles": "Articles",
+    "wikiPages": "Wiki",
+    "newWikiPage": "Nouvelle page du wiki",
     "thisTicket": "Ce ticket",
     "goTo": "Aller à",
     "actions": "Actions",

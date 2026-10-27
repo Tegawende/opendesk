@@ -4,35 +4,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-  BarChart3,
-  BookOpen,
-  Check,
-  ChevronRight,
-  ChevronsUpDown,
-  CircleCheck,
-  CircleDashed,
-  Clock,
-  Inbox,
-  Keyboard,
-  EyeOff,
-  Layers,
-  Lock,
-  LogOut,
-  Monitor,
-  Moon,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Plus,
-  Server,
-  Settings,
-  ShieldAlert,
-  SlidersHorizontal,
-  Sun,
-  User,
-  UserPlus,
-  Users,
-} from "lucide-react";
+import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, EyeOff, Inbox, Keyboard, Layers, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -468,6 +440,12 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
             <Link to="/kb" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.kb") : undefined}>{withPill(<>
               <BookOpen />
               <Label rail={rail}>{t("nav.kb")}</Label>
+            </>)}</Link>
+          </NavTip>
+          <NavTip rail={rail} label={t("nav.wiki")}>
+            <Link to="/wiki" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.wiki") : undefined}>{withPill(<>
+              <NotebookText />
+              <Label rail={rail}>{t("nav.wiki")}</Label>
             </>)}</Link>
           </NavTip>
           <NavTip rail={rail} label={t("nav.reports")}>

@@ -4,9 +4,12 @@
 
 import { infiniteQueryOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import { scopeWorkspace } from "./api/client";
-import { api, rows, type CollabThreadQuery, type TicketListQuery } from "./api/endpoints";
+import { api, rows, type ChangelogListQuery, type CollabThreadQuery, type TicketListQuery } from "./api/endpoints";
 import type { Page, ReportsQuery, ReportsRange, SpacesResponse } from "./api/types";
 import { normalizeSpace, normalizeSpaces } from "./spaces/model";
+
+/** The changelog list's filters, as its key holds them. */
+export type ChangelogFilters = Omit<ChangelogListQuery, "limit" | "cursor">;
 
 // Workspace-owned keys start with `ws:<workspace id>`: the cache holds several
 // workspaces at once (contracts/api.md "Several workspaces") and a key of
@@ -192,7 +195,23 @@ export const qk = {
   },
   kbArticles: (q: { collection_id?: string; status?: string; q?: string; for_brand_id?: string }) => w(["kb", "articles", q] as const),
   kbArticle: (id: string) => w(["kb", "article", id] as const),
+  get changelogEntryLists() {
+    return w(["changelog", "entries"] as const);
+  },
+  changelogEntries: (q: ChangelogFilters) => w(["changelog", "entries", q] as const),
+  changelogEntry: (id: string) => w(["changelog", "entry", id] as const),
+  get changelogCategories() {
+    return w(["changelog", "categories"] as const);
+  },
   search: (q: string) => w(["search", q] as const),
+  /** The wiki's tree: every page without its body (contracts/wiki.md). */
+  get wikiTree() {
+    return w(["wiki", "tree"] as const);
+  },
+  wikiPage: (id: string) => w(["wiki", "page", id] as const),
+  wikiRevisions: (id: string) => w(["wiki", "revisions", id] as const),
+  wikiRevision: (id: string, rid: string) => w(["wiki", "revision", id, rid] as const),
+  wikiSearch: (q: string) => w(["wiki", "search", q] as const),
   reports: (r: ReportsQuery) => w(["reports", r] as const),
   reportAgents: (r: ReportsQuery) => w(["reports", "agents", r] as const),
   get widgetSettings() {
@@ -416,6 +435,21 @@ export const q = {
   kbArticles: (query: { collection_id?: string; status?: "draft" | "published"; q?: string; for_brand_id?: string }) =>
     list(qk.kbArticles(query), () => api.kb.articles.search({ ...query, limit: 100 })),
   kbArticle: (id: string) => queryOptions({ queryKey: qk.kbArticle(id), queryFn: () => api.kb.articles.get(id) }),
+  changelogEntries: (query: ChangelogFilters) =>
+    infiniteQueryOptions({
+      queryKey: qk.changelogEntries(query),
+      queryFn: ({ pageParam }) => api.changelog.entries.search({ ...query, limit: 50, cursor: pageParam }),
+      initialPageParam: null as string | null,
+      getNextPageParam: (last) => last.next_cursor,
+    }),
+  changelogEntry: (id: string) => queryOptions({ queryKey: qk.changelogEntry(id), queryFn: () => api.changelog.entries.get(id) }),
+  changelogCategories: () => list(qk.changelogCategories, () => api.changelog.categories()),
+  wikiTree: () => list(qk.wikiTree, () => api.wiki.tree()),
+  wikiPage: (id: string) => queryOptions({ queryKey: qk.wikiPage(id), queryFn: () => api.wiki.get(id) }),
+  wikiRevisions: (id: string) => list(qk.wikiRevisions(id), () => api.wiki.revisions(id)),
+  wikiRevision: (id: string, rid: string) => queryOptions({ queryKey: qk.wikiRevision(id, rid), queryFn: () => api.wiki.revision(id, rid), staleTime: Infinity }),
+  wikiSearch: (term: string) =>
+    queryOptions({ queryKey: qk.wikiSearch(term), queryFn: async () => (await api.wiki.search(term)).data, enabled: term.trim().length > 0, staleTime: 5_000 }),
   search: (term: string) =>
     queryOptions({ queryKey: qk.search(term), queryFn: () => api.search(term), enabled: term.trim().length > 1, staleTime: 10_000 }),
   reports: (r: ReportsQuery) => queryOptions({ queryKey: qk.reports(r), queryFn: () => api.reports.overview(r) }),

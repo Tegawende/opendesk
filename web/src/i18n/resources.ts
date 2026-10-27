@@ -30,8 +30,9 @@ import settingsTeams from "./locales/en/settingsTeams.json";
 import setup from "./locales/en/setup.json";
 import shell from "./locales/en/shell.json";
 import spaces from "./locales/en/spaces.json";
+import wiki from "./locales/en/wiki.json";
 import workspaces from "./locales/en/workspaces.json";
 
-export const en = { common, billing, collab, ai, agent, agentQuality, bots, aiSetup, aiTicket, assistant, public: pub, shell, settings, settingsInbox, settingsDev, settingsChannels, settingsTeams, emailDesign, contacts, kb, reports, inbox, indicators, navigation, auth, ui, imports, setup, spaces, workspaces } as const;
-export const NAMESPACES = ["common", "billing", "collab", "ai", "agent", "agentQuality", "bots", "aiSetup", "aiTicket", "assistant", "public", "shell", "settings", "settingsInbox", "settingsDev", "settingsChannels", "settingsTeams", "emailDesign", "contacts", "kb", "reports", "inbox", "indicators", "navigation", "auth", "ui", "imports", "setup", "spaces", "workspaces"] as const;
+export const en = { common, billing, collab, ai, agent, agentQuality, bots, aiSetup, aiTicket, assistant, public: pub, shell, settings, settingsInbox, settingsDev, settingsChannels, settingsTeams, emailDesign, contacts, kb, reports, inbox, indicators, navigation, auth, ui, imports, setup, spaces, wiki, workspaces } as const;
+export const NAMESPACES = ["common", "billing", "collab", "ai", "agent", "agentQuality", "bots", "aiSetup", "aiTicket", "assistant", "public", "shell", "settings", "settingsInbox", "settingsDev", "settingsChannels", "settingsTeams", "emailDesign", "contacts", "kb", "reports", "inbox", "indicators", "navigation", "auth", "ui", "imports", "setup", "spaces", "wiki", "workspaces"] as const;
 export type Namespace = (typeof NAMESPACES)[number];

@@ -42,6 +42,30 @@ export type TicketListQuery = ListQuery & {
   fields?: T.FieldFilter[];
 };
 
+/** The changelog list's filters (contracts/api.md "Changelog"). */
+export type ChangelogListQuery = ListQuery & {
+  /** published: live now; scheduled: published with a future date. */
+  status?: "draft" | "published" | "scheduled";
+  category?: string;
+  q?: string;
+  /** A brand's own entries, or "none" for those of every brand. */
+  brand_id?: string;
+  /** What that brand's help center shows: its own entries and those of every brand. */
+  for_brand_id?: string;
+};
+
+/** A changelog write. On PATCH, `published_at: null` dates it when it is next published and `brand_id: null` is every brand. */
+export type ChangelogEntryBody = {
+  title: string;
+  slug?: string;
+  body_html?: string;
+  excerpt?: string;
+  categories?: string[];
+  status?: T.ChangelogEntry["status"];
+  published_at?: string | null;
+  brand_id?: string | null;
+};
+
 export type TicketBulkQuery = Omit<TicketListQuery, "limit" | "cursor" | "sort" | "order">;
 
 /** Flattens custom field filters into `field.<key>[<op>]` query parameters. */
@@ -546,6 +570,26 @@ export const api = {
       search: (q: ListQuery & { collection_id?: string; status?: T.KbArticle["status"]; q?: string; for_brand_id?: string }) =>
         http.get<T.Page<T.KbArticle>>("/v1/kb/articles", { query: q }),
     },
+  },
+  changelog: {
+    entries: {
+      ...crud<T.ChangelogEntry, ChangelogEntryBody>("/v1/changelog/entries"),
+      search: (q: ChangelogListQuery) => http.get<T.Page<T.ChangelogEntry>>("/v1/changelog/entries", { query: q }),
+    },
+    categories: () => http.get<T.ChangelogCategory[]>("/v1/changelog/categories"),
+  },
+  wiki: {
+    tree: () => http.get<T.Page<T.WikiNode>>("/v1/wiki/pages"),
+    get: (id: string) => http.get<T.WikiPage>(`/v1/wiki/pages/${id}`),
+    create: (b: { parent_id?: string | null; title?: string; icon?: string; body_html?: string; position?: number }) => http.create<T.WikiPage>("/v1/wiki/pages", b),
+    /** `keepalive` lets a save started as the page closes finish (contracts/wiki.md "Editing together"). */
+    update: (id: string, b: T.WikiPagePatch, opts?: { keepalive?: boolean }) => http.patch<T.WikiPage>(`/v1/wiki/pages/${id}`, b, opts),
+    move: (id: string, b: { parent_id: string | null; position: number }) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/move`, b),
+    remove: (id: string) => http.del(`/v1/wiki/pages/${id}`),
+    revisions: (id: string) => http.get<T.Page<T.WikiRevision>>(`/v1/wiki/pages/${id}/revisions`),
+    revision: (id: string, rid: string) => http.get<T.WikiRevision>(`/v1/wiki/pages/${id}/revisions/${rid}`),
+    restore: (id: string, rid: string) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/revisions/${rid}/restore`, {}),
+    search: (q: string, limit = 20) => http.get<T.Page<T.WikiSearchHit>>("/v1/wiki/search", { query: { q, limit } }),
   },
   search: (q: string) => http.get<T.SearchResults>("/v1/search", { query: { q } }),
   reports: {

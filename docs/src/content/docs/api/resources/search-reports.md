@@ -1,11 +1,11 @@
 ---
 title: Search and reports
-description: Search across tickets, contacts and articles, and read the reports overview and the agents report.
+description: Search across tickets, contacts, articles and wiki pages, and read the reports overview and the agents report.
 ---
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/v1/search?q=` | Top tickets, contacts and articles |
+| `GET` | `/v1/search?q=` | Top tickets, contacts, articles and wiki pages |
 | `GET` | `/v1/reports/overview?from=&to=` | Metrics for a date range |
 | `GET` | `/v1/reports/agents?from=&to=` | Each agent's work for a date range |
 
@@ -16,10 +16,10 @@ curl "https://api.opendesk.sh/v1/search?q=refund" -H "Authorization: Bearer od_l
 ```
 
 ```json
-{ "tickets": [ ... ], "contacts": [ ... ], "articles": [ ... ] }
+{ "tickets": [ ... ], "contacts": [ ... ], "articles": [ ... ], "wiki_pages": [ ... ] }
 ```
 
-Up to five of each. For more tickets, use `GET /v1/tickets?q=`.
+Up to five of each, of the kinds the key's scopes can read. For more tickets, use `GET /v1/tickets?q=`; for more wiki pages, [`GET /v1/wiki/search?q=`](/api/resources/wiki/).
 
 ## Reports overview
 
