@@ -11,7 +11,6 @@ import type { Member, SavedReply } from "@/lib/api/types";
 import { q } from "@/lib/queries";
 import { cn } from "@/lib/cn";
 import { useHotkeys } from "@/lib/hotkeys";
-import { atLeast, useRole } from "@/lib/session";
 import { useDocumentTitle } from "@/app/RootLayout";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -24,8 +23,7 @@ import { useNewTicket } from "@/components/tickets/useNewTicket";
 import { isDirty, newTicketDrafts } from "@/components/tickets/newTicket";
 import { NewTicketFrom, NewTicketKind, NewTicketTo } from "@/components/tickets/NewTicketFields";
 import { NewTicketProperties } from "@/components/tickets/NewTicketProperties";
-import { EmailChips } from "@/components/tickets/detail/Composer";
-import { AttachButton, SavedReplyButton, UploadChip, uploadFiles } from "@/components/tickets/detail/composerParts";
+import { AttachButton, EmailChips, SavedReplyButton, UploadChip, uploadFiles } from "@/components/tickets/detail/composerParts";
 import { mentionExtension, savedReplyExtension, SuggestionPopup } from "@/components/tickets/detail/suggestions";
 import { readPanel, savePanel } from "@/components/tickets/detail/panel";
 import type { Upload } from "@/components/tickets/detail/outbox";
@@ -33,7 +31,6 @@ import type { Upload } from "@/components/tickets/detail/outbox";
 export default function NewTicketPage() {
   const { t: tr } = useTranslation("inbox");
   const { t: indicatorText } = useTranslation("indicators");
-  const role = useRole();
   const navigate = useNavigate();
   const router = useRouter();
   const canGoBack = useCanGoBack();
@@ -49,20 +46,15 @@ export default function NewTicketPage() {
   const recipient = draft.to?.contact?.email ?? draft.to?.email;
   useDocumentTitle(tr("newTicket.title"));
 
-  // Viewers read only: there is nothing to write here.
-  useEffect(() => {
-    if (!atLeast(role, "agent")) void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "unassigned", ticketId: undefined }, replace: true });
-  }, [role]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Leaving with nothing written drops the defaults picked here; a draft stays for its next opening.
   const uploadsRef = useRef(uploads);
   uploadsRef.current = uploads;
   useEffect(
     () => () => {
       uploadsRef.current.forEach((u) => u.preview && URL.revokeObjectURL(u.preview));
-      if (!isDirty(newTicketDrafts.get(s.wid))) newTicketDrafts.clear(s.wid);
+      if (!isDirty(newTicketDrafts.get(s.key))) newTicketDrafts.clear(s.key);
     },
-    [s.wid],
+    [s.key],
   );
 
   const dirty = s.dirty || uploads.length > 0;

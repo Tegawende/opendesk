@@ -16,7 +16,7 @@ import { RootLayout } from "./app/RootLayout";
 import { AppLayout } from "./app/AppLayout";
 import { AuthLayout } from "./app/AuthLayout";
 import { NotFound, RouteError, RoutePending } from "./app/RouteStates";
-import { bootSession, openLinkedWorkspace } from "./lib/session";
+import { atLeast, bootSession, currentMembership, openLinkedWorkspace } from "./lib/session";
 import { stripWorkspaceParam, workspaceParam } from "./lib/workspaceParam";
 import { queryClient } from "./lib/queryClient";
 import { q } from "./lib/queries";
@@ -364,6 +364,11 @@ function prefetchTicket(qc: QueryClient, id: string) {
 const newTicketRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/tickets/new",
+  // Viewers read only: there is nothing to write here.
+  beforeLoad: () => {
+    if (!atLeast(currentMembership()?.role ?? "viewer", "agent"))
+      throw redirect({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "unassigned", ticketId: undefined }, replace: true });
+  },
   loader: ({ context }) => {
     const qc = context.queryClient;
     prefetchInboxShared(qc);

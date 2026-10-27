@@ -1,35 +1,36 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { Contact } from "@/lib/api/types";
-import { createTicketBody, emptyNewTicket, isDirty, newTicketDrafts, newTicketProblem, type NewTicketDraft } from "./newTicket";
+import { createTicketBody, draftKey, emptyNewTicket, isDirty, newTicketDrafts, newTicketProblem, pageOnlyCount, type NewTicketDraft } from "./newTicket";
 
 const contact = { id: "c1", name: "Ada Lovelace", email: "ada@example.com" } as Contact;
 const draft = (over: Partial<NewTicketDraft> = {}): NewTicketDraft => ({ ...emptyNewTicket, ...over });
 // What goes over the wire: keys left undefined are not sent.
 const wire = (v: unknown) => JSON.parse(JSON.stringify(v));
+const mine = draftKey("u1", "w1");
+const otherWorkspace = draftKey("u1", "w2");
+const otherPerson = draftKey("u2", "w1");
 
 describe("the new ticket draft", () => {
-  afterEach(() => {
-    newTicketDrafts.clear("w1");
-    newTicketDrafts.clear("w2");
-  });
+  afterEach(() => [mine, otherWorkspace, otherPerson].forEach(newTicketDrafts.clear));
 
   it("hands what the dialog wrote to the page as is", () => {
-    newTicketDrafts.patch("w1", { to: { contact }, subject: "Lamp flickers" });
-    newTicketDrafts.patch("w1", { body: "<p>Hello</p>", kind: "note", priority: "high", assignee: null, team: "t1", mailbox: "m1" });
+    newTicketDrafts.patch(mine, { to: { contact }, subject: "Lamp flickers" });
+    newTicketDrafts.patch(mine, { body: "<p>Hello</p>", kind: "note", priority: "high", assignee: null, team: "t1", mailbox: "m1" });
     // The page reads the same draft the dialog left.
-    expect(newTicketDrafts.get("w1")).toEqual(
+    expect(newTicketDrafts.get(mine)).toEqual(
       draft({ to: { contact }, subject: "Lamp flickers", body: "<p>Hello</p>", kind: "note", priority: "high", assignee: null, team: "t1", mailbox: "m1" }),
     );
-    // One draft per workspace.
-    expect(newTicketDrafts.get("w2")).toEqual(emptyNewTicket);
+    // One draft per person and workspace: another account on this browser never gets it.
+    expect(newTicketDrafts.get(otherWorkspace)).toEqual(emptyNewTicket);
+    expect(newTicketDrafts.get(otherPerson)).toEqual(emptyNewTicket);
   });
 
   it("starts over once discarded or created", () => {
-    newTicketDrafts.patch("w1", { subject: "Lamp flickers", tags: ["bug"] });
-    newTicketDrafts.patch("w2", { subject: "Other workspace" });
-    newTicketDrafts.clear("w1");
-    expect(newTicketDrafts.get("w1")).toEqual(emptyNewTicket);
-    expect(newTicketDrafts.get("w2").subject).toBe("Other workspace");
+    newTicketDrafts.patch(mine, { subject: "Lamp flickers", tags: ["bug"] });
+    newTicketDrafts.patch(otherWorkspace, { subject: "Other workspace" });
+    newTicketDrafts.clear(mine);
+    expect(newTicketDrafts.get(mine)).toEqual(emptyNewTicket);
+    expect(newTicketDrafts.get(otherWorkspace).subject).toBe("Other workspace");
   });
 
   it("counts what was written, not the defaults picked for it", () => {
@@ -40,6 +41,11 @@ describe("the new ticket draft", () => {
     expect(isDirty(draft({ tags: ["bug"] }))).toBe(true);
     expect(isDirty(draft({ fields: { plan: "pro" } }))).toBe(true);
     expect(isDirty(draft({ cc: ["b@example.com"] }))).toBe(true);
+  });
+
+  it("counts what only the full page shows, for the dialog to say it goes along", () => {
+    expect(pageOnlyCount(draft({ to: { contact }, subject: "x", body: "y", priority: "high", team: "t1", assignee: null }))).toBe(0);
+    expect(pageOnlyCount(draft({ tags: ["bug", "hardware"], severity: "sev2", fields: { plan: "pro" }, cc: ["b@example.com"], bcc: ["c@example.com"] }))).toBe(6);
   });
 
   it("asks for a recipient, a subject, a message, then an address that can send", () => {

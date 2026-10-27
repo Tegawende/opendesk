@@ -9,7 +9,7 @@ import { q, qk } from "@/lib/queries";
 import { patchTicketEverywhere } from "@/lib/ticketCache";
 import { useSession } from "@/lib/session";
 import { useTeamsCtx } from "./teams";
-import { createTicketBody, isDirty, newTicketDrafts, newTicketProblem, useNewTicketDraft, type NewTicketDraft } from "./newTicket";
+import { createTicketBody, draftKey, isDirty, newTicketDrafts, newTicketProblem, useNewTicketDraft, type NewTicketDraft } from "./newTicket";
 
 /**
  * Writing a new ticket, in the dialog or on its page: the workspace's draft, the
@@ -22,8 +22,9 @@ export function useNewTicket({ onCreated }: { onCreated?: () => void } = {}) {
   const navigate = useNavigate();
   const me = useSession((s) => s.user!.id);
   const wid = useSession((s) => s.workspaceId!);
-  const draft = useNewTicketDraft(wid);
-  const set = useCallback((p: Partial<NewTicketDraft>) => newTicketDrafts.patch(wid, p), [wid]);
+  const key = draftKey(me, wid);
+  const draft = useNewTicketDraft(key);
+  const set = useCallback((p: Partial<NewTicketDraft>) => newTicketDrafts.patch(key, p), [key]);
   const { data: mailboxes } = useQuery(q.mailboxes());
   const teams = useTeamsCtx();
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +54,7 @@ export function useNewTicket({ onCreated }: { onCreated?: () => void } = {}) {
       patchTicketEverywhere(qc, t, me);
       void qc.invalidateQueries({ queryKey: qk.counts });
       toast.success(tr("newTicket.created", { number: t.number }));
-      newTicketDrafts.clear(wid);
+      newTicketDrafts.clear(key);
       onCreated?.();
       void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: t.assignee?.id === me ? "mine" : "open", ticketId: t.id } });
     },
@@ -68,11 +69,11 @@ export function useNewTicket({ onCreated }: { onCreated?: () => void } = {}) {
   };
 
   return {
-    wid,
+    key,
     me,
     draft,
     set,
-    discard: () => newTicketDrafts.clear(wid),
+    discard: () => newTicketDrafts.clear(key),
     dirty: isDirty(draft),
     teams,
     brand,

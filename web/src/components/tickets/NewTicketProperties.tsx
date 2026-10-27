@@ -28,7 +28,7 @@ export function NewTicketProperties({ s }: { s: NewTicketState }) {
   const severityItems = useSeverityItems();
   const assignee = members?.find((m) => m.user.id === s.assignee)?.user;
   const setField = (key: string, v: FieldValues[string] | null) => {
-    const fields = { ...newTicketDrafts.get(s.wid).fields };
+    const fields = { ...newTicketDrafts.get(s.key).fields };
     if (v === null) delete fields[key];
     else fields[key] = v;
     set({ fields });

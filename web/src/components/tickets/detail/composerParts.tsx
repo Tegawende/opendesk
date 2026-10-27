@@ -1,9 +1,9 @@
 // Pieces of the reply composer that the new ticket page writes with too:
-// files, the saved replies button.
+// addresses, files, the saved replies button.
 
 import { i18n } from "@/i18n";
 import { Loader2, MessageSquareText, Paperclip, X } from "lucide-react";
-import { useRef, type Dispatch, type SetStateAction } from "react";
+import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import type { SavedReply } from "@/lib/api/types";
 import { api } from "@/lib/api/endpoints";
@@ -100,5 +100,51 @@ export function AttachButton({ onFiles }: { onFiles: (files: FileList) => void }
         </button>
       </Tooltip>
     </>
+  );
+}
+
+const emailRe = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+
+/** Addresses as chips (Cc, Bcc, a side conversation's To): typed, pasted or split on commas. */
+export function EmailChips({ label, values, onChange, wide }: { label: string; values: string[]; onChange: (v: string[]) => void; wide?: boolean }) {
+  const { t } = useTranslation("indicators");
+  const [text, setText] = useState("");
+  const commit = () => {
+    const parts = text.split(/[\s,;]+/).filter(Boolean);
+    const ok = parts.filter((p) => emailRe.test(p) && !values.includes(p));
+    if (ok.length) onChange([...values, ...ok]);
+    setText(parts.filter((p) => !emailRe.test(p)).join(" "));
+  };
+  return (
+    <div className="flex min-h-8 items-center gap-2 border-b border-line-soft px-3">
+      <span className={cn("shrink-0 text-xs text-fg-3", wide ? "w-12" : "w-7")}>{label}</span>
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 py-1">
+        {values.map((v) => (
+          <span key={v} className="mono inline-flex h-5 items-center gap-1 rounded-sm bg-hover pl-1.5 pr-0.5 text-[11.5px] animate-pop-in motion-reduce:animate-none" data-ph-mask>
+            {v}
+            <button type="button" aria-label={t("tickets.remove", { name: v })} onClick={() => onChange(values.filter((x) => x !== v))} className="flex size-4 items-center justify-center rounded-xs text-fg-4 hover:text-fg">
+              <X className="size-3" />
+            </button>
+          </span>
+        ))}
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === "," || e.key === " " || e.key === "Tab") {
+              if (text.trim()) {
+                e.preventDefault();
+                commit();
+              }
+            }
+            if (e.key === "Backspace" && !text && values.length) onChange(values.slice(0, -1));
+          }}
+          aria-label={label}
+          placeholder={values.length ? "" : "name@example.com"}
+          className="h-6 min-w-[120px] flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-fg-4"
+        />
+      </div>
+    </div>
   );
 }

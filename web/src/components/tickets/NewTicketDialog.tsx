@@ -16,6 +16,7 @@ import { PriorityIcon, priorityLabel, priorityOrder } from "./bits";
 import { ChevronDown, Lock, Maximize2, Users } from "lucide-react";
 import { sortTeams, TeamDot } from "./teams";
 import { useNewTicket } from "./useNewTicket";
+import { pageOnlyCount } from "./newTicket";
 import { NewTicketFrom, NewTicketKind, NewTicketTo } from "./NewTicketFields";
 
 export default function NewTicketDialog() {
@@ -43,6 +44,8 @@ export default function NewTicketDialog() {
   };
 
   const assigneeName = members?.find((m) => m.user.id === assignee)?.user.name;
+  // Set on the full page and not shown here: it goes with the ticket, so say so and offer the page.
+  const more = pageOnlyCount(draft);
 
   return (
     <Dialog
@@ -178,6 +181,11 @@ export default function NewTicketDialog() {
               </Button>
             }
           />
+          {more > 0 && (
+            <Button size="sm" variant="ghost" icon={<Maximize2 className="size-3 text-fg-3" />} onClick={expand} className="ml-auto">
+              {tr("newTicket.moreOnPage", { count: more })}
+            </Button>
+          )}
         </div>
       </div>
     </Dialog>

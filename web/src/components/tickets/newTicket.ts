@@ -1,5 +1,5 @@
-// A new ticket being written: one draft per workspace, shared by the quick
-// dialog and the full page, so opening the page carries everything written.
+// A new ticket being written: one draft per person and workspace, shared by the
+// quick dialog and the full page, so opening the page carries everything written.
 // Memory only, like the reply composer's drafts.
 
 import { create } from "zustand";
@@ -45,17 +45,20 @@ export const emptyNewTicket: NewTicketDraft = {
 
 const useDrafts = create<Record<string, NewTicketDraft>>(() => ({}));
 
-export function useNewTicketDraft(wid: string): NewTicketDraft {
-  return useDrafts((s) => s[wid]) ?? emptyNewTicket;
+/** Whose draft: another account signed in on this browser never sees it. */
+export const draftKey = (uid: string, wid: string) => `${uid}:${wid}`;
+
+export function useNewTicketDraft(key: string): NewTicketDraft {
+  return useDrafts((s) => s[key]) ?? emptyNewTicket;
 }
 
 export const newTicketDrafts = {
-  get: (wid: string): NewTicketDraft => useDrafts.getState()[wid] ?? emptyNewTicket,
-  patch: (wid: string, p: Partial<NewTicketDraft>) => useDrafts.setState((s) => ({ [wid]: { ...(s[wid] ?? emptyNewTicket), ...p } })),
-  clear: (wid: string) =>
+  get: (key: string): NewTicketDraft => useDrafts.getState()[key] ?? emptyNewTicket,
+  patch: (key: string, p: Partial<NewTicketDraft>) => useDrafts.setState((s) => ({ [key]: { ...(s[key] ?? emptyNewTicket), ...p } })),
+  clear: (key: string) =>
     useDrafts.setState((s) => {
       const next = { ...s };
-      delete next[wid];
+      delete next[key];
       return next;
     }, true),
 };
@@ -63,6 +66,14 @@ export const newTicketDrafts = {
 /** Something written that closing would lose (the address and defaults picked for it are not). */
 export function isDirty(d: NewTicketDraft): boolean {
   return !!(d.to || d.subject || d.body || d.tags.length || Object.keys(d.fields).length || d.cc.length || d.bcc.length);
+}
+
+/**
+ * What was set on the full page that the dialog has no field for: labels, severity,
+ * fields and copies. The dialog says how many go with the ticket and opens the page.
+ */
+export function pageOnlyCount(d: NewTicketDraft): number {
+  return d.tags.length + (d.severity ? 1 : 0) + Object.keys(d.fields).length + d.cc.length + d.bcc.length;
 }
 
 /** What is missing before it can be created, as an inbox `newTicket.*` key. */

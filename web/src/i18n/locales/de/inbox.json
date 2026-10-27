@@ -636,6 +636,8 @@
     "discard": "Verwerfen",
     "keepWriting": "Weiterschreiben",
     "openPage": "Als ganze Seite öffnen",
+    "moreOnPage_one": "{{count}} weiteres von der ganzen Seite",
+    "moreOnPage_other": "{{count}} weitere von der ganzen Seite",
     "newContact": "Neuer Kontakt, wird mit dem Ticket angelegt",
     "recipientHint": "Wähle, an wen es geht: Kontaktdaten und frühere Tickets erscheinen dann hier.",
     "needTo": "Füge einen Empfänger hinzu.",

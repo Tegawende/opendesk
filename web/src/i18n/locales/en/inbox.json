@@ -640,6 +640,8 @@
     "discard": "Discard",
     "keepWriting": "Keep writing",
     "openPage": "Open full page",
+    "moreOnPage_one": "{{count}} more from the full page",
+    "moreOnPage_other": "{{count}} more from the full page",
     "newContact": "New contact, created with the ticket",
     "recipientHint": "Choose who it goes to, and their details and earlier tickets show here.",
     "needTo": "Add a recipient.",
