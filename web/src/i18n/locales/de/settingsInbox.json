@@ -140,6 +140,8 @@
       "team": "Team",
       "mailbox": "Postfach",
       "writtenTo": "Geschrieben an",
+      "contact": "Kontakt",
+      "company": "Unternehmen",
       "tag": "Label",
       "channel": "Kanal",
       "keyword": "Stichwort"
@@ -166,8 +168,20 @@
     "unknown": "unbekannt",
     "inMailbox": "In {{name}}",
     "aMailbox": "ein Postfach",
+    "aContact": "ein Kontakt",
+    "aCompany": "ein Unternehmen",
     "writtenTo": "Geschrieben an {{address}}",
     "matching": "Passend zu „{{q}}“",
+    "ops": {
+      "is": "ist",
+      "not": "ist nicht"
+    },
+    "choose": {
+      "contact": "Kontakte wählen",
+      "company": "Unternehmen wählen"
+    },
+    "notContact": "Nicht von {{name}}",
+    "notCompany": "Nicht von {{name}}",
     "emptyTips": {
       "sidebar": "Geteilte Ansichten erscheinen in der Seitenleiste aller",
       "personal": "Persönliche Ansichten bleiben nur in deiner Seitenleiste"
@@ -313,6 +327,7 @@
     "chooseTeammate": "Teammitglied wählen",
     "chooseTeam": "Team wählen",
     "markSpamHint": "Verschiebt das Ticket in Spam. Es wird keine Antwort gesendet.",
+    "deleteTicketHint": "Löscht das Ticket: Es verschwindet aus allen Ansichten, und nichts weiter läuft darauf.",
     "replyPlaceholder": "Danke für deine Nachricht. Wir haben sie erhalten…",
     "notePlaceholder": "Interne Notiz für das Team",
     "replyText": "Antworttext",
@@ -378,6 +393,7 @@
     "send_reply": "Antwort senden",
     "add_note": "Interne Notiz hinzufügen",
     "mark_spam": "Als Spam markieren",
+    "delete_ticket": "Ticket löschen",
     "set_field": "Feld setzen",
     "set_reply_address": "Antwortadresse setzen"
   },
@@ -389,6 +405,8 @@
   },
   "pickers": {
     "search": "Suchen",
+    "searchContacts": "Name oder E-Mail suchen",
+    "searchCompanies": "Name oder Domain suchen",
     "andMore": "{{first}} und {{count}} weitere"
   },
   "customFields": {

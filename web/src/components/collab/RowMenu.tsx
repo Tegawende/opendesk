@@ -1,11 +1,11 @@
 // The sidebar row's own menu: the row's actions (a view's Duplicate), which number it shows
-// (with what each would show), pin it to Favorites, hide it. It opens on right-click,
-// long-press or the Menu key, and from the row's ⋯ button, which takes the number's place on
-// hover and keyboard focus (not in the rail). The prefs are Collab's, where the sidebar prefs
-// exist, saved at once with PUT /v1/collab/sidebar; without Collab the menu holds the row's
-// actions alone, and a row without any is left as it is.
+// (with what each would show), pin it to Favorites, hide it, and an account's settings. It
+// opens on right-click, long-press or the Menu key, and from the row's ⋯ button, which takes
+// the number's place on hover and keyboard focus (not in the rail). The prefs are Collab's,
+// where the sidebar prefs exist, saved at once with PUT /v1/collab/sidebar; without Collab the
+// menu holds the row's actions alone, and a row without any is left as it is.
 
-import { Ellipsis, EyeOff, Pin, PinOff, SlidersHorizontal } from "lucide-react";
+import { Ellipsis, EyeOff, Pin, PinOff, Settings, SlidersHorizontal } from "lucide-react";
 import { forwardRef, useRef, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Slot } from "radix-ui";
@@ -57,6 +57,8 @@ export type RowMenuProps = {
   action?: RowAction;
   /** The row's own actions (a view's Duplicate), next in the menu; they show without Collab too. */
   items?: RowAction[];
+  /** Opens what the row is set up in (an account's settings), beside Customize sidebar. */
+  settings?: { label: string; onSelect: () => void };
   children: ReactElement;
 } & Omit<React.HTMLAttributes<HTMLElement>, "children">;
 
@@ -75,7 +77,7 @@ const contextParts: Parts = { Label: ContextMenuLabel, Choice: ContextMenuChoice
 const dropdownParts: Parts = { Label: MenuLabel, Choice: MenuChoice, Item: MenuItem, Separator: MenuSeparator };
 
 /** Forwards props and ref to its one child, so it can sit inside the rail's tooltip. */
-export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ enabled, prefs, badge, pin, hideId, rail, label, labelColor, action, items, children, ...rest }, ref) {
+export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ enabled, prefs, badge, pin, hideId, rail, label, labelColor, action, items, settings, children, ...rest }, ref) {
   const { t } = useTranslation("collab");
   const save = useSaveSidebarPrefs();
   const setColor = useSetLabelColor();
@@ -143,6 +145,11 @@ export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ 
         </Item>
       )}
       {(pin || hideId) && <Separator />}
+      {settings && (
+        <Item icon={<Settings />} onSelect={settings.onSelect}>
+          {settings.label}
+        </Item>
+      )}
       <Item icon={<SlidersHorizontal />} onSelect={() => collabUi.customize(true)}>
         {t("rowMenu.customize")}
       </Item>
