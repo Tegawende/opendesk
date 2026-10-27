@@ -1,3 +1,5 @@
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import "@/i18n";
@@ -46,6 +48,8 @@ const data = (orders: PanelOrder[]): TicketPanelData => ({
 });
 
 // The rendered text, read through the DOM rather than by stripping tags.
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 const text = (html: string) => new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
 
 describe("Shopify ticket panel", () => {
@@ -286,6 +290,57 @@ describe("URL ticket panel", () => {
     const row = doc.querySelector('a[aria-label="PDF"]');
     expect(row?.getAttribute("href")).toBe("https://billing.example.com/inv/12.pdf");
     expect(row?.querySelector("svg.lucide-file-text")).not.toBeNull();
+  });
+
+  it("folds a collapsed card to its header until it is opened, and shows any other card open", async () => {
+    const card = (title: string, collapsed?: boolean): PanelBlock => ({
+      type: "card",
+      title,
+      collapsed,
+      subtitle: "Placed Oct 2",
+      badges: [{ text: "Delivered", tone: "success" }],
+      links: [{ label: "Open in the shop", url: "https://shop.example/o/1", icon: "store" }],
+      fields: [{ label: "Carrier", value: { type: "text", text: "DHL" } }],
+      lines: [{ quantity: 1, title: "Arco floor lamp" }],
+      footer: [{ label: "Total", value: { type: "money", amount: "1890", currency: "EUR" } }],
+    });
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () =>
+      root.render(
+        <TooltipProvider>
+          <PanelBody data={httpData([card("Order #1042", false), card("Order #1041", true), { type: "card", title: "Order #1040", collapsed: true, subtitle: "Header only" }])} />
+        </TooltipProvider>,
+      ),
+    );
+    const [open, folded, bare] = [...host.querySelectorAll("article")];
+    // An open card has no fold button and shows everything.
+    expect(open.querySelector("button[aria-expanded]")).toBeNull();
+    expect(open.textContent).toContain("CarrierDHL");
+    // A folded card shows its title, links, subtitle and badges, and a button that says it is closed.
+    const toggle = folded.querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.getAttribute("aria-label")).toBe("Show Order #1041");
+    expect(folded.textContent).toContain("Order #1041");
+    expect(folded.textContent).toContain("Placed Oct 2");
+    expect(folded.textContent).toContain("Delivered");
+    expect(folded.querySelector('a[aria-label="Open in the shop"]')).not.toBeNull();
+    expect(folded.textContent).not.toContain("DHL");
+    expect(folded.textContent).not.toContain("Arco floor lamp");
+    expect(folded.textContent).not.toContain("Total");
+    // Opening it shows the rest; closing it folds it again.
+    await act(async () => toggle.click());
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(toggle.getAttribute("aria-label")).toBe("Hide Order #1041");
+    expect(document.getElementById(toggle.getAttribute("aria-controls")!)?.textContent).toContain("CarrierDHL1×Arco floor lampTotal€1,890.00");
+    await act(async () => toggle.click());
+    expect(folded.textContent).not.toContain("DHL");
+    // A collapsed card with nothing under its header has nothing to open.
+    expect(bare.querySelector("button")).toBeNull();
+    expect(bare.textContent).toContain("Header only");
+    await act(async () => root.unmount());
+    host.remove();
   });
 
   it("says how far a day is", () => {

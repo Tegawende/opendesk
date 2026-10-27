@@ -207,7 +207,7 @@ const iso = (days: number) => new Date(Date.now() + days * 86_400_000).toISOStri
 
 /**
  * What a URL of the workspace's own might answer: an ERP's order (found by the first reference in
- * the ticket, else made up from its number) with a supplier running late, the contact's
+ * the ticket, else made up from its number) with a supplier running late, an older order folded, the contact's
  * subscription and invoices, and a note.
  */
 function blocksFor(p: TicketPanel, t: { number: number; subject: string }): PanelBlock[] {
@@ -238,6 +238,19 @@ function blocksFor(p: TicketPanel, t: { number: number; subject: string }): Pane
         { quantity: 4, title: "LED bulb E27", subtitle: "2700 K", value: { type: "money", amount: "12.90", currency: "EUR" } },
       ],
       footer: [{ label: "Total", value: { type: "money", amount: "3831.60", currency: "EUR" } }],
+    },
+    {
+      // An older order, sent folded: the agent opens it when it matters.
+      type: "card",
+      title: `Sales order S${String(so - 7).padStart(5, "0")}`,
+      url: `https://erp.example.com/odoo/sales/${so - 7}`,
+      subtitle: "Web shop · delivered",
+      collapsed: true,
+      badges: [{ text: "Delivered", tone: "success" }],
+      links: [{ label: "Open in the ERP", url: `https://erp.example.com/odoo/sales/${so - 7}`, icon: "receipt" }],
+      fields: [{ label: "Delivered", value: { type: "date", value: iso(-34) } }],
+      lines: [{ quantity: 1, title: "Snoopy table lamp", subtitle: "Black", value: { type: "money", amount: "1150.00", currency: "EUR" } }],
+      footer: [{ label: "Total", value: { type: "money", amount: "1150.00", currency: "EUR" } }],
     },
     {
       type: "fields",

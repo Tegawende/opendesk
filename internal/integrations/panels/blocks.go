@@ -37,18 +37,19 @@ const (
 // PanelBlock is one block of an http panel's answer, cleaned: a card (an order, an invoice, a
 // subscription, a deal), a list of labelled values, a list of rows or a short note.
 type PanelBlock struct {
-	Type     string       `json:"type" enum:"card,fields,list,note"`
-	Title    string       `json:"title,omitempty" doc:"card: required; fields and list: optional"`
-	URL      string       `json:"url,omitempty" doc:"card: https only"`
-	Subtitle string       `json:"subtitle,omitempty" doc:"card"`
-	Badges   []PanelBadge `json:"badges,omitempty" doc:"card: at most 4"`
-	Links    []PanelLink  `json:"links,omitempty" doc:"card: the same record in other tools, shown as small buttons beside the title, at most 5"`
-	Fields   []PanelItem  `json:"fields,omitempty" doc:"card: labelled values, at most 30"`
-	Lines    []PanelItem  `json:"lines,omitempty" doc:"card: rows such as an order's lines, at most 20"`
-	Footer   []PanelItem  `json:"footer,omitempty" doc:"card: labelled values under the lines, such as a total, at most 6"`
-	Items    []PanelItem  `json:"items,omitempty" doc:"fields: labelled values, at most 30; list: rows, at most 20"`
-	Text     string       `json:"text,omitempty" doc:"note"`
-	Tone     string       `json:"tone,omitempty" enum:"neutral,info,success,warning,danger" doc:"note"`
+	Type      string       `json:"type" enum:"card,fields,list,note"`
+	Title     string       `json:"title,omitempty" doc:"card: required; fields and list: optional"`
+	URL       string       `json:"url,omitempty" doc:"card: https only"`
+	Subtitle  string       `json:"subtitle,omitempty" doc:"card"`
+	Badges    []PanelBadge `json:"badges,omitempty" doc:"card: at most 4"`
+	Links     []PanelLink  `json:"links,omitempty" doc:"card: the same record in other tools, shown as small buttons beside the title, at most 5"`
+	Collapsed bool         `json:"collapsed,omitempty" doc:"card: shown folded to its title, links, subtitle and badges until the reader opens it"`
+	Fields    []PanelItem  `json:"fields,omitempty" doc:"card: labelled values, at most 30"`
+	Lines     []PanelItem  `json:"lines,omitempty" doc:"card: rows such as an order's lines, at most 20"`
+	Footer    []PanelItem  `json:"footer,omitempty" doc:"card: labelled values under the lines, such as a total, at most 6"`
+	Items     []PanelItem  `json:"items,omitempty" doc:"fields: labelled values, at most 30; list: rows, at most 20"`
+	Text      string       `json:"text,omitempty" doc:"note"`
+	Tone      string       `json:"tone,omitempty" enum:"neutral,info,success,warning,danger" doc:"note"`
 }
 
 // PanelItem is a field (label, value, url), a card's line (quantity, title, subtitle, value, url) or
@@ -117,18 +118,19 @@ func toneOf(s string) string {
 // blockIn is a block as a URL answers it; anything that can take several forms stays raw and is
 // read on its own, so one wrong part drops that part only.
 type blockIn struct {
-	Type     string            `json:"type"`
-	Title    string            `json:"title"`
-	URL      string            `json:"url"`
-	Subtitle string            `json:"subtitle"`
-	Badges   []json.RawMessage `json:"badges"`
-	Links    []json.RawMessage `json:"links"`
-	Fields   []json.RawMessage `json:"fields"`
-	Lines    []json.RawMessage `json:"lines"`
-	Footer   []json.RawMessage `json:"footer"`
-	Items    []json.RawMessage `json:"items"`
-	Text     string            `json:"text"`
-	Tone     string            `json:"tone"`
+	Type      string            `json:"type"`
+	Title     string            `json:"title"`
+	URL       string            `json:"url"`
+	Subtitle  string            `json:"subtitle"`
+	Badges    []json.RawMessage `json:"badges"`
+	Links     []json.RawMessage `json:"links"`
+	Collapsed json.RawMessage   `json:"collapsed"`
+	Fields    []json.RawMessage `json:"fields"`
+	Lines     []json.RawMessage `json:"lines"`
+	Footer    []json.RawMessage `json:"footer"`
+	Items     []json.RawMessage `json:"items"`
+	Text      string            `json:"text"`
+	Tone      string            `json:"tone"`
 }
 
 type itemIn struct {
@@ -177,6 +179,7 @@ func (s *Service) cleanBlock(in blockIn) (PanelBlock, bool) {
 			}
 		}
 		b.Links = s.cleanLinks(in.Links)
+		b.Collapsed = bytes.Equal(bytes.TrimSpace(in.Collapsed), []byte("true")) // only true folds: anything else shows the card open
 		b.Fields = s.cleanFields(in.Fields, maxBlockFields)
 		b.Lines = s.cleanRows(in.Lines, maxCardLines, true)
 		b.Footer = s.cleanFields(in.Footer, maxCardFooter)

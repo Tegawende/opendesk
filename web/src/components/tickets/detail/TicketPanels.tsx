@@ -30,7 +30,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AppMark } from "@/components/appmark";
 import { Badge } from "@/components/ui/badge";
@@ -529,6 +529,11 @@ function CardBlock({ block }: { block: Extract<PanelBlock, { type: "card" }> }) 
   const fields = block.fields ?? [];
   const lines = block.lines ?? [];
   const footer = block.footer ?? [];
+  // A folded card shows its header (title, links, subtitle, badges) until opened, for this view only.
+  const [open, setOpen] = useState(!block.collapsed);
+  const bodyId = useId();
+  const foldable = !!block.collapsed && fields.length + lines.length + footer.length > 0;
+  const shown = open || !foldable;
   return (
     <article className="rounded-md border border-line-soft px-2.5 py-2" aria-label={block.title}>
       <div className="flex min-w-0 items-center gap-1.5">
@@ -549,6 +554,18 @@ function CardBlock({ block }: { block: Extract<PanelBlock, { type: "card" }> }) 
           )}
         </h4>
         {links.length > 0 && <LinkButtons links={links} />}
+        {foldable && (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            aria-controls={bodyId}
+            aria-label={open ? t("panels.collapse", { name: block.title }) : t("panels.expand", { name: block.title })}
+            className="flex size-5 shrink-0 items-center justify-center rounded-md text-fg-4 outline-none hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]"
+          >
+            <ChevronRight className={cn("size-3.5 transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} aria-hidden />
+          </button>
+        )}
       </div>
       {block.subtitle && <p className="truncate text-[11.5px] text-fg-4">{block.subtitle}</p>}
       {badges.length > 0 && (
@@ -558,27 +575,31 @@ function CardBlock({ block }: { block: Extract<PanelBlock, { type: "card" }> }) 
           ))}
         </div>
       )}
-      {fields.length > 0 && <FieldList fields={fields} className="mt-1.5" />}
-      {lines.length > 0 && (
-        <ul className="mt-1.5 flex flex-col gap-0.5 text-[11.5px] text-fg-3">
-          {lines.map((l, i) => (
-            <LineRow key={i} line={l} />
-          ))}
-        </ul>
-      )}
-      {footer.length > 0 && (
-        <dl className="mt-1.5 flex flex-col gap-0.5 border-t border-line-soft pt-1.5">
-          {footer.map((f, i) => (
-            <div key={i} className="flex items-baseline gap-2 text-[12px]">
-              <dt className="min-w-0 flex-1 truncate text-fg-3">{f.label}</dt>
-              <dd className="shrink-0 font-medium text-fg-2">
-                <Out url={f.url}>
-                  <PanelValueView value={f.value} />
-                </Out>
-              </dd>
-            </div>
-          ))}
-        </dl>
+      {shown && (
+        <div id={bodyId}>
+          {fields.length > 0 && <FieldList fields={fields} className="mt-1.5" />}
+          {lines.length > 0 && (
+            <ul className="mt-1.5 flex flex-col gap-0.5 text-[11.5px] text-fg-3">
+              {lines.map((l, i) => (
+                <LineRow key={i} line={l} />
+              ))}
+            </ul>
+          )}
+          {footer.length > 0 && (
+            <dl className="mt-1.5 flex flex-col gap-0.5 border-t border-line-soft pt-1.5">
+              {footer.map((f, i) => (
+                <div key={i} className="flex items-baseline gap-2 text-[12px]">
+                  <dt className="min-w-0 flex-1 truncate text-fg-3">{f.label}</dt>
+                  <dd className="shrink-0 font-medium text-fg-2">
+                    <Out url={f.url}>
+                      <PanelValueView value={f.value} />
+                    </Out>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
       )}
     </article>
   );

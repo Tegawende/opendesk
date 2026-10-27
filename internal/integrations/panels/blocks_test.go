@@ -200,6 +200,31 @@ func TestCleanLinks(t *testing.T) {
 	}
 }
 
+func TestCleanCollapsed(t *testing.T) {
+	s := &Service{guard: netsafe.Guard{}}
+	b := s.cleanBlocks(decodeList(t, `[
+		{"type":"card","title":"Order #1042","collapsed":false,"fields":[{"label":"Status","value":"Late"}]},
+		{"type":"card","title":"Order #1041","collapsed":true,"fields":[{"label":"Status","value":"Delivered"}]},
+		{"type":"card","title":"Order #1040"},
+		{"type":"card","title":"Order #1039","collapsed":"yes"},
+		{"type":"card","title":"Order #1038","collapsed":1},
+		{"type":"note","text":"Not a card.","collapsed":true}
+	]`))
+	got := make([]bool, len(b))
+	for i, x := range b {
+		got[i] = x.Collapsed
+	}
+	if !reflect.DeepEqual(got, []bool{false, true, false, false, false, false}) || len(b[1].Fields) != 1 {
+		t.Fatalf("collapsed = %v", got)
+	}
+	if raw, _ := json.Marshal(b[1]); !strings.Contains(string(raw), `"collapsed":true`) {
+		t.Fatalf("json = %s", raw)
+	}
+	if raw, _ := json.Marshal(b[0]); strings.Contains(string(raw), `collapsed`) {
+		t.Fatalf("json = %s", raw)
+	}
+}
+
 func decodeList(t *testing.T, s string) []json.RawMessage {
 	t.Helper()
 	var out []json.RawMessage

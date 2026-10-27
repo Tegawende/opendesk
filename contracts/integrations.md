@@ -290,7 +290,8 @@ and answers `sections`, shown as they always were. Both are at most 64 KB.
 ```ts
 interface Answer { version?: 2; blocks: Block[]; cache_seconds?: number /* 0 to 600; 0: not kept */ }
 type Block =
-  | { type: "card"; title: string; url?: string; subtitle?: string; badges?: Badge[]; links?: Link[]; fields?: Field[]; lines?: Line[]; footer?: Field[] }
+  | { type: "card"; title: string; url?: string; subtitle?: string; badges?: Badge[]; links?: Link[];
+      collapsed?: boolean /* shown folded to its header */; fields?: Field[]; lines?: Line[]; footer?: Field[] }
   | { type: "fields"; title?: string; items: Field[] }
   | { type: "list"; title?: string; items: { title: string; url?: string; subtitle?: string; value?: Value; badge?: Badge; links?: Link[] }[] }
   | { type: "note"; text: string; tone?: Tone };
@@ -320,6 +321,10 @@ type Value = string | number | boolean
   tipped by its `label` and opens a new tab. Its `icon` is drawn by the app: a generic mark or the
   product's shipped logo; without one, or with a name this version does not know, the button shows
   the label's first letter. Apps never load a picture or favicon from the link's site.
+- `collapsed: true` on a card shows it folded to its header (title, links, subtitle, badges) with a
+  button to open the rest, so a customer with many orders reads at a glance: send the newest or the
+  late order open and older ones folded. Opening lasts for that view; nothing is stored. Anything
+  but `true` is open, and a card with nothing under its header has nothing to open.
 - The app formats dates in the agent's locale and timezone (a day as it is, never shifted) and, with
   `relative`, adds "in 3 days" or "5 days ago"; money in the agent's locale; a badge's tone is the
   app's own colour (info blue, success green, warning amber, danger red).
@@ -352,6 +357,8 @@ type Value = string | number | boolean
     "fields": [ { "label": "Supplier date", "value": { "type": "date", "value": "2026-11-12", "relative": true } } ],
     "lines": [ { "quantity": 2, "title": "Arco floor lamp", "value": { "type": "money", "amount": "1890.00", "currency": "EUR" } } ],
     "footer": [ { "label": "Total", "value": { "type": "money", "amount": "3780.00", "currency": "EUR" } } ] },
+  { "type": "card", "title": "Sales order S00035", "collapsed": true, "badges": [ { "text": "Delivered", "tone": "success" } ],
+    "footer": [ { "label": "Total", "value": { "type": "money", "amount": "1150.00", "currency": "EUR" } } ] },
   { "type": "note", "text": "No open invoice." } ] }
 ```
 

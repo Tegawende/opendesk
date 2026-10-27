@@ -90,7 +90,9 @@ describe("mock ticket panels", () => {
     const tickets = (await call("GET", "/v1/tickets")).body.data as { id: string }[];
     const d = (await call("GET", `/v1/tickets/${tickets[0]!.id}/panels/${made.body.panel.id}`)).body;
     expect(d.sections).toBeUndefined();
-    expect(d.blocks.map((b: { type: string }) => b.type)).toEqual(["card", "fields", "list", "note"]);
+    expect(d.blocks.map((b: { type: string }) => b.type)).toEqual(["card", "card", "fields", "list", "note"]);
+    expect(d.blocks[0].links).toHaveLength(2);
+    expect([d.blocks[0].collapsed, d.blocks[1].collapsed]).toEqual([undefined, true]);
     expect(made.body.panel.reference_pattern).toBe(DEFAULT_REFERENCE_PATTERN);
     expect((await call("PATCH", `/v1/ticket-panels/${made.body.panel.id}`, { reference_pattern: "(unclosed" })).status).toBe(422);
     expect((await call("PATCH", `/v1/ticket-panels/${made.body.panel.id}`, { reference_pattern: "x?" })).status).toBe(422);
