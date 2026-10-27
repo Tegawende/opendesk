@@ -33,7 +33,7 @@ type Customer struct {
 	OrdersCount int64    `json:"orders_count"`
 	TotalSpent  string   `json:"total_spent"`
 	Currency    string   `json:"currency"`
-	Tags        []string `json:"tags"`
+	Tags        []string `json:"tags" doc:"Empty when the panel leaves tags out"`
 }
 
 // Order is one of the contact's last orders, newest first.
@@ -47,8 +47,19 @@ type Order struct {
 	FinancialStatus   string      `json:"financial_status" doc:"Lowercase, such as paid, pending, refunded, partially_refunded"`
 	FulfillmentStatus string      `json:"fulfillment_status" doc:"Lowercase, such as fulfilled, unfulfilled, partially_fulfilled"`
 	Cancelled         bool        `json:"cancelled"`
+	CancelledAt       *time.Time  `json:"cancelled_at,omitempty"`
+	Refunded          string      `json:"refunded,omitempty" doc:"Decimal, what was refunded; left out when nothing was"`
+	DiscountCodes     []string    `json:"discount_codes"`
+	Shipping          *Shipping   `json:"shipping,omitempty" doc:"Left out when the order has neither an address nor a shipping method (a pickup, a digital order)"`
 	Items             []OrderItem `json:"items"`
 	Tracking          []Tracking  `json:"tracking"`
+}
+
+// Shipping is where an order goes and how: the city and country only, never the street.
+type Shipping struct {
+	City    string `json:"city,omitempty"`
+	Country string `json:"country,omitempty" doc:"ISO 3166-1 alpha-2, such as BE"`
+	Method  string `json:"method,omitempty" doc:"The shipping method as the checkout named it"`
 }
 
 // OrderItem is one line of an order.
@@ -56,7 +67,7 @@ type OrderItem struct {
 	Title    string `json:"title"`
 	Variant  string `json:"variant,omitempty"`
 	Quantity int    `json:"quantity"`
-	Price    string `json:"price" doc:"Unit price"`
+	Price    string `json:"price" doc:"Unit price before discounts, decimal, in the order's currency"`
 }
 
 // Tracking is one parcel of an order.

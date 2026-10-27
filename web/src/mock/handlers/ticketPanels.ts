@@ -21,6 +21,7 @@ function seed(): TicketPanel[] {
       host: "margin-store.myshopify.com",
       auth: "client_credentials",
       client_id: "3f9c0d1e7a2b4c5d8e6f",
+      show_tags: true,
       enabled: true,
       position: 0,
       status: "connected",
@@ -98,13 +99,24 @@ function hash(s: string) {
 }
 
 const PRODUCTS = [
+  { title: "Lucide Leanne Wall Lamp", variant: "Black", price: "14.44" },
   { title: "Arco floor lamp", variant: "Marble", price: "1890.00" },
   { title: "Tolomeo desk lamp", variant: "Aluminium", price: "289.00" },
   { title: "Flowerpot VP3", variant: "Mint", price: "159.00" },
   { title: "LED bulb E27", price: "12.90" },
 ];
 
-/** A made-up store history for an email: the same every time, none for some addresses. */
+const DESTINATIONS = [
+  { city: "Brussels", country: "BE", method: "DHL Express" },
+  { city: "Antwerp", country: "BE", method: "bpost" },
+  { city: "Lyon", country: "FR", method: "Colissimo" },
+  { city: "Rotterdam", country: "NL", method: "PostNL" },
+];
+
+/**
+ * A made-up store history for an email: the same every time, none for some addresses. The
+ * newest order may carry a code and a partial refund; a third order back is cancelled.
+ */
 function ordersFor(email: string, shop: string): { orders: PanelOrder[]; spent: number } | null {
   const h = hash(email);
   if (h % 5 === 0) return null;
@@ -113,24 +125,36 @@ function ordersFor(email: string, shop: string): { orders: PanelOrder[]; spent: 
   const orders: PanelOrder[] = [];
   let spent = 0;
   for (let i = 0; i < n; i++) {
-    const p = PRODUCTS[(h + i) % PRODUCTS.length];
-    const qty = 1 + ((h >> i) % 2);
-    const total = Number(p.price) * qty;
-    spent += total;
+    const a = PRODUCTS[(h + i) % PRODUCTS.length];
+    const b = PRODUCTS[(h + i + 2) % PRODUCTS.length];
+    const items = [{ title: a.title, variant: a.variant, quantity: 1 + ((h >> i) % 3), price: a.price }];
+    if ((h >> i) % 2 === 0) items.push({ title: b.title, variant: b.variant, quantity: 1, price: b.price });
+    const gross = items.reduce((s, it) => s + Number(it.price) * it.quantity, 0);
     const id = 5000 + (h % 900) + i;
-    const days = 3 + i * 17 + (h % 5);
-    const fulfilled = i > 0 || h % 2 === 0;
+    const created = Date.now() - (3 + i * 17 + (h % 5)) * 86_400_000;
+    const cancelled = i === 2;
+    const codes = i === 0 && h % 2 === 0 ? ["WELCOME10"] : [];
+    const partly = i === 0 && (h >> 3) % 2 === 0;
+    const refunded = cancelled ? gross : partly ? Number(items[0]!.price) : 0;
+    const total = gross * (codes.length ? 0.9 : 1) - refunded;
+    spent += total;
+    const fulfilled = !cancelled && (i > 0 || h % 2 === 0);
+    const dest = DESTINATIONS[(h + i) % DESTINATIONS.length]!;
     orders.push({
       id: `gid://shopify/Order/${id}`,
       number: `#${1000 + (h % 400) + n - i}`,
       url: `https://admin.shopify.com/store/${handle}/orders/${id}`,
-      created_at: new Date(Date.now() - days * 86_400_000).toISOString(),
-      total: total.toFixed(2),
+      created_at: new Date(created).toISOString(),
+      total: Math.max(total, 0).toFixed(2),
       currency: "EUR",
-      financial_status: i === 0 && h % 7 === 0 ? "refunded" : "paid",
+      financial_status: cancelled ? "refunded" : partly ? "partially_refunded" : "paid",
       fulfillment_status: fulfilled ? "fulfilled" : "unfulfilled",
-      cancelled: false,
-      items: [{ title: p.title, variant: p.variant, quantity: qty, price: p.price }],
+      cancelled,
+      cancelled_at: cancelled ? new Date(created + 86_400_000).toISOString() : undefined,
+      refunded: refunded > 0 ? refunded.toFixed(2) : undefined,
+      discount_codes: codes,
+      shipping: dest,
+      items,
       tracking: fulfilled ? [{ company: "DHL Express", number: `JD01460000${id}`, url: `https://www.dhl.com/track?tracking-id=JD01460000${id}` }] : [],
     });
   }
@@ -153,7 +177,8 @@ function dataFor(p: TicketPanel, t: { id: string; number: number; contact: { ema
         orders_count: found.orders.length + (hash(email) % 4),
         total_spent: found.spent.toFixed(2),
         currency: "EUR",
-        tags: hash(email) % 3 === 0 ? ["VIP"] : [],
+        // As stores tag customers: mostly marketing. Left out when the panel says so.
+        tags: !p.show_tags ? [] : hash(email) % 3 === 0 ? ["VIP", "newsletter"] : ["footer_signup", "Login with Shop"],
       },
       orders: found.orders,
     };
@@ -187,10 +212,11 @@ export function registerTicketPanels() {
     if (kind === "shopify") {
       const host = shopOf(ctx.body.shop);
       const auth = shopifyAuth(ctx.body);
-      p = { id: uuid(), kind, name: String(ctx.body.name ?? "").trim() || "Margin Store", host, ...auth, enabled: true, position: list.length, status: "connected", last_error: "", created_at: at, updated_at: at };
+      const show_tags = ctx.body.show_tags !== false;
+      p = { id: uuid(), kind, name: String(ctx.body.name ?? "").trim() || "Margin Store", host, ...auth, show_tags, enabled: true, position: list.length, status: "connected", last_error: "", created_at: at, updated_at: at };
     } else if (kind === "http") {
       const url = urlOf(ctx.body.url);
-      p = { id: uuid(), kind, name: String(ctx.body.name ?? "").trim() || new URL(url).host, host: new URL(url).host, enabled: true, position: list.length, status: "connected", last_error: "", created_at: at, updated_at: at };
+      p = { id: uuid(), kind, name: String(ctx.body.name ?? "").trim() || new URL(url).host, host: new URL(url).host, show_tags: true, enabled: true, position: list.length, status: "connected", last_error: "", created_at: at, updated_at: at };
       s = secret();
     } else throw invalid("A panel is shopify or http.");
     list.push(p);
@@ -206,6 +232,10 @@ export function registerTicketPanels() {
     if (typeof b.name === "string") p.name = b.name.trim().slice(0, 64) || p.name;
     if (typeof b.enabled === "boolean") p.enabled = b.enabled;
     if (typeof b.position === "number") p.position = b.position;
+    if (b.show_tags !== undefined) {
+      if (p.kind !== "shopify") throw invalid("Only a Shopify panel shows customer tags.");
+      p.show_tags = b.show_tags === true;
+    }
     if (b.token !== undefined || b.client_id !== undefined || b.client_secret !== undefined) {
       if (p.kind !== "shopify") throw invalid("Only a Shopify panel has credentials.");
       // A rotated secret keeps the app's client ID.

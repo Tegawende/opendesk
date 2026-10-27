@@ -544,6 +544,16 @@
     "secretDescription": "Copy it now. You won’t see it again.",
     "secretVerify": "Every request carries OD-Signature, like webhook deliveries. Verify it before answering:",
     "secretAnswer": "Answer JSON sections of labelled values, at most 64 KB:",
-    "secretSaved": "I’ve saved it"
+    "secretSaved": "I’ve saved it",
+    "showTags": "Show customer tags",
+    "showTagsHint": "Many stores tag customers for marketing, such as newsletter or how they signed up. Turn this off to leave tags out of tickets.",
+    "catalog": {
+      "kind": "Ticket panel",
+      "shopify": "Show the contact’s Shopify customer and last orders beside each ticket.",
+      "via": "App client ID and secret",
+      "show": "Show {{name}} in ticket panels",
+      "ownTitle": "Your own data",
+      "ownBody": "Show what a system of your own knows about the contact, from a URL that answers."
+    }
   }
 }

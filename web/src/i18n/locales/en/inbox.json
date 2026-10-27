@@ -870,6 +870,12 @@
       "on_hold": "On hold",
       "scheduled": "Scheduled",
       "restocked": "Restocked"
-    }
+    },
+    "cancelledOn": "Cancelled {{date}}",
+    "unitPrice": "Unit price",
+    "shipping": "Shipping",
+    "discountCodes_one": "Discount code",
+    "discountCodes_other": "Discount codes",
+    "refunded": "{{amount}} refunded"
   }
 }

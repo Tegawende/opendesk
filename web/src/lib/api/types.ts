@@ -1043,6 +1043,8 @@ export type TicketPanel = {
   auth?: "client_credentials" | "access_token";
   /** shopify client_credentials: the app's client ID (not a secret). */
   client_id?: string;
+  /** shopify: the customer's tags are read and shown (true unless an admin turned them off). */
+  show_tags: boolean;
   enabled: boolean;
   position: number;
   /** error: the last lookup found the credentials refused. */
@@ -1051,6 +1053,7 @@ export type TicketPanel = {
   created_at: string;
   updated_at: string;
 };
+/** `tags` is empty when the panel leaves them out. */
 export type PanelCustomer = { name: string; url: string; orders_count: number; total_spent: string; currency: string; tags: string[] };
 export type PanelOrder = {
   id: string;
@@ -1063,6 +1066,13 @@ export type PanelOrder = {
   financial_status: string;
   fulfillment_status: string;
   cancelled: boolean;
+  cancelled_at?: string;
+  /** Decimal, what was refunded; absent when nothing was. */
+  refunded?: string;
+  discount_codes: string[];
+  /** Where it goes (city and ISO country, never the street) and the shipping method; absent when there is neither. */
+  shipping?: { city?: string; country?: string; method?: string };
+  /** `price`: the unit price before discounts, decimal, in the order's currency. */
   items: { title: string; variant?: string; quantity: number; price: string }[];
   tracking: { company?: string; number?: string; url?: string }[];
 };

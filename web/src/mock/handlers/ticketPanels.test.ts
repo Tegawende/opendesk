@@ -20,7 +20,34 @@ describe("mock ticket panels", () => {
     const withEmail = tickets.find((t) => t.contact?.email)!;
     const d = (await call("GET", `/v1/tickets/${withEmail.id}/panels/${shop.id}`)).body;
     expect(["ok", "empty"]).toContain(d.state);
-    if (d.state === "ok") expect(d.orders.length).toBeGreaterThan(0);
+    if (d.state === "ok") {
+      expect(d.orders.length).toBeGreaterThan(0);
+      expect(d.orders[0].items[0].price).toMatch(/^\d+\.\d\d$/);
+      expect(d.orders[0].shipping).toMatchObject({ city: expect.any(String), country: expect.stringMatching(/^[A-Z]{2}$/) });
+      expect(Array.isArray(d.orders[0].discount_codes)).toBe(true);
+    }
+  });
+
+  it("leaves the customer's tags out when the panel says so, for Shopify panels only", async () => {
+    const panels = (await call("GET", "/v1/ticket-panels")).body.data as { id: string; kind: string; show_tags: boolean }[];
+    const shop = panels.find((p) => p.kind === "shopify")!;
+    expect(shop.show_tags).toBe(true);
+    const tickets = (await call("GET", "/v1/tickets")).body.data as { id: string; contact: { email: string | null } | null }[];
+    const ids = tickets.filter((t) => t.contact?.email).map((t) => t.id);
+    const read = async () => {
+      for (const id of ids) {
+        const d = (await call("GET", `/v1/tickets/${id}/panels/${shop.id}`)).body;
+        if (d.state === "ok") return d;
+      }
+      throw new Error("no contact the store knows");
+    };
+    expect((await read()).customer.tags.length).toBeGreaterThan(0);
+    expect((await call("PATCH", `/v1/ticket-panels/${shop.id}`, { show_tags: false })).body.show_tags).toBe(false);
+    expect((await read()).customer.tags).toEqual([]);
+    await call("PATCH", `/v1/ticket-panels/${shop.id}`, { show_tags: true });
+    const made = await call("POST", "/v1/ticket-panels", { kind: "http", url: "https://erp.example.com/tags" });
+    expect((await call("PATCH", `/v1/ticket-panels/${made.body.panel.id}`, { show_tags: false })).status).toBe(422);
+    await call("DELETE", `/v1/ticket-panels/${made.body.panel.id}`);
   });
 
   it("adds an http panel with a secret shown once, refuses bad input, and removes it", async () => {

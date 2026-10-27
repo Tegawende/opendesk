@@ -165,6 +165,7 @@ interface TicketPanel { id: string; kind: "shopify" | "http"; name: string;
   host: string /* shopify: the shop's myshopify.com domain; http: the URL's host only, since a path can carry a secret */;
   auth?: "client_credentials" | "access_token" /* shopify: how OpenDesk gets its Admin API token */;
   client_id?: string /* shopify client_credentials: the app's client ID, not a secret */;
+  show_tags: boolean /* shopify: the customer's tags are read and shown; true unless an admin turned them off */;
   enabled: boolean; position: number; status: "connected" | "error" /* error: the last lookup found the credentials refused */;
   last_error: string; created_at: string; updated_at: string }
 interface TicketPanelData { panel_id: string; kind: "shopify" | "http";
@@ -172,12 +173,16 @@ interface TicketPanelData { panel_id: string; kind: "shopify" | "http";
   message?: string /* error: a few words, never a URL */; customer?: Customer; orders?: Order[] /* shopify */;
   sections?: Section[] /* http */; fetched_at: string }
 interface Customer { name: string; url: string /* in the store's admin */; orders_count: number;
-  total_spent: string /* decimal */; currency: string; tags: string[] }
+  total_spent: string /* decimal */; currency: string; tags: string[] /* empty when the panel leaves them out */ }
 interface Order { id: string; number: string /* "#1042" */; url: string /* in the store's admin */; created_at: string;
   total: string /* decimal, after refunds */; currency: string;
   financial_status: string /* lowercase: paid, pending, refunded, partially_refunded, … */;
   fulfillment_status: string /* lowercase: fulfilled, unfulfilled, partially_fulfilled, … */; cancelled: boolean;
-  items: { title: string; variant?: string; quantity: number; price: string /* unit, decimal */ }[];
+  cancelled_at?: string; refunded?: string /* decimal, what was refunded; absent when nothing was */;
+  discount_codes: string[];
+  shipping?: { city?: string; country?: string /* ISO 3166-1 alpha-2 */; method?: string /* as the checkout named it */ }
+    /* absent when the order has neither an address nor a method; never the street */;
+  items: { title: string; variant?: string; quantity: number; price: string /* unit, before discounts, decimal, in the order's currency */ }[];
   tracking: { company?: string; number?: string; url?: string /* https only */ }[] }
 interface Section { title: string; items: { label: string; value: string; url?: string /* https only */ }[] }
 ```
@@ -188,8 +193,8 @@ into the same section.
 | method | path | role | body → response |
 | --- | --- | --- | --- |
 | GET | `/v1/ticket-panels` | viewer, `tickets:read` | → `{data: TicketPanel[]}` in `position` order |
-| POST | `/v1/ticket-panels` | admin user | `{kind, name?, shop? /* shopify: domain, handle or admin URL */, client_id?, client_secret? /* shopify: an app */, token? /* shopify: in place of the app */, url? /* http */}` → 201 `{panel, secret? /* http: the signing secret, shown once */}`, `Cache-Control: no-store` |
-| PATCH | `/v1/ticket-panels/{id}` | admin user | `{name?, enabled?, position?, client_secret?, client_id? /* shopify: a new secret keeps the client ID */, token? /* shopify */, url? /* http */}` → `TicketPanel` |
+| POST | `/v1/ticket-panels` | admin user | `{kind, name?, shop? /* shopify: domain, handle or admin URL */, client_id?, client_secret? /* shopify: an app */, token? /* shopify: in place of the app */, show_tags? /* shopify, default true */, url? /* http */}` → 201 `{panel, secret? /* http: the signing secret, shown once */}`, `Cache-Control: no-store` |
+| PATCH | `/v1/ticket-panels/{id}` | admin user | `{name?, enabled?, position?, client_secret?, client_id? /* shopify: a new secret keeps the client ID */, token? /* shopify */, show_tags? /* shopify; 422 on http */, url? /* http */}` → `TicketPanel` |
 | POST | `/v1/ticket-panels/{id}/rotate-secret` | admin user | → `{panel, secret}` (http; the old secret stops at once) |
 | DELETE | `/v1/ticket-panels/{id}` | admin user | → 204 |
 | GET | `/v1/tickets/{id}/panels/{panelId}` | viewer, `tickets:read` | `?refresh=true` asks the product again → `TicketPanelData`. A hidden or missing ticket, or a panel that is off or gone: `404` |
@@ -217,7 +222,18 @@ into the same section.
   these tokens only for a shop of the app's own organization) marks the panel `error`.
 - Shopify: the first customer whose default email is the contact's (an exact, case-insensitive
   match of the phrase search); none is `empty`. Up to 5 orders, newest first, with up to 10
-  lines each and their fulfilments' tracking. Links go to `admin.shopify.com/store/<handle>`.
+  lines each (unit price before discounts), their fulfilments' tracking, discount codes, the
+  refunded amount (`totalRefundedSet`), the shipping method (`shippingLine.title`) and the
+  destination's city and country (`shippingAddress`; never the street). The customer's tags are
+  read only when `show_tags` is on (`tags @include(if: $tags)`). One query, a requested cost of
+  about 350 points (Shopify allows 1,000 per query). An app without access to customer addresses
+  gets them refused field by field: the orders show without a destination and the panel stays
+  `connected`. Links go to `admin.shopify.com/store/<handle>`: the customer and each order by
+  the number of its global id (`gid://shopify/Order/123` → `/orders/123`).
+- The integrations catalog in settings lists Shopify beside the MCP products, and a card for a
+  panel from a URL: both open the panel's own dialog, since a panel is a `ticket_panels` row and
+  not an integration (it gives Ollie no tool). A connected Shopify panel shows as connected there
+  and leads to its row.
 
 ### The http request
 
@@ -252,7 +268,7 @@ panel's secret: the scheme of outgoing webhooks (`contracts/events.md`), verifie
   answers, events, logs or audit entries. Requests go through the outbound URL rules at connect
   time (https, public addresses only, no redirects, no proxy; loopback on development instances).
 - Audit: `ticket_panel.connected`, `ticket_panel.updated` (`changes` names the fields:
-  `credentials` for new Shopify credentials, `secret` for a rotation), `ticket_panel.disconnected`,
+  `credentials` for new Shopify credentials, `secret` for a rotation, `show_tags`), `ticket_panel.disconnected`,
   with the kind and host.
 - The ticket is read through domain visibility: a contact on a ticket of a private team the
   reader is not on is never looked up.

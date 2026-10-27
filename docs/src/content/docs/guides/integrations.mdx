@@ -92,7 +92,7 @@ Integrations are for your team's Ollie. To let the [AI agent](/guides/ai/#the-ai
 
 ## Ticket panels
 
-A ticket panel shows, beside the ticket and under the contact, what another product knows about the ticket's contact: their orders in your Shopify store, or anything a system of your own can answer, such as an ERP's delivery dates. Panels only read. They load when someone opens the ticket, each on its own, and a product that is slow or down shows a short note instead of holding the ticket up. Admins add them in **Settings, Integrations, Ticket panels**.
+A ticket panel shows, beside the ticket and under the contact, what another product knows about the ticket's contact: their orders in your Shopify store, or anything a system of your own can answer, such as an ERP's delivery dates. Panels only read. They load when someone opens the ticket, each on its own, and a product that is slow or down shows a short note instead of holding the ticket up. Admins add them in **Settings, Integrations, Ticket panels**, or from the **Shopify** and **Your own data** cards of the integrations catalog.
 
 <Steps>
 <Step title="Shopify: create an app for your shop">
@@ -104,7 +104,7 @@ The app must belong to the shop's own Shopify organization: create it while sign
 </Step>
 <Step title="Add the panel">
 
-Click **Add a panel**, keep **Shopify**, enter the shop's `myshopify.com` domain and paste the client ID and secret. opendesk checks them with the shop before saving them, then asks Shopify for a new access every 24 hours on its own. An app made in Shopify admin before 2026 still has an Admin API access token: choose **An access token** and paste it instead. Each ticket whose contact has an email then shows the customer (with their order count, what they spent and their tags) and their last five orders: number, date, total, payment and fulfilment status, what they bought and the parcel's tracking link. Every order opens in Shopify admin.
+Click **Add a panel**, keep **Shopify**, enter the shop's `myshopify.com` domain and paste the client ID and secret. opendesk checks them with the shop before saving them, then asks Shopify for a new access every 24 hours on its own. An app made in Shopify admin before 2026 still has an Admin API access token: choose **An access token** and paste it instead. Each ticket whose contact has an email then shows the customer (with their order count, what they spent and their tags) and their last five orders: number, date, total, payment and fulfilment status, each line with its unit price, the city and country it ships to and the shipping method, discount codes, what was refunded, and the parcel's tracking link. A cancelled order is marked with its date. Every order opens in Shopify admin. The city and country need the app's access to customer addresses (protected customer data in the Dev Dashboard); without it the orders show without them. If your store tags customers for marketing (newsletter, signup source), turn off **Show customer tags** when adding the panel or in its menu.
 
 </Step>
 <Step title="A system of your own: add a panel from a URL">

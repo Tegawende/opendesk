@@ -52,6 +52,17 @@ func shopifyOrigin(shop string) string { return "https://" + shop }
 // shopHandle is the shop's name in admin.shopify.com links.
 func shopHandle(shop string) string { return strings.TrimSuffix(shop, ".myshopify.com") }
 
+// adminURL is the shop's admin, where its customers and orders open.
+func adminURL(shop string) string {
+	return "https://admin.shopify.com/store/" + url.PathEscape(shopHandle(shop))
+}
+
+// positive reports whether a decimal amount is above zero.
+func positive(amount string) bool {
+	f, err := strconv.ParseFloat(strings.TrimSpace(amount), 64)
+	return err == nil && f > 0
+}
+
 // gidNumber is the number at the end of a Shopify global id (gid://shopify/Order/123).
 func gidNumber(gid string) string {
 	if i := strings.LastIndexByte(gid, '/'); i >= 0 {
@@ -105,18 +116,13 @@ func (s *Service) graphql(ctx context.Context, shop, token, query string, vars m
 	}
 	var env struct {
 		Data   json.RawMessage `json:"data"`
-		Errors []struct {
-			Message    string `json:"message"`
-			Extensions struct {
-				Code string `json:"code"`
-			} `json:"extensions"`
-		} `json:"errors"`
+		Errors []gqlError      `json:"errors"`
 	}
 	if err := json.Unmarshal(raw, &env); err != nil {
 		return errors.New("Shopify's answer is not JSON.")
 	}
-	if len(env.Errors) > 0 {
-		e := env.Errors[0]
+	if errs := blocking(env.Errors, env.Data); len(errs) > 0 {
+		e := errs[0]
 		if e.Extensions.Code == "ACCESS_DENIED" {
 			return &authError{"Shopify refused: " + clip(e.Message, 200)}
 		}
@@ -126,6 +132,40 @@ func (s *Service) graphql(ctx context.Context, shop, token, query string, vars m
 		return errors.New("Shopify: " + clip(e.Message, 200))
 	}
 	return json.Unmarshal(env.Data, out)
+}
+
+type gqlError struct {
+	Message    string `json:"message"`
+	Path       []any  `json:"path"`
+	Extensions struct {
+		Code string `json:"code"`
+	} `json:"extensions"`
+}
+
+// optionalFields are fields an app may not be allowed to read: Shopify answers null with an
+// error for each (an app without access to customer addresses, for shippingAddress), and the
+// rest of the answer stands.
+var optionalFields = map[string]bool{"shippingAddress": true}
+
+// blocking is the errors that fail an answer: all of them without data, else those outside
+// the optional fields.
+func blocking(errs []gqlError, data json.RawMessage) []gqlError {
+	if len(errs) == 0 || len(data) == 0 || string(data) == "null" {
+		return errs
+	}
+	out := []gqlError{}
+	for _, e := range errs {
+		optional := false
+		for _, p := range e.Path {
+			if f, ok := p.(string); ok && optionalFields[f] {
+				optional = true
+			}
+		}
+		if !optional {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // checkShopify reads the shop's name with the credentials, so a wrong shop, app or token
@@ -156,7 +196,9 @@ func (s *Service) checkShopify(ctx context.Context, shop string, c shopifyCred) 
 	return clip(strings.TrimSpace(out.Shop.Name), 64), nil
 }
 
-const customerQuery = `query PanelCustomer($q: String!, $orders: Int!, $items: Int!) {
+// customerQuery reads the contact's customer and last orders. Its requested cost is about 350
+// points (5 orders of 10 lines and 5 fulfilments), well under Shopify's 1,000 per query.
+const customerQuery = `query PanelCustomer($q: String!, $orders: Int!, $items: Int!, $tags: Boolean!) {
   customers(first: 1, query: $q) {
     nodes {
       id
@@ -164,7 +206,7 @@ const customerQuery = `query PanelCustomer($q: String!, $orders: Int!, $items: I
       defaultEmailAddress { emailAddress }
       numberOfOrders
       amountSpent { amount currencyCode }
-      tags
+      tags @include(if: $tags)
       orders(first: $orders, sortKey: CREATED_AT, reverse: true) {
         nodes {
           id
@@ -174,6 +216,10 @@ const customerQuery = `query PanelCustomer($q: String!, $orders: Int!, $items: I
           displayFinancialStatus
           displayFulfillmentStatus
           currentTotalPriceSet { shopMoney { amount currencyCode } }
+          totalRefundedSet { shopMoney { amount currencyCode } }
+          discountCodes
+          shippingLine { title }
+          shippingAddress { city countryCodeV2 }
           lineItems(first: $items) {
             nodes { title variantTitle quantity originalUnitPriceSet { shopMoney { amount currencyCode } } }
           }
@@ -212,7 +258,16 @@ type shopifyCustomer struct {
 			DisplayFinancialStatus   string     `json:"displayFinancialStatus"`
 			DisplayFulfillmentStatus string     `json:"displayFulfillmentStatus"`
 			CurrentTotalPriceSet     shopMoney  `json:"currentTotalPriceSet"`
-			LineItems                struct {
+			TotalRefundedSet         *shopMoney `json:"totalRefundedSet"`
+			DiscountCodes            []string   `json:"discountCodes"`
+			ShippingLine             *struct {
+				Title string `json:"title"`
+			} `json:"shippingLine"`
+			ShippingAddress *struct {
+				City          *string `json:"city"`
+				CountryCodeV2 *string `json:"countryCodeV2"`
+			} `json:"shippingAddress"`
+			LineItems struct {
 				Nodes []struct {
 					Title                string    `json:"title"`
 					VariantTitle         *string   `json:"variantTitle"`
@@ -255,7 +310,7 @@ func (s *Service) readShopify(ctx context.Context, x *row, sub subject, d *Data)
 			Nodes []shopifyCustomer `json:"nodes"`
 		} `json:"customers"`
 	}
-	vars := map[string]any{"q": searchPhrase(sub.Email), "orders": shopifyOrders, "items": shopifyItems}
+	vars := map[string]any{"q": searchPhrase(sub.Email), "orders": shopifyOrders, "items": shopifyItems, "tags": x.ShowTags}
 	err = s.graphql(ctx, x.Target, token, customerQuery, vars, &out)
 	if errors.Is(err, errAuth) && !fresh {
 		// The app's token was revoked before its end: once more with a new one.
@@ -279,20 +334,38 @@ func (s *Service) readShopify(ctx context.Context, x *row, sub subject, d *Data)
 		d.State = "empty"
 		return nil
 	}
-	admin := "https://admin.shopify.com/store/" + url.PathEscape(shopHandle(x.Target))
+	admin := adminURL(x.Target)
 	count, _ := strconv.ParseInt(c.NumberOfOrders.String(), 10, 64)
-	tags := c.Tags
-	if tags == nil {
-		tags = []string{}
+	tags := []string{}
+	if x.ShowTags && c.Tags != nil {
+		tags = c.Tags
 	}
-	d.Customer = &Customer{Name: c.DisplayName, URL: admin + "/customers/" + gidNumber(c.ID), OrdersCount: count,
+	d.Customer = &Customer{Name: c.DisplayName, URL: admin + "/customers/" + url.PathEscape(gidNumber(c.ID)), OrdersCount: count,
 		TotalSpent: c.AmountSpent.Amount, Currency: c.AmountSpent.CurrencyCode, Tags: tags}
 	d.Orders = []Order{}
 	for _, o := range c.Orders.Nodes {
-		order := Order{ID: o.ID, Number: o.Name, URL: admin + "/orders/" + gidNumber(o.ID), CreatedAt: o.CreatedAt,
+		order := Order{ID: o.ID, Number: o.Name, URL: admin + "/orders/" + url.PathEscape(gidNumber(o.ID)), CreatedAt: o.CreatedAt,
 			Total: o.CurrentTotalPriceSet.ShopMoney.Amount, Currency: o.CurrentTotalPriceSet.ShopMoney.CurrencyCode,
 			FinancialStatus: strings.ToLower(o.DisplayFinancialStatus), FulfillmentStatus: strings.ToLower(o.DisplayFulfillmentStatus),
-			Cancelled: o.CancelledAt != nil, Items: []OrderItem{}, Tracking: []Tracking{}}
+			Cancelled: o.CancelledAt != nil, CancelledAt: o.CancelledAt, DiscountCodes: []string{}, Items: []OrderItem{}, Tracking: []Tracking{}}
+		if r := o.TotalRefundedSet; r != nil && positive(r.ShopMoney.Amount) {
+			order.Refunded = r.ShopMoney.Amount
+		}
+		for _, code := range o.DiscountCodes {
+			if code = strings.TrimSpace(code); code != "" {
+				order.DiscountCodes = append(order.DiscountCodes, code)
+			}
+		}
+		var ship Shipping
+		if a := o.ShippingAddress; a != nil {
+			ship.City, ship.Country = strings.TrimSpace(deref(a.City)), strings.ToUpper(strings.TrimSpace(deref(a.CountryCodeV2)))
+		}
+		if o.ShippingLine != nil {
+			ship.Method = strings.TrimSpace(o.ShippingLine.Title)
+		}
+		if ship != (Shipping{}) {
+			order.Shipping = &ship
+		}
 		for _, li := range o.LineItems.Nodes {
 			order.Items = append(order.Items, OrderItem{Title: li.Title, Variant: deref(li.VariantTitle), Quantity: li.Quantity,
 				Price: li.OriginalUnitPriceSet.ShopMoney.Amount})

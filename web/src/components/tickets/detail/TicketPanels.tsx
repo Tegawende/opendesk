@@ -3,7 +3,7 @@
 // each panel loads on its own, folds away, and a failure is one quiet line.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, ChevronRight, Globe, RefreshCw, Truck } from "lucide-react";
+import { ArrowUpRight, BadgePercent, ChevronRight, Globe, MapPin, RefreshCw, Truck, Undo2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,7 +14,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { api } from "@/lib/api/endpoints";
 import type { PanelOrder, PanelSection, TicketPanel, TicketPanelData } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
-import { money, shortDate } from "@/lib/format";
+import { countryName, money, shortDate } from "@/lib/format";
 import { ease } from "@/lib/motion";
 import { q, qk } from "@/lib/queries";
 
@@ -125,7 +125,7 @@ function PanelSectionView({ ticketId, panel, open, onToggle }: { ticketId: strin
             className="overflow-hidden"
           >
             <div className="px-4 pb-3.5" data-ph-mask>
-              {isLoading || !data ? <PanelSkeleton /> : <PanelBody data={data} onRetry={() => void refresh()} />}
+              {isLoading || !data ? <PanelSkeleton /> : <PanelBody data={data} showTags={panel.show_tags !== false} onRetry={() => void refresh()} />}
             </div>
           </motion.div>
         )}
@@ -148,7 +148,8 @@ function Quiet({ children }: { children: ReactNode }) {
   return <p className="text-[12px] text-fg-4">{children}</p>;
 }
 
-export function PanelBody({ data, onRetry }: { data: TicketPanelData; onRetry?: () => void }) {
+/** What a panel answered; `showTags` follows the panel's setting (an answer from before it changed may still carry tags). */
+export function PanelBody({ data, onRetry, showTags = true }: { data: TicketPanelData; onRetry?: () => void; showTags?: boolean }) {
   const { t } = useTranslation("inbox");
   switch (data.state) {
     case "no_contact":
@@ -167,7 +168,7 @@ export function PanelBody({ data, onRetry }: { data: TicketPanelData; onRetry?: 
         </p>
       );
   }
-  return data.kind === "shopify" ? <Commerce data={data} /> : <Sections sections={data.sections ?? []} />;
+  return data.kind === "shopify" ? <Commerce data={data} showTags={showTags} /> : <Sections sections={data.sections ?? []} />;
 }
 
 /** "Partly refunded" for partially_refunded, the word Shopify uses otherwise. */
@@ -186,7 +187,7 @@ function statusTone(s: string): "ok" | "warn" | "danger" | "neutral" {
   return "neutral";
 }
 
-function Commerce({ data }: { data: TicketPanelData }) {
+function Commerce({ data, showTags }: { data: TicketPanelData; showTags: boolean }) {
   const { t } = useTranslation("inbox");
   const c = data.customer;
   const orders = data.orders ?? [];
@@ -207,7 +208,7 @@ function Commerce({ data }: { data: TicketPanelData }) {
           <p className="text-[11.5px] text-fg-3">
             {t("panels.orders", { count: c.orders_count })} · {t("panels.spent", { amount: money(c.total_spent, c.currency) })}
           </p>
-          {c.tags.length > 0 && (
+          {showTags && c.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {c.tags.slice(0, 6).map((tag) => (
                 <Badge key={tag}>{tag}</Badge>
@@ -229,45 +230,79 @@ function Commerce({ data }: { data: TicketPanelData }) {
   );
 }
 
+/** "Brussels, Belgium · DHL Express": where an order goes and how, from what the store knows. */
+export function shippingLine(s: PanelOrder["shipping"]): string {
+  if (!s) return "";
+  const place = [s.city, s.country ? countryName(s.country) : ""].filter(Boolean).join(", ");
+  return [place, s.method].filter(Boolean).join(" · ");
+}
+
 function OrderRow({ o }: { o: PanelOrder }) {
   const { t } = useTranslation("inbox");
   const word = useStatusWord();
+  const shipping = shippingLine(o.shipping);
+  const codes = o.discount_codes ?? [];
   return (
-    <li className="rounded-md border border-line-soft px-2.5 py-2">
+    <li className={cn("rounded-md border border-line-soft px-2.5 py-2", o.cancelled && "bg-sunken")}>
       <div className="flex items-baseline gap-2">
         <a
           href={o.url}
           target="_blank"
           rel="noopener noreferrer"
           title={t("panels.openOrder", { number: o.number })}
-          className="mono text-[12px] font-medium text-fg outline-none hover:underline focus-visible:underline"
+          className="group inline-flex items-center gap-0.5 mono text-[12px] font-medium text-fg outline-none hover:underline focus-visible:underline"
         >
           {o.number}
+          <ArrowUpRight className="size-3 shrink-0 text-fg-4 group-hover:text-fg" aria-hidden />
         </a>
         <span className="text-[11.5px] text-fg-4">{shortDate(o.created_at)}</span>
-        <span className="ml-auto text-[12px] tabular-nums text-fg-2">{money(o.total, o.currency)}</span>
+        <span className={cn("ml-auto text-[12px] tabular-nums", o.cancelled ? "text-fg-4" : "text-fg-2")}>{money(o.total, o.currency)}</span>
       </div>
       <div className="mt-1 flex flex-wrap gap-1">
-        {o.cancelled ? (
-          <Badge tone="danger">{t("panels.cancelled")}</Badge>
-        ) : (
-          <>
-            {o.financial_status && <Badge tone={statusTone(o.financial_status)}>{word(o.financial_status)}</Badge>}
-            {o.fulfillment_status && <Badge tone={statusTone(o.fulfillment_status)}>{word(o.fulfillment_status)}</Badge>}
-          </>
+        {o.cancelled && (
+          <Badge tone="danger">{o.cancelled_at ? t("panels.cancelledOn", { date: shortDate(o.cancelled_at) }) : t("panels.cancelled")}</Badge>
         )}
+        {o.financial_status && <Badge tone={statusTone(o.financial_status)}>{word(o.financial_status)}</Badge>}
+        {!o.cancelled && o.fulfillment_status && <Badge tone={statusTone(o.fulfillment_status)}>{word(o.fulfillment_status)}</Badge>}
       </div>
       {o.items.length > 0 && (
         <ul className="mt-1.5 flex flex-col gap-0.5 text-[11.5px] text-fg-3">
           {o.items.map((it, i) => (
             <li key={i} className="flex gap-1.5">
               <span className="tabular-nums text-fg-4">{it.quantity}×</span>
-              <span className="min-w-0 flex-1 truncate">
+              <span className="min-w-0 flex-1 truncate" title={it.variant ? `${it.title} - ${it.variant}` : it.title}>
                 {it.title}
-                {it.variant ? <span className="text-fg-4"> · {it.variant}</span> : null}
+                {it.variant ? <span className="text-fg-4"> - {it.variant}</span> : null}
               </span>
+              {it.price && (
+                <span className="shrink-0 tabular-nums text-fg-4" title={t("panels.unitPrice")}>
+                  {money(it.price, o.currency)}
+                </span>
+              )}
             </li>
           ))}
+        </ul>
+      )}
+      {(shipping || codes.length > 0 || o.refunded) && (
+        <ul className="mt-1.5 flex flex-col gap-0.5 text-[11.5px] text-fg-3">
+          {shipping && (
+            <li className="flex items-center gap-1.5" title={t("panels.shipping")}>
+              <MapPin className="size-3 shrink-0 text-fg-4" aria-hidden />
+              <span className="min-w-0 truncate">{shipping}</span>
+            </li>
+          )}
+          {codes.length > 0 && (
+            <li className="flex items-center gap-1.5" title={t("panels.discountCodes", { count: codes.length })}>
+              <BadgePercent className="size-3 shrink-0 text-fg-4" aria-hidden />
+              <span className="mono min-w-0 truncate">{codes.join(", ")}</span>
+            </li>
+          )}
+          {o.refunded && (
+            <li className="flex items-center gap-1.5">
+              <Undo2 className="size-3 shrink-0 text-fg-4" aria-hidden />
+              <span className="min-w-0 truncate">{t("panels.refunded", { amount: money(o.refunded, o.currency) })}</span>
+            </li>
+          )}
         </ul>
       )}
       {o.tracking.length > 0 && (

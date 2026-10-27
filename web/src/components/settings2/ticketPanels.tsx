@@ -4,7 +4,7 @@
 // token. Secrets and tokens never come back: they are replaced, a signing secret renewed.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, KeyRound, Link2, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { ArrowUpRight, KeyRound, Link2, MoreHorizontal, Plus, Tags, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Section } from "@/components/layout";
@@ -14,7 +14,7 @@ import { useConfirm } from "@/components/ui/confirm";
 import { CopyField } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, TextInput } from "@/components/ui/input";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { Menu, MenuCheckItem, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Switch } from "@/components/ui/switch";
 import { Segmented } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
@@ -23,9 +23,11 @@ import { errorMessage } from "@/lib/api/client";
 import type { TicketPanel } from "@/lib/api/types";
 import { qk, q, removeFromList, upsertInList } from "@/lib/queries";
 import { ListSkeleton, StatePill } from "./bits";
+import { CatalogTile, ProviderMark } from "./integrations";
 import { MotionList, MotionRow } from "./motion";
 
 type Kind = TicketPanel["kind"];
+export type PanelKind = Kind;
 type ShopifyAuth = NonNullable<TicketPanel["auth"]>;
 type ShopifyCred = { auth: ShopifyAuth; clientId: string; clientSecret: string; token: string };
 
@@ -63,10 +65,29 @@ export function shopDomain(v: string): string | null {
   return /^[a-z0-9][a-z0-9-]{0,59}\.myshopify\.com$/.test(s) ? s : null;
 }
 
-export function TicketPanelsSection({ admin }: { admin: boolean }) {
+/** The id of a panel's row in settings, which the catalog scrolls to. */
+export const panelAnchor = (id: string) => `ticket-panel-${id}`;
+
+/** Scrolls to a panel's row in settings and marks it for a moment. */
+export function revealPanel(id: string) {
+  const el = document.getElementById(panelAnchor(id));
+  if (!el) return;
+  const reduce = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView?.({ behavior: reduce ? "auto" : "smooth", block: "center" });
+  el.focus({ preventScroll: true });
+  if (!reduce) el.animate?.([{ backgroundColor: "var(--hover)" }, { backgroundColor: "transparent" }], { duration: 1400, easing: "ease-out" });
+}
+
+/**
+ * The panels' settings. The integrations catalog opens the add dialog through `adding`
+ * (a kind, or null when closed); without it the section keeps its own.
+ */
+export function TicketPanelsSection({ admin, adding: addingKind, onAdding }: { admin: boolean; adding?: Kind | null; onAdding?: (k: Kind | null) => void }) {
   const { t } = useTranslation("settingsDev");
   const { data: panels, isLoading } = useQuery(q.ticketPanels());
-  const [adding, setAdding] = useState(false);
+  const [ownAdding, setOwnAdding] = useState<Kind | null>(null);
+  const adding = addingKind !== undefined ? addingKind : ownAdding;
+  const setAdding = onAdding ?? setOwnAdding;
   const [secret, setSecret] = useState<string | null>(null);
   const rows = panels ?? [];
 
@@ -77,7 +98,7 @@ export function TicketPanelsSection({ admin }: { admin: boolean }) {
       description={admin ? t("panels.hint") : `${t("panels.hint")} ${t("panels.adminsOnly")}`}
       actions={
         admin && (
-          <Button size="xs" icon={<Plus className="size-3.5" />} onClick={() => setAdding(true)}>
+          <Button size="xs" icon={<Plus className="size-3.5" />} onClick={() => setAdding("shopify")}>
             {t("panels.add")}
           </Button>
         )
@@ -96,9 +117,10 @@ export function TicketPanelsSection({ admin }: { admin: boolean }) {
       )}
       {adding && (
         <AddPanelDialog
-          onClose={() => setAdding(false)}
+          initialKind={adding}
+          onClose={() => setAdding(null)}
           onAdded={(p, s) => {
-            setAdding(false);
+            setAdding(null);
             toast.success(t("panels.added", { name: p.name }));
             if (s) setSecret(s);
           }}
@@ -118,7 +140,7 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
   const stateWord = !p.enabled ? t("panels.state.off") : t(`panels.state.${p.status}`);
 
   const update = useMutation({
-    mutationFn: (b: { enabled?: boolean }) => api.ticketPanels.update(p.id, b),
+    mutationFn: (b: { enabled?: boolean; show_tags?: boolean }) => api.ticketPanels.update(p.id, b),
     onMutate: (b) => {
       const prev = qc.getQueryData<TicketPanel[]>(qk.ticketPanels);
       upsertInList(qc, qk.ticketPanels, { ...p, ...b });
@@ -149,7 +171,7 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
 
   return (
     <MotionRow>
-      <div className="flex items-center gap-3 px-4 py-2.5">
+      <div id={panelAnchor(p.id)} tabIndex={-1} className="flex items-center gap-3 px-4 py-2.5 outline-none">
         <PanelMark panel={p} size="md" />
         <div className={p.enabled ? "min-w-0 flex-1" : "min-w-0 flex-1 opacity-60"}>
           <div className="flex items-center gap-2">
@@ -174,9 +196,14 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
               </MenuTrigger>
               <MenuContent>
                 {p.kind === "shopify" ? (
-                  <MenuItem icon={<KeyRound />} onSelect={() => setEditing(true)}>
-                    {t("panels.replaceCredentials")}
-                  </MenuItem>
+                  <>
+                    <MenuItem icon={<KeyRound />} onSelect={() => setEditing(true)}>
+                      {t("panels.replaceCredentials")}
+                    </MenuItem>
+                    <MenuCheckItem icon={<Tags />} checked={p.show_tags} onSelect={() => update.mutate({ show_tags: !p.show_tags })}>
+                      {t("panels.showTags")}
+                    </MenuCheckItem>
+                  </>
                 ) : (
                   <>
                     <MenuItem icon={<Link2 />} onSelect={() => setEditing(true)}>
@@ -211,10 +238,11 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
   );
 }
 
-function AddPanelDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (p: TicketPanel, secret?: string) => void }) {
+function AddPanelDialog({ initialKind = "shopify", onClose, onAdded }: { initialKind?: Kind; onClose: () => void; onAdded: (p: TicketPanel, secret?: string) => void }) {
   const { t } = useTranslation("settingsDev");
   const qc = useQueryClient();
-  const [kind, setKind] = useState<Kind>("shopify");
+  const [kind, setKind] = useState<Kind>(initialKind);
+  const [showTags, setShowTags] = useState(true);
   const [shop, setShop] = useState("");
   const [cred, setCred] = useState<ShopifyCred>({ auth: "client_credentials", clientId: "", clientSecret: "", token: "" });
   const [url, setUrl] = useState("");
@@ -225,7 +253,7 @@ function AddPanelDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (p
     mutationFn: () =>
       api.ticketPanels.create(
         kind === "shopify"
-          ? { kind, shop: shop.trim(), ...shopifyBody(cred), name: name.trim() || undefined }
+          ? { kind, shop: shop.trim(), ...shopifyBody(cred), name: name.trim() || undefined, show_tags: showTags }
           : { kind, url: url.trim(), name: name.trim() || undefined },
       ),
     onSuccess: (r) => {
@@ -287,6 +315,13 @@ function AddPanelDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (p
               {(f) => <TextInput {...f} autoFocus className="mono" value={shop} placeholder="my-store.myshopify.com" onChange={(e) => setShop(e.target.value)} />}
             </Field>
             <ShopifyCredentialFields value={cred} onChange={setCred} />
+            <label className="flex cursor-pointer items-start justify-between gap-3">
+              <span className="flex flex-col gap-0.5">
+                <span className="text-[12.5px] font-medium text-fg-2">{t("panels.showTags")}</span>
+                <span className="text-[12px] leading-[18px] text-fg-3">{t("panels.showTagsHint")}</span>
+              </span>
+              <Switch checked={showTags} onCheckedChange={setShowTags} aria-label={t("panels.showTags")} />
+            </label>
           </>
         ) : (
           <Field label={t("panels.url")} hint={t("panels.urlHint")}>
@@ -426,6 +461,56 @@ function EditPanelDialog({ p, onClose }: { p: TicketPanel; onClose: () => void }
         <button type="submit" className="hidden" />
       </form>
     </Dialog>
+  );
+}
+
+/**
+ * The Shopify card of the "Add an integration" catalog: a ticket panel, not an MCP server,
+ * so it opens the panel's own dialog. Once a store is connected it says so and leads to it.
+ */
+export function ShopifyPanelCard({ admin, onAdd }: { admin: boolean; onAdd: () => void }) {
+  const { t } = useTranslation("settingsDev");
+  const { data: panels } = useQuery(q.ticketPanels());
+  const shop = (panels ?? []).find((p) => p.kind === "shopify");
+  return (
+    <CatalogTile
+      mark={<ProviderMark provider="shopify" name="Shopify" />}
+      name="Shopify"
+      kind={t("panels.catalog.kind")}
+      description={t("panels.catalog.shopify")}
+      via={t("panels.catalog.via")}
+      action={
+        shop ? (
+          <button
+            type="button"
+            onClick={() => revealPanel(shop.id)}
+            title={t("panels.catalog.show", { name: shop.name })}
+            className="rounded-sm text-[12px] font-medium text-tone-green outline-none hover:underline focus-visible:underline"
+          >
+            {t("panels.state.connected")}
+          </button>
+        ) : admin ? (
+          <Button size="xs" onClick={onAdd}>
+            {t("integrations.connect.connect")}
+          </Button>
+        ) : null
+      }
+    />
+  );
+}
+
+/** The catalog's card for a panel from a URL of the workspace's own. */
+export function OwnDataPanelCard({ onAdd }: { onAdd: () => void }) {
+  const { t } = useTranslation("settingsDev");
+  return (
+    <button
+      type="button"
+      onClick={onAdd}
+      className="flex flex-col items-start gap-1.5 rounded-lg border border-dashed border-line p-3.5 text-left transition-colors hover:border-line-strong hover:bg-surface"
+    >
+      <span className="text-[13px] font-medium text-fg">{t("panels.catalog.ownTitle")}</span>
+      <span className="text-[12px] leading-[18px] text-fg-3">{t("panels.catalog.ownBody")}</span>
+    </button>
   );
 }
 

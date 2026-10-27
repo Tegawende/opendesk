@@ -866,6 +866,12 @@
       "on_hold": "Angehalten",
       "scheduled": "Geplant",
       "restocked": "Wieder eingelagert"
-    }
+    },
+    "cancelledOn": "Storniert am {{date}}",
+    "unitPrice": "Stückpreis",
+    "shipping": "Versand",
+    "discountCodes_one": "Rabattcode",
+    "discountCodes_other": "Rabattcodes",
+    "refunded": "{{amount}} erstattet"
   }
 }

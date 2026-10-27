@@ -67,6 +67,11 @@ type fakeShopify struct {
 	scope   string          // what the app's version grants
 	issued  atomic.Int32
 	lookups atomic.Int32
+	// noAddress answers as for an app without access to customer addresses: a null
+	// shippingAddress with an access error for it.
+	noAddress bool
+	// tags is the $tags variable of the last lookup.
+	tags any
 }
 
 func newFakeShopify(tokens ...string) *fakeShopify {
@@ -83,6 +88,18 @@ func (f *fakeShopify) only(tokens ...string) {
 	for _, t := range tokens {
 		f.valid[t] = true
 	}
+}
+
+func (f *fakeShopify) withoutAddresses(on bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.noAddress = on
+}
+
+func (f *fakeShopify) lastTags() any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.tags
 }
 
 func (f *fakeShopify) set(secret, scope string) {
@@ -129,6 +146,7 @@ func (f *fakeShopify) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.lookups.Add(1)
+	f.tags = req.Variables["tags"]
 	if req.Variables["q"] != `email:"ada@example.com"` {
 		// A phrase search can still return a near match: it must not be taken.
 		_, _ = io.WriteString(w, `{"data":{"customers":{"nodes":[{"id":"gid://shopify/Customer/9","displayName":"Ada Other",
@@ -136,13 +154,33 @@ func (f *fakeShopify) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"tags":[],"orders":{"nodes":[]}}]}}}`)
 		return
 	}
+	// The query says @include(if: $tags): without it, Shopify leaves the field out.
+	tags := ""
+	if req.Variables["tags"] == true {
+		tags = `"tags":["VIP","newsletter"],`
+	}
+	address, errs := `{"city":" Brussels ","countryCodeV2":"be"}`, ""
+	if f.noAddress {
+		address = "null"
+		errs = `,"errors":[{"message":"Access denied for shippingAddress field.","extensions":{"code":"ACCESS_DENIED"},
+			"path":["customers","nodes",0,"orders","nodes",0,"shippingAddress"]}]`
+	}
 	_, _ = io.WriteString(w, `{"data":{"customers":{"nodes":[{"id":"gid://shopify/Customer/42","displayName":"Ada Buyer",
 		"defaultEmailAddress":{"emailAddress":"Ada@Example.com"},"numberOfOrders":"3","amountSpent":{"amount":"412.50","currencyCode":"EUR"},
-		"tags":["VIP"],"orders":{"nodes":[{"id":"gid://shopify/Order/1001","name":"#1042","createdAt":"2026-10-20T09:00:00Z","cancelledAt":null,
-		"displayFinancialStatus":"PAID","displayFulfillmentStatus":"FULFILLED",
-		"currentTotalPriceSet":{"shopMoney":{"amount":"129.00","currencyCode":"EUR"}},
-		"lineItems":{"nodes":[{"title":"Arco lamp","variantTitle":"Black","quantity":1,"originalUnitPriceSet":{"shopMoney":{"amount":"129.00","currencyCode":"EUR"}}}]},
-		"fulfillments":[{"trackingInfo":[{"company":"DHL","number":"JD0123","url":"https://dhl.example/track/JD0123"},{"company":null,"number":null,"url":"javascript:alert(1)"}]}]}]}}]}}}`)
+		`+tags+`"orders":{"nodes":[{"id":"gid://shopify/Order/1001","name":"#1042","createdAt":"2026-10-20T09:00:00Z","cancelledAt":null,
+		"displayFinancialStatus":"PARTIALLY_REFUNDED","displayFulfillmentStatus":"FULFILLED",
+		"currentTotalPriceSet":{"shopMoney":{"amount":"119.32","currencyCode":"EUR"}},
+		"totalRefundedSet":{"shopMoney":{"amount":"14.44","currencyCode":"EUR"}},
+		"discountCodes":["WELCOME10"," "],"shippingLine":{"title":"DHL Express"},"shippingAddress":`+address+`,
+		"lineItems":{"nodes":[{"title":"Arco lamp","variantTitle":"Black","quantity":1,"originalUnitPriceSet":{"shopMoney":{"amount":"129.00","currencyCode":"EUR"}}},
+			{"title":"Lucide Leanne Wall Lamp","variantTitle":null,"quantity":3,"originalUnitPriceSet":{"shopMoney":{"amount":"14.44","currencyCode":"EUR"}}}]},
+		"fulfillments":[{"trackingInfo":[{"company":"DHL","number":"JD0123","url":"https://dhl.example/track/JD0123"},{"company":null,"number":null,"url":"javascript:alert(1)"}]}]},
+		{"id":"gid://shopify/Order/998","name":"#1039","createdAt":"2026-09-02T14:00:00Z","cancelledAt":"2026-09-03T08:30:00Z",
+		"displayFinancialStatus":"REFUNDED","displayFulfillmentStatus":"UNFULFILLED",
+		"currentTotalPriceSet":{"shopMoney":{"amount":"0.00","currencyCode":"EUR"}},
+		"totalRefundedSet":{"shopMoney":{"amount":"0.00","currencyCode":"EUR"}},
+		"discountCodes":[],"shippingLine":null,"shippingAddress":null,
+		"lineItems":{"nodes":[]},"fulfillments":[]}]}}]}}`+errs+`}`)
 }
 
 func TestShopifyPanel(t *testing.T) {
@@ -191,18 +229,45 @@ func TestShopifyPanel(t *testing.T) {
 	tid := newTicket(t, e, agent, "ada@example.com", nil)
 	path := "/v1/tickets/" + tid + "/panels/" + p.ID.String()
 	var d Data
+	var status string
 	d = readPanel(t, e, path, viewer)
 	if d.State != "ok" || d.Customer == nil || d.Customer.Name != "Ada Buyer" || d.Customer.OrdersCount != 3 || d.Customer.TotalSpent != "412.50" ||
-		d.Customer.URL != "https://admin.shopify.com/store/lumen-store/customers/42" || !slices.Equal(d.Customer.Tags, []string{"VIP"}) {
+		d.Customer.URL != "https://admin.shopify.com/store/lumen-store/customers/42" || !slices.Equal(d.Customer.Tags, []string{"VIP", "newsletter"}) {
 		t.Fatalf("customer = %+v (%s %s)", d.Customer, d.State, d.Message)
 	}
-	if len(d.Orders) != 1 {
+	if shop.lastTags() != true || !p.ShowTags {
+		t.Fatalf("tags asked for: %v, panel %v", shop.lastTags(), p.ShowTags)
+	}
+	if len(d.Orders) != 2 {
 		t.Fatalf("orders = %+v", d.Orders)
 	}
+	// Each line with its unit price; the order links to the shop's admin by its id.
 	o := d.Orders[0]
-	if o.Number != "#1042" || o.Total != "129.00" || o.Currency != "EUR" || o.FinancialStatus != "paid" || o.FulfillmentStatus != "fulfilled" ||
-		o.URL != "https://admin.shopify.com/store/lumen-store/orders/1001" || len(o.Items) != 1 || o.Items[0].Variant != "Black" {
+	if o.Number != "#1042" || o.Total != "119.32" || o.Currency != "EUR" || o.FinancialStatus != "partially_refunded" || o.FulfillmentStatus != "fulfilled" ||
+		o.URL != "https://admin.shopify.com/store/lumen-store/orders/1001" || len(o.Items) != 2 || o.Cancelled || o.CancelledAt != nil {
 		t.Fatalf("order = %+v", o)
+	}
+	if it := o.Items; it[0] != (OrderItem{Title: "Arco lamp", Variant: "Black", Quantity: 1, Price: "129.00"}) ||
+		it[1] != (OrderItem{Title: "Lucide Leanne Wall Lamp", Quantity: 3, Price: "14.44"}) {
+		t.Fatalf("items = %+v", it)
+	}
+	// Where it goes (city and country, never the street) and how; codes, and what was refunded.
+	if o.Shipping == nil || *o.Shipping != (Shipping{City: "Brussels", Country: "BE", Method: "DHL Express"}) {
+		t.Fatalf("shipping = %+v", o.Shipping)
+	}
+	if !slices.Equal(o.DiscountCodes, []string{"WELCOME10"}) || o.Refunded != "14.44" {
+		t.Fatalf("discounts %v, refunded %q", o.DiscountCodes, o.Refunded)
+	}
+	// A cancelled order says when; nothing refunded, no address and no method leave those out.
+	c := d.Orders[1]
+	if !c.Cancelled || c.CancelledAt == nil || !c.CancelledAt.Equal(time.Date(2026, 9, 3, 8, 30, 0, 0, time.UTC)) || c.Refunded != "" ||
+		c.Shipping != nil || c.DiscountCodes == nil || len(c.DiscountCodes) != 0 || c.Items == nil || c.Tracking == nil ||
+		c.URL != "https://admin.shopify.com/store/lumen-store/orders/998" {
+		t.Fatalf("cancelled order = %+v", c)
+	}
+	raw := string(e.Do("GET", path, viewer, nil).Want(t, 200).Body)
+	if !strings.Contains(raw, `"discount_codes":[]`) || strings.Contains(raw, "street") {
+		t.Fatalf("answer = %s", raw)
 	}
 	// A parcel whose only detail is a link that isn't https shows nothing, so it is left out.
 	if len(o.Tracking) != 1 || o.Tracking[0].URL != "https://dhl.example/track/JD0123" || o.Tracking[0].Company != "DHL" {
@@ -218,6 +283,34 @@ func TestShopifyPanel(t *testing.T) {
 	if shop.lookups.Load() != n+1 {
 		t.Fatal("refresh did not ask again")
 	}
+
+	// Tags turned off are not asked for, and the changed panel never answers from before.
+	e.Do("PATCH", "/v1/ticket-panels/"+p.ID.String(), agent, map[string]any{"show_tags": false}).Want(t, 403)
+	if upd := e.Do("PATCH", "/v1/ticket-panels/"+p.ID.String(), admin, map[string]any{"show_tags": false}).Want(t, 200).Map(t); upd["show_tags"] != false {
+		t.Fatalf("tags off = %v", upd)
+	}
+	d = readPanel(t, e, path, viewer)
+	if d.State != "ok" || shop.lastTags() != false || d.Customer == nil || d.Customer.Tags == nil || len(d.Customer.Tags) != 0 {
+		t.Fatalf("without tags = %+v (asked %v)", d.Customer, shop.lastTags())
+	}
+	var showTags bool
+	e.Scalar(`SELECT show_tags FROM ticket_panels WHERE id = $1`, &showTags, p.ID)
+	if showTags {
+		t.Fatal("show_tags not stored")
+	}
+	e.Do("PATCH", "/v1/ticket-panels/"+p.ID.String(), admin, map[string]any{"show_tags": true}).Want(t, 200)
+
+	// An app without access to addresses: the orders still show, with their shipping method.
+	shop.withoutAddresses(true)
+	d = readPanel(t, e, path+"?refresh=true", viewer)
+	if d.State != "ok" || len(d.Orders) != 2 || d.Orders[0].Shipping == nil || *d.Orders[0].Shipping != (Shipping{Method: "DHL Express"}) {
+		t.Fatalf("without addresses = %+v (%s)", d.Orders, d.Message)
+	}
+	e.Scalar(`SELECT status FROM ticket_panels WHERE id = $1`, &status, p.ID)
+	if status != "connected" {
+		t.Fatalf("an address refusal marked the panel %q", status)
+	}
+	shop.withoutAddresses(false)
 
 	// Another contact the store doesn't know (a near match aside), and a ticket without one.
 	d = readPanel(t, e, "/v1/tickets/"+newTicket(t, e, agent, "ada.o@example.com", nil)+"/panels/"+p.ID.String(), viewer)
@@ -235,7 +328,7 @@ func TestShopifyPanel(t *testing.T) {
 	if d.State != "error" || !strings.Contains(d.Message, "access token") {
 		t.Fatalf("revoked = %+v", d)
 	}
-	var status, lastErr string
+	var lastErr string
 	e.Scalar(`SELECT status || '|' || last_error FROM ticket_panels WHERE id = $1`, &status, p.ID)
 	if status, lastErr, _ = strings.Cut(status, "|"); status != "error" || lastErr == "" {
 		t.Fatalf("status = %q %q", status, lastErr)
@@ -382,7 +475,10 @@ func TestPanelFollowsTicketVisibility(t *testing.T) {
 	var created struct {
 		Panel Panel `json:"panel"`
 	}
-	e.Do("POST", "/v1/ticket-panels", ws.Admin.As(ws), map[string]any{"kind": "shopify", "shop": "lumen-store", "token": "shpat_good"}).Want(t, 201).JSON(t, &created)
+	e.Do("POST", "/v1/ticket-panels", ws.Admin.As(ws), map[string]any{"kind": "shopify", "shop": "lumen-store", "token": "shpat_good", "show_tags": false}).Want(t, 201).JSON(t, &created)
+	if created.Panel.ShowTags {
+		t.Fatal("added with tags off, shows them")
+	}
 	lead := e.AddUser(ws, "agent", "Lena Lead")
 	var team string
 	e.Scalar(`INSERT INTO teams (id, workspace_id, name, private) VALUES (gen_random_uuid(), $1, 'Security', true) RETURNING id::text`, &team, ws.ID)
@@ -444,6 +540,7 @@ func TestHTTPPanel(t *testing.T) {
 	if !strings.HasPrefix(created.Secret, "pnsec_") || created.Panel.Name != "Odoo" || strings.Contains(created.Panel.Host, "s3cret") {
 		t.Fatalf("created = %+v", created)
 	}
+	e.Do("PATCH", "/v1/ticket-panels/"+created.Panel.ID.String(), admin, map[string]any{"show_tags": false}).Want(t, 422)
 	if strings.Contains(string(e.Do("GET", "/v1/ticket-panels", viewer, nil).Want(t, 200).Body), "s3cret") {
 		t.Fatal("the URL's query is listed")
 	}
@@ -529,6 +626,32 @@ func TestNormalizeShop(t *testing.T) {
 	}
 	if q := searchPhrase(`a"b\c@x.com`); q != `email:"a\"b\\c@x.com"` {
 		t.Errorf("searchPhrase = %s", q)
+	}
+}
+
+func TestShopifyHelpers(t *testing.T) {
+	if got := adminURL("lumen-store.myshopify.com") + "/orders/" + gidNumber("gid://shopify/Order/5551234"); got != "https://admin.shopify.com/store/lumen-store/orders/5551234" {
+		t.Errorf("order URL = %s", got)
+	}
+	for in, want := range map[string]bool{"14.44": true, "0.00": false, "0": false, "": false, "x": false, " 0.01 ": true} {
+		if positive(in) != want {
+			t.Errorf("positive(%q) = %v", in, !want)
+		}
+	}
+	data := json.RawMessage(`{"customers":{"nodes":[]}}`)
+	addr := gqlError{Message: "Access denied", Path: []any{"customers", "nodes", 0.0, "orders", "nodes", 1.0, "shippingAddress"}}
+	other := gqlError{Message: "Access denied", Path: []any{"customers", "nodes", 0.0, "orders"}}
+	if errs := blocking([]gqlError{addr}, data); len(errs) != 0 {
+		t.Errorf("an address refusal blocks: %v", errs)
+	}
+	if errs := blocking([]gqlError{addr, other}, data); len(errs) != 1 || errs[0].Path[len(errs[0].Path)-1] != "orders" {
+		t.Errorf("another refusal passes: %v", errs)
+	}
+	if errs := blocking([]gqlError{addr}, json.RawMessage("null")); len(errs) != 1 {
+		t.Errorf("no data, yet no error: %v", errs)
+	}
+	if !strings.Contains(customerQuery, "tags @include(if: $tags)") {
+		t.Error("tags are read whatever the panel says")
 	}
 }
 

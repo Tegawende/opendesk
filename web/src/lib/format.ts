@@ -202,6 +202,17 @@ export function currency(minorUnits: number, code: string, opts: { exact?: boole
   return nf({ style: "currency", currency: cur, ...(whole ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}) }).format(value);
 }
 
+/** A country's name in the active locale from its ISO code: "BE" -> "Belgium" / "Belgique"; the code when unknown. */
+export function countryName(code: string): string {
+  const c = code.trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(c)) return code;
+  try {
+    return new Intl.DisplayNames([intlLocale()], { type: "region" }).of(c) ?? c;
+  } catch {
+    return c;
+  }
+}
+
 /** Money from a decimal string (another product's amounts): money("129.00", "EUR") -> "€129.00". */
 export function money(amount: string, code: string): string {
   const n = Number(amount);
