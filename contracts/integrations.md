@@ -224,7 +224,13 @@ into the same section.
   answer may choose 0 to 600 s with `cache_seconds`) per panel and contact (and ticket and
   references, for http), and a changed panel never answers from before the change; `refresh` skips
   the copy. A panel makes at most 120 lookups a minute that the copy did
-  not answer. A failure is `state: "error"` with a 200, never an error status: the ticket shows a
+  not answer. What an http request carries beyond the ticket (`references`, `emails`, `phone`) is
+  read from the ticket once per version of the panel and the ticket, kept for a minute, and that
+  reading counts as the lookup it leads to: a reading the copy does not keep is refused like a
+  lookup when the 120 are spent, before the ticket is read. A new message, a deleted one or a note
+  sent as a reply changes the ticket's `updated_at`, so the next open reads it again; a changed
+  phone or an edited or restored note shows within the minute, or at once with `refresh`,
+  which reads it again. A failure is `state: "error"` with a 200, never an error status: the ticket shows a
   quiet note. Refused credentials (Shopify `401`, `403` or `ACCESS_DENIED`; the URL's `401` or
   `403`) also mark the panel `error` with `last_error` and publish `ticket_panel.updated`; a
   lookup that works again, new credentials or a new URL marks it `connected`. A timeout or an outage

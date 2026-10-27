@@ -131,29 +131,34 @@ func (x *row) referencePattern() string {
 	return *x.RefPattern
 }
 
-// lookupContext adds to sub what an http panel's request carries beyond the ticket: the
-// references found in its subject and newest messages (never their text), every address the
-// contact wrote from and the contact's phone.
-func (s *Service) lookupContext(ctx context.Context, x *row, t *domain.Ticket, sub *subject) error {
-	sub.References = []string{}
+// ticketContext is what an http panel's request carries beyond the ticket: the references found in
+// its subject and newest messages (never their text), every address the contact wrote from and the
+// contact's phone.
+type ticketContext struct {
+	References []string
+	Emails     []string
+	Phone      string
+}
+
+// lookupContext reads the ticket's context for the panel.
+func (s *Service) lookupContext(ctx context.Context, x *row, t *domain.Ticket, sub subject) (ticketContext, error) {
+	c := ticketContext{References: []string{}, Emails: []string{}}
 	if sub.Email != "" {
-		sub.Emails = []string{sub.Email}
-	} else {
-		sub.Emails = []string{}
+		c.Emails = []string{sub.Email}
 	}
 	if sub.ContactID != nil {
 		if err := s.d.DB.Pool.QueryRow(ctx, `SELECT phone FROM contacts WHERE workspace_id = $1 AND id = $2`,
-			x.WorkspaceID, *sub.ContactID).Scan(&sub.Phone); err != nil {
-			return err
+			x.WorkspaceID, *sub.ContactID).Scan(&c.Phone); err != nil {
+			return c, err
 		}
-		sub.Phone = cleanText(sub.Phone, 50)
+		c.Phone = cleanText(c.Phone, 50)
 	}
 	// Only messages every reader of the ticket reads: never a deleted one or a note sent as a reply.
 	rows, err := s.d.DB.Pool.Query(ctx, `SELECT left(m.body_text, $5), m.from_email, m.author_contact_id IS NOT DISTINCT FROM $3
 		FROM messages m WHERE m.workspace_id = $1 AND m.ticket_id = $2 AND NOT `+domain.HiddenMessageSQL+`
 		ORDER BY m.created_at DESC LIMIT $4`, x.WorkspaceID, t.ID, sub.ContactID, referenceMessages, maxScannedText)
 	if err != nil {
-		return err
+		return c, err
 	}
 	defer rows.Close()
 	texts := []string{t.Subject}
@@ -161,23 +166,23 @@ func (s *Service) lookupContext(ctx context.Context, x *row, t *domain.Ticket, s
 		var body, from string
 		var byContact bool
 		if err := rows.Scan(&body, &from, &byContact); err != nil {
-			return err
+			return c, err
 		}
 		texts = append(texts, body)
 		from = strings.ToLower(strings.TrimSpace(from))
-		if byContact && sub.ContactID != nil && from != "" && len(sub.Emails) < maxContactEmails && !slices.Contains(sub.Emails, from) {
-			sub.Emails = append(sub.Emails, from)
+		if byContact && sub.ContactID != nil && from != "" && len(c.Emails) < maxContactEmails && !slices.Contains(c.Emails, from) {
+			c.Emails = append(c.Emails, from)
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		return c, err
 	}
 	if p := x.referencePattern(); p != "" {
 		re, err := compilePattern(p)
 		if err != nil {
-			return nil // checked when saved; a pattern that no longer compiles finds nothing
+			return c, nil // checked when saved; a pattern that no longer compiles finds nothing
 		}
-		sub.References = findReferences(re, texts...)
+		c.References = findReferences(re, texts...)
 	}
-	return nil
+	return c, nil
 }

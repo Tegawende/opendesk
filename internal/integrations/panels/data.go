@@ -95,7 +95,7 @@ type SectionItem struct {
 }
 
 // subject is what a lookup is about: the ticket and its contact. An http panel's request also
-// carries the references found in the ticket, the contact's addresses and phone (lookupContext),
+// carries the references found in the ticket, the contact's addresses and phone (ticketContext),
 // and whether an agent asked again.
 type subject struct {
 	TicketID     uuid.UUID
@@ -124,7 +124,8 @@ func subjectOf(t *domain.Ticket) subject {
 
 // read answers the panel for the ticket: from the cache when it answered in the last
 // minute (a failure, the last 15 seconds; an http answer may choose its own time), else from
-// the product, within fetchTimeout.
+// the product, within fetchTimeout. A panel makes lookupsPerMinute lookups at most, and an http
+// panel's reading of the ticket (kept per ticket version) counts as the lookup it leads to.
 func (s *Service) read(ctx context.Context, x *row, t *domain.Ticket, refresh bool) Data {
 	sub := subjectOf(t)
 	sub.Refresh = refresh
@@ -133,15 +134,37 @@ func (s *Service) read(ctx context.Context, x *row, t *domain.Ticket, refresh bo
 		base.State = "no_contact"
 		return base
 	}
+	// allow takes the panel's lookup once: a reading of the ticket and the lookup it leads to
+	// count as one.
+	allowed := false
+	allow := func() bool {
+		allowed = allowed || s.d.Limiter.Allow("ticket-panel:lookup:"+x.ID.String(), lookupsPerMinute, time.Minute)
+		return allowed
+	}
 	key := cacheKey{panel: x.ID, version: x.UpdatedAt.UnixNano(), email: sub.Email}
 	if x.Kind == KindHTTP {
 		// The URL is told the ticket too, so its answer may differ per ticket, and a new
-		// reference in it asks again.
-		if err := s.lookupContext(ctx, x, t, &sub); err != nil {
-			s.d.Log.Warn("ticket panel context", "panel", x.ID, "err", err)
-			base.State, base.Message = "error", "Couldn't read the ticket."
-			return base
+		// reference in it asks again. A reading of the ticket the cache does not keep takes the
+		// panel's lookup before it starts, so readings are bounded like lookups.
+		ck := contextKey{panel: x.ID, version: x.UpdatedAt.UnixNano(), ticket: t.ID, ticketVersion: t.UpdatedAt.UnixNano(), email: sub.Email}
+		if sub.ContactID != nil {
+			ck.contact = *sub.ContactID
 		}
+		c, ok := s.contexts.get(ck)
+		if refresh || !ok {
+			if !allow() {
+				base.State, base.Message = "error", "Too many lookups. Try again in a minute."
+				return base
+			}
+			var err error
+			if c, err = s.lookupContext(ctx, x, t, sub); err != nil {
+				s.d.Log.Warn("ticket panel context", "panel", x.ID, "err", err)
+				base.State, base.Message = "error", "Couldn't read the ticket."
+				return base
+			}
+			s.contexts.set(ck, c, cacheTTL)
+		}
+		sub.References, sub.Emails, sub.Phone = c.References, c.Emails, c.Phone
 		key.ticket, key.refs = sub.TicketID, strings.Join(sub.References, "\n")
 	}
 	if !refresh {
@@ -149,7 +172,7 @@ func (s *Service) read(ctx context.Context, x *row, t *domain.Ticket, refresh bo
 			return d
 		}
 	}
-	if !s.d.Limiter.Allow("ticket-panel:lookup:"+x.ID.String(), lookupsPerMinute, time.Minute) {
+	if !allow() {
 		base.State, base.Message = "error", "Too many lookups. Try again in a minute."
 		return base
 	}
@@ -203,35 +226,56 @@ type cacheKey struct {
 	refs    string
 }
 
-type cached struct {
-	data    Data
+// contextKey is one reading of a ticket for an http panel: the panel at a version (its pattern)
+// and the ticket at a version, for its contact. A new message, a deleted one or a note sent as a
+// reply changes the ticket's updated_at, so the next reading leaves no hidden message in it.
+type contextKey struct {
+	panel         uuid.UUID
+	version       int64
+	ticket        uuid.UUID
+	ticketVersion int64
+	contact       uuid.UUID
+	email         string
+}
+
+func (k cacheKey) panelID() uuid.UUID   { return k.panel }
+func (k contextKey) panelID() uuid.UUID { return k.panel }
+
+type panelKey interface {
+	comparable
+	panelID() uuid.UUID
+}
+
+type cached[V any] struct {
+	v       V
 	expires time.Time
 }
 
-// answerCache keeps recent answers in this process. Several API processes each keep
-// their own; an answer is at most a minute old either way.
-type answerCache struct {
+// ttlCache keeps at most max recent values in this process: answers, and readings of tickets.
+// Several API processes each keep their own.
+type ttlCache[K panelKey, V any] struct {
 	mu  sync.Mutex
 	max int
-	m   map[cacheKey]cached
+	m   map[K]cached[V]
 	now func() time.Time
 }
 
-func newAnswerCache(max int) *answerCache {
-	return &answerCache{max: max, m: map[cacheKey]cached{}, now: time.Now}
+func newTTLCache[K panelKey, V any](max int) *ttlCache[K, V] {
+	return &ttlCache[K, V]{max: max, m: map[K]cached[V]{}, now: time.Now}
 }
 
-func (c *answerCache) get(k cacheKey) (Data, bool) {
+func (c *ttlCache[K, V]) get(k K) (V, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	v, ok := c.m[k]
 	if !ok || c.now().After(v.expires) {
-		return Data{}, false
+		var zero V
+		return zero, false
 	}
-	return v.data, true
+	return v.v, true
 }
 
-func (c *answerCache) set(k cacheKey, d Data, ttl time.Duration) {
+func (c *ttlCache[K, V]) set(k K, v V, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if len(c.m) >= c.max {
@@ -242,18 +286,18 @@ func (c *answerCache) set(k cacheKey, d Data, ttl time.Duration) {
 			}
 		}
 		if len(c.m) >= c.max {
-			c.m = map[cacheKey]cached{}
+			c.m = map[K]cached[V]{}
 		}
 	}
-	c.m[k] = cached{data: d, expires: c.now().Add(ttl)}
+	c.m[k] = cached[V]{v: v, expires: c.now().Add(ttl)}
 }
 
-// forget drops a removed panel's answers.
-func (c *answerCache) forget(panel uuid.UUID) {
+// forget drops a removed panel's values.
+func (c *ttlCache[K, V]) forget(panel uuid.UUID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for key := range c.m {
-		if key.panel == panel {
+		if key.panelID() == panel {
 			delete(c.m, key)
 		}
 	}

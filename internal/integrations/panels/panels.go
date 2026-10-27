@@ -155,14 +155,15 @@ func listRows(ctx context.Context, q db.Querier, wid uuid.UUID) ([]*row, error) 
 	return out, rows.Err()
 }
 
-// Service holds the outbound client, the answers cache and the Shopify app tokens (one
-// per process).
+// Service holds the outbound client, the caches of answers and of ticket readings, and the
+// Shopify app tokens (one per process).
 type Service struct {
-	d      *deps.Deps
-	http   *http.Client
-	guard  netsafe.Guard
-	cache  *answerCache
-	tokens *appTokens
+	d        *deps.Deps
+	http     *http.Client
+	guard    netsafe.Guard
+	cache    *ttlCache[cacheKey, Data]
+	contexts *ttlCache[contextKey, ticketContext]
+	tokens   *appTokens
 	// shopifyBase is a shop's origin (https://<shop>); tests point it at a fake.
 	shopifyBase func(shop string) string
 }
@@ -180,8 +181,9 @@ func For(d *deps.Deps) *Service {
 		return s
 	}
 	dev := !d.Cfg.IsProduction()
-	s := &Service{d: d, http: netsafe.Client(dev, fetchTimeout), guard: netsafe.Guard{Dev: dev}, cache: newAnswerCache(1000),
-		tokens: newAppTokens(), shopifyBase: shopifyOrigin}
+	s := &Service{d: d, http: netsafe.Client(dev, fetchTimeout), guard: netsafe.Guard{Dev: dev}, cache: newTTLCache[cacheKey, Data](1000),
+		contexts: newTTLCache[contextKey, ticketContext](1000),
+		tokens:   newAppTokens(), shopifyBase: shopifyOrigin}
 	services[d] = s
 	return s
 }
@@ -611,6 +613,7 @@ func (s *Service) registerRoutes(api huma.API) {
 				return nil, httpx.Wrap(err)
 			}
 			s.cache.forget(id)
+			s.contexts.forget(id)
 			s.tokens.forget(id)
 			return nil, nil
 		})

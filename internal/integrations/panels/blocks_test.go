@@ -1,6 +1,7 @@
 package panels
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +16,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/netsafe"
 )
 
@@ -462,5 +467,132 @@ func TestHTTPPanelBlocks(t *testing.T) {
 	mu.Unlock()
 	if req.Contact.ID != nil || req.Contact.Emails == nil || len(req.Contact.Emails) != 0 || req.Contact.Phone != "" || !slices.Contains(req.Ticket.References, "#20001") {
 		t.Fatalf("no contact = %+v %q", req.Contact, req.Ticket.References)
+	}
+}
+
+// TestTicketReadingIsKept: an http panel reads a ticket once per version of the panel and the
+// ticket. A kept reading answers without the database or a lookup of the panel's; a new one
+// takes the panel's lookup before it reads, and the lookup it leads to asks with that one. A
+// cancelled context shows when the database is read: the reading answers "Couldn't read the
+// ticket."
+func TestTicketReadingIsKept(t *testing.T) {
+	e, ws := apiEnv(t)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var req lookupRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		text := strings.Join(req.Ticket.References, " ") + " | " + strings.Join(req.Contact.Emails, " ")
+		_ = json.NewEncoder(w).Encode(map[string]any{"version": 2, "blocks": []any{map[string]any{"type": "note", "text": text}}})
+	}))
+	defer srv.Close()
+	admin, agent := ws.Admin.As(ws), ws.Agent.As(ws)
+	newPanel := func() *row {
+		var created struct {
+			Panel Panel `json:"panel"`
+		}
+		e.Do("POST", "/v1/ticket-panels", admin, map[string]any{"kind": "http", "url": srv.URL + "/panel"}).Want(t, 201).JSON(t, &created)
+		x, err := loadRow(e.Ctx, e.D.DB.Pool, ws.ID, created.Panel.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return x
+	}
+	spend := func(x *row, n int) {
+		for range n {
+			e.D.Limiter.Allow("ticket-panel:lookup:"+x.ID.String(), lookupsPerMinute, time.Minute)
+		}
+	}
+	const contactEmail = "ada@example.com"
+	var contact, tk struct {
+		ID uuid.UUID `json:"id"`
+	}
+	e.Do("POST", "/v1/contacts", agent, map[string]any{"email": contactEmail, "name": "Ada Buyer"}).Want(t, 201).JSON(t, &contact)
+	e.Do("POST", "/v1/tickets", agent, map[string]any{"subject": "Order #1001", "contact_id": contact.ID, "body_html": "<p>Hi</p>"}).Want(t, 201).JSON(t, &tk)
+	ticket := func() *domain.Ticket {
+		tt, err := domain.LoadTicket(e.Ctx, e.D.DB.Pool, ws.ID, tk.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &tt
+	}
+	shown := func(d Data) string {
+		if d.State != "ok" || len(d.Blocks) != 1 {
+			return d.State + ": " + d.Message
+		}
+		return d.Blocks[0].Text
+	}
+	s := For(e.D)
+	cancelled, cancel := context.WithCancel(e.Ctx)
+	cancel()
+	const unread, refused = "error: Couldn't read the ticket.", "error: Too many lookups. Try again in a minute."
+
+	if got := shown(s.read(cancelled, newPanel(), ticket(), false)); got != unread {
+		t.Fatalf("a new reading without the database = %q", got)
+	}
+
+	// One lookup left: the new reading takes it, and the lookup asks with it.
+	x := newPanel()
+	spend(x, lookupsPerMinute-1)
+	want := "#1001 | " + contactEmail
+	if got := shown(s.read(e.Ctx, x, ticket(), false)); got != want || calls.Load() != 1 {
+		t.Fatalf("the last lookup = %q, %d calls", got, calls.Load())
+	}
+	// None left: the kept reading and answer still answer, without the database.
+	for range 3 {
+		if got := shown(s.read(cancelled, x, ticket(), false)); got != want || calls.Load() != 1 {
+			t.Fatalf("a repeated open = %q, %d calls", got, calls.Load())
+		}
+	}
+	// A new version of the ticket is read again: refused before the database is read.
+	e.Do("POST", "/v1/tickets/"+tk.ID.String()+"/messages", agent, map[string]any{"kind": "note", "body_html": "<p>See #1002</p>"}).Want(t, 201)
+	for _, ctx := range []context.Context{cancelled, e.Ctx} {
+		if got := shown(s.read(ctx, x, ticket(), false)); got != refused || calls.Load() != 1 {
+			t.Fatalf("a new version with no lookup left = %q, %d calls", got, calls.Load())
+		}
+	}
+
+	// A deleted note and a note sent as a reply move the ticket: their references leave at once.
+	x = newPanel()
+	var note struct {
+		ID string `json:"id"`
+	}
+	notes := "/v1/tickets/" + tk.ID.String() + "/messages"
+	e.Do("POST", notes, agent, map[string]any{"kind": "note", "body_html": "<p>Wrong customer: #3001</p>"}).Want(t, 201).JSON(t, &note)
+	if got := shown(s.read(e.Ctx, x, ticket(), false)); got != "#1001 #3001 #1002 | "+contactEmail {
+		t.Fatalf("a new note = %q", got)
+	}
+	before := ticket()
+	e.Do("DELETE", notes+"/"+note.ID, agent, nil).Want(t, 204)
+	after := ticket()
+	if got := shown(s.read(e.Ctx, x, after, false)); got != "#1001 #1002 | "+contactEmail || !after.UpdatedAt.After(before.UpdatedAt) {
+		t.Fatalf("a deleted note = %q, updated_at %v then %v", got, before.UpdatedAt, after.UpdatedAt)
+	}
+	e.Do("POST", notes, agent, map[string]any{"kind": "note", "body_html": "<p>Draft about #3002</p>"}).Want(t, 201).JSON(t, &note)
+	if got := shown(s.read(e.Ctx, x, ticket(), false)); got != "#1001 #3002 #1002 | "+contactEmail {
+		t.Fatalf("a new note = %q", got)
+	}
+	before = ticket()
+	e.Do("POST", notes, agent, map[string]any{"kind": "reply", "body_html": "<p>It is on its way.</p>", "from_note_id": note.ID}).Want(t, 201)
+	after = ticket()
+	if got := shown(s.read(e.Ctx, x, after, false)); got != "#1001 #1002 | "+contactEmail || !after.UpdatedAt.After(before.UpdatedAt) {
+		t.Fatalf("a note sent as a reply = %q, updated_at %v then %v", got, before.UpdatedAt, after.UpdatedAt)
+	}
+
+	// An incoming message moves the ticket: its reference and address are read at once.
+	before = ticket()
+	if got := shown(s.read(e.Ctx, x, before, false)); got != "#1001 #1002 | "+contactEmail {
+		t.Fatalf("before = %q", got)
+	}
+	if err := e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
+		_, err := domain.AddMessage(e.Ctx, tx, e.D.Jobs, domain.NewMessage{WorkspaceID: ws.ID, TicketID: tk.ID, Kind: "reply", Direction: "inbound",
+			AuthorType: "contact", AuthorContactID: &contact.ID, FromEmail: "ada.work@example.com", BodyHTML: "<p>And #1003</p>", BodyText: "And #1003"})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after = ticket()
+	if got := shown(s.read(e.Ctx, x, after, false)); got != "#1001 #1003 #1002 | "+contactEmail+" ada.work@example.com" || !after.UpdatedAt.After(before.UpdatedAt) {
+		t.Fatalf("after an incoming message = %q, updated_at %v then %v", got, before.UpdatedAt, after.UpdatedAt)
 	}
 }
