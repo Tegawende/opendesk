@@ -32,6 +32,12 @@ func (w *cardWorker) Work(ctx context.Context, job *river.Job[jobs.PhoneInsightC
 	return err
 }
 
+// cardTickets is the predicate for the tickets aliased t a card may name. The card is read
+// by anyone in the provider's app, so like anything sent without a reader in mind it leaves
+// out tickets of private teams, as well as deleted, merged and spam ones.
+const cardTickets = `t.deleted_at IS NULL AND t.merged_into_id IS NULL AND NOT t.spam
+	AND NOT EXISTS (SELECT 1 FROM teams pt WHERE pt.workspace_id = t.workspace_id AND pt.id = t.team_id AND pt.private)`
+
 // Card builds what the agent sees about a ringing call: who calls, the ticket the call
 // is on and the caller's three latest other tickets, each linked to opendesk.
 func (s *Service) Card(ctx context.Context, q db.Querier, wid, callID uuid.UUID) (provider.Card, *PhoneConnection, string, error) {
@@ -68,14 +74,17 @@ func (s *Service) Card(ctx context.Context, q db.Querier, wid, callID uuid.UUID)
 	if ticketID != nil {
 		var n int64
 		var subject, status string
-		if err := q.QueryRow(ctx, `SELECT number, subject, status FROM tickets WHERE workspace_id = $1 AND id = $2`, wid, *ticketID).
-			Scan(&n, &subject, &status); err == nil {
+		err := q.QueryRow(ctx, `SELECT t.number, t.subject, t.status FROM tickets t WHERE t.workspace_id = $1 AND t.id = $2 AND `+cardTickets, wid, *ticketID).
+			Scan(&n, &subject, &status)
+		if err == nil {
 			card.Lines = append(card.Lines, provider.CardLine{Label: "Ticket", Text: fmt.Sprintf("#%d %s", n, subject), Link: app + "/inbox/all/" + ticketID.String()})
+		} else if !db.IsNotFound(err) {
+			return provider.Card{}, nil, "", err
 		}
 	}
 	if contactID != nil {
-		rows, err := q.Query(ctx, `SELECT id, number, subject, status FROM tickets WHERE workspace_id = $1 AND contact_id = $2
-			AND deleted_at IS NULL AND merged_into_id IS NULL AND id IS DISTINCT FROM $3 ORDER BY updated_at DESC LIMIT 3`, wid, *contactID, ticketID)
+		rows, err := q.Query(ctx, `SELECT t.id, t.number, t.subject, t.status FROM tickets t WHERE t.workspace_id = $1 AND t.contact_id = $2
+			AND t.id IS DISTINCT FROM $3 AND `+cardTickets+` ORDER BY t.updated_at DESC LIMIT 3`, wid, *contactID, ticketID)
 		if err != nil {
 			return provider.Card{}, nil, "", err
 		}

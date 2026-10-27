@@ -168,8 +168,9 @@ don't run the automations again.
 
 With `insight_cards`, a ringing inbound call shows the caller's name (linked to their
 contact), the ticket the call went on and their three latest other tickets in the
-provider's app (Aircall: one card per call). The card is sent by the `phone.insight_card`
-job and dropped when it could not go out within three minutes.
+provider's app (Aircall: one card per call). Anyone in the provider's app reads it, so it
+names no ticket of a private team and no spam, merged or deleted one. The card is sent by
+the `phone.insight_card` job and dropped when it could not go out within three minutes.
 
 ### Click to call
 

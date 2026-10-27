@@ -478,3 +478,50 @@ func TestVoicemailOutboundAndPlacement(t *testing.T) {
 		t.Fatalf("anonymous %+v", tk)
 	}
 }
+
+// The insight card is read by anyone in Aircall: it names no ticket of a private team, and
+// no spam or deleted one.
+func TestInsightCardLeavesOutPrivateSpamAndDeletedTickets(t *testing.T) {
+	h := newHarness(t)
+	cid := uuid.New()
+	h.e.Exec(`INSERT INTO contacts (id, workspace_id, name, phone) VALUES ($1, $2, 'Jane Doe', '+32 470 12 34 56')`, cid, h.ws.ID)
+	team := uuid.New()
+	h.e.Exec(`INSERT INTO teams (id, workspace_id, name, private) VALUES ($1, $2, 'Legal', true)`, team, h.ws.ID)
+	ticket := func(subject, status string) uuid.UUID {
+		var tk domain.Ticket
+		h.e.Do("POST", "/v1/tickets", h.ws.Admin.As(h.ws), map[string]any{"subject": subject, "channel": "api", "kind": "note",
+			"body_html": "<p>Earlier</p>", "status": status}).Want(t, 201).JSON(t, &tk)
+		h.e.Exec(`UPDATE tickets SET contact_id = $2 WHERE id = $1`, tk.ID, cid)
+		return tk.ID
+	}
+	visible := ticket("Visible order", "solved")
+	spam := ticket("Spam offer", "solved")
+	h.e.Exec(`UPDATE tickets SET spam = true WHERE id = $1`, spam)
+	deleted := ticket("Deleted thread", "solved")
+	h.e.Exec(`UPDATE tickets SET deleted_at = now() WHERE id = $1`, deleted)
+	private := ticket("Legal claim", "open")
+	h.e.Exec(`UPDATE tickets SET team_id = $2 WHERE id = $1`, private, team)
+	hidden := ticket("Other legal claim", "solved")
+	h.e.Exec(`UPDATE tickets SET team_id = $2 WHERE id = $1`, hidden, team)
+
+	h.sendAll(t, h.recorded(t, "answered")[:1])
+	if got := h.ticketOfCall(t, "1290001"); got.ID != private {
+		t.Fatalf("the call went on %s, not the open ticket %s", got.ID, private)
+	}
+	cards := h.f.Cards("1290001")
+	if len(cards) != 1 {
+		t.Fatalf("cards %+v", cards)
+	}
+	contents := cards[0]["contents"].([]any)
+	if title := contents[0].(map[string]any); title["text"] != "Jane Doe" {
+		t.Fatalf("title %+v", title)
+	}
+	var lines []string
+	for _, c := range contents[1:] {
+		item := c.(map[string]any)
+		lines = append(lines, item["label"].(string)+": "+item["text"].(string))
+	}
+	if len(lines) != 1 || !strings.HasPrefix(lines[0], "Earlier: #") || !strings.Contains(lines[0], "Visible order") {
+		t.Fatalf("card lines %v (visible ticket %s)", lines, visible)
+	}
+}
