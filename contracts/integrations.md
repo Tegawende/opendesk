@@ -209,7 +209,7 @@ into the same section.
 | --- | --- | --- | --- |
 | GET | `/v1/ticket-panels` | viewer, `tickets:read` | → `{data: TicketPanel[]}` in `position` order |
 | POST | `/v1/ticket-panels` | admin user | `{kind, name?, shop? /* shopify: domain, handle or admin URL */, client_id?, client_secret? /* shopify: an app */, token? /* shopify: in place of the app */, fields?, orders_shown? /* shopify; 422 on http */, url?, reference_pattern? /* http; 422 on shopify */}` → 201 `{panel, secret? /* http: the signing secret, shown once */}`, `Cache-Control: no-store` |
-| PATCH | `/v1/ticket-panels/{id}` | admin user | `{name?, enabled?, position?, client_secret?, client_id? /* shopify: a new secret keeps the client ID */, token? /* shopify */, fields? /* shopify: the whole list; an unknown field, or line_prices without line_items: 422 */, orders_shown? /* shopify, 1 to 5 */, url?, reference_pattern? /* http: the default pattern stores the default, "" none; 422 when it does not compile, compiles to more than 64 instructions or matches an empty text */}` → `TicketPanel` |
+| PATCH | `/v1/ticket-panels/{id}` | admin user | `{name? /* trimmed, 1 to 64 characters, internal/displayname's rules: 422 invalid_name */, enabled?, position?, client_secret?, client_id? /* shopify: a new secret keeps the client ID */, token? /* shopify */, fields? /* shopify: the whole list; an unknown field, or line_prices without line_items: 422 */, orders_shown? /* shopify, 1 to 5 */, url?, reference_pattern? /* http: the default pattern stores the default, "" none; 422 when it does not compile, compiles to more than 64 instructions or matches an empty text */}` → `TicketPanel` |
 | POST | `/v1/ticket-panels/{id}/rotate-secret` | admin user | → `{panel, secret}` (http; the old secret stops at once) |
 | DELETE | `/v1/ticket-panels/{id}` | admin user | → 204 |
 | GET | `/v1/tickets/{id}/panels/{panelId}` | viewer, `tickets:read` | `?refresh=true` asks the product again → `TicketPanelData`. A hidden or missing ticket, or a panel that is off or gone: `404` |
@@ -262,6 +262,9 @@ into the same section.
   panel from a URL: both open the panel's own dialog, since a panel is a `ticket_panels` row and
   not an integration (it gives Ollie no tool). A connected Shopify panel shows as connected there
   and leads to its row.
+- In settings, each panel's menu renames it (`PATCH {name}`; an unchanged name sends nothing),
+  then replaces a Shopify panel's credentials and chooses its fields, or changes an http panel's
+  URL, its references and its signing secret, and removes it.
 
 ### The http request
 
@@ -380,7 +383,7 @@ type Value = string | number | boolean
   24-hour tokens are only kept in memory. None of them appear in
   answers, events, logs or audit entries. Requests go through the outbound URL rules at connect
   time (https, public addresses only, no redirects, no proxy; loopback on development instances).
-- Audit: `ticket_panel.connected`, `ticket_panel.updated` (`changes` names the fields:
+- Audit: `ticket_panel.connected`, `ticket_panel.updated` (`changes` names the fields: `name`, `enabled`, `position`, `url`,
   `credentials` for new Shopify credentials, `secret` for a rotation, `fields`, `orders_shown`, `reference_pattern`), `ticket_panel.disconnected`,
   with the kind and host.
 - The ticket is read through domain visibility: a contact on a ticket of a private team the

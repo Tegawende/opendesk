@@ -4,7 +4,7 @@
 // token. Secrets and tokens never come back: they are replaced, a signing secret renewed.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, Hash, KeyRound, Link2, ListChecks, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { ArrowUpRight, Hash, KeyRound, Link2, ListChecks, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Section } from "@/components/layout";
@@ -143,6 +143,7 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
   const [editing, setEditing] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [referencing, setReferencing] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const state = !p.enabled ? ("paused" as const) : p.status === "error" ? ("failing" as const) : ("active" as const);
   const stateWord = !p.enabled ? t("panels.state.off") : t(`panels.state.${p.status}`);
 
@@ -202,6 +203,9 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
                 </button>
               </MenuTrigger>
               <MenuContent>
+                <MenuItem icon={<Pencil />} onSelect={() => setRenaming(true)}>
+                  {t("panels.rename")}
+                </MenuItem>
                 {p.kind === "shopify" ? (
                   <>
                     <MenuItem icon={<KeyRound />} onSelect={() => setEditing(true)}>
@@ -246,6 +250,7 @@ function PanelRow({ p, admin, onSecret }: { p: TicketPanel; admin: boolean; onSe
       {editing && <EditPanelDialog p={p} onClose={() => setEditing(false)} />}
       {choosing && <ShopifyFieldsDialog p={p} onClose={() => setChoosing(false)} />}
       {referencing && <ReferencesDialog p={p} onClose={() => setReferencing(false)} />}
+      {renaming && <RenamePanelDialog p={p} onClose={() => setRenaming(false)} />}
     </MotionRow>
   );
 }
@@ -462,6 +467,62 @@ function EditPanelDialog({ p, onClose }: { p: TicketPanel; onClose: () => void }
             )}
           </Field>
         )}
+        <button type="submit" className="hidden" />
+      </form>
+    </Dialog>
+  );
+}
+
+/** A panel's name, which tickets show above what it answers. Unchanged, nothing is sent. */
+export function RenamePanelDialog({ p, onClose }: { p: TicketPanel; onClose: () => void }) {
+  const { t } = useTranslation("settingsDev");
+  const qc = useQueryClient();
+  const [name, setName] = useState(p.name);
+  const [error, setError] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: (n: string) => api.ticketPanels.update(p.id, { name: n }),
+    onSuccess: (row) => {
+      upsertInList(qc, qk.ticketPanels, row);
+      toast.success(t("panels.renamed", { name: row.name }));
+      onClose();
+    },
+    onError: (e) => setError(errorMessage(e)),
+  });
+  const submit = () => {
+    setError(null);
+    const n = name.trim();
+    if (!n) return setError(t("panels.nameRequired"));
+    if (n === p.name) return onClose();
+    save.mutate(n);
+  };
+  return (
+    <Dialog
+      open
+      size="md"
+      onOpenChange={(o) => !o && onClose()}
+      title={t("panels.renameTitle", { name: p.name })}
+      footer={
+        <>
+          <span className="mr-auto text-xs text-danger-fg">{error}</span>
+          <Button variant="ghost" onClick={onClose}>
+            {t("cancel")}
+          </Button>
+          <Button variant="primary" loading={save.isPending} onClick={submit}>
+            {t("panels.save")}
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="flex flex-col gap-4 pb-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <Field label={t("panels.name")} hint={t("panels.nameHint")}>
+          {(f) => <TextInput {...f} autoFocus autoComplete="off" value={name} maxLength={64} onChange={(e) => setName(e.target.value)} />}
+        </Field>
         <button type="submit" className="hidden" />
       </form>
     </Dialog>

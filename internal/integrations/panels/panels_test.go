@@ -622,6 +622,29 @@ func TestHTTPPanel(t *testing.T) {
 	}
 	secret.Store(created.Secret)
 
+	// Renamed: the name is trimmed, audited as the one change and published; a blank, long or
+	// link-like name is refused and the panel keeps its own.
+	pid := "/v1/ticket-panels/" + created.Panel.ID.String()
+	for _, bad := range []string{"   ", strings.Repeat("x", 65), "erp.example.com"} {
+		e.Do("PATCH", pid, admin, map[string]any{"name": bad}).Want(t, 422)
+	}
+	_, seq := e.Events(ws.ID, 0)
+	var renamed Panel
+	if e.Do("PATCH", pid, admin, map[string]any{"name": "  Odoo   ERP "}).Want(t, 200).JSON(t, &renamed); renamed.Name != "Odoo ERP" {
+		t.Fatalf("renamed = %q", renamed.Name)
+	}
+	if types, _ := e.Events(ws.ID, seq); !slices.Equal(types, []string{"ticket_panel.updated"}) {
+		t.Fatalf("rename events = %v", types)
+	}
+	var published, stored string
+	var renames int
+	e.Scalar(`SELECT data->'panel'->>'name' FROM events WHERE workspace_id = $1 AND seq > $2 AND type = 'ticket_panel.updated'`, &published, ws.ID, seq)
+	e.Scalar(`SELECT name FROM ticket_panels WHERE id = $1`, &stored, created.Panel.ID)
+	e.Scalar(`SELECT count(*) FROM audit_logs WHERE workspace_id = $1 AND action = 'ticket_panel.updated' AND data->'changes' = '["name"]'::jsonb`, &renames, ws.ID)
+	if published != "Odoo ERP" || stored != "Odoo ERP" || renames != 1 {
+		t.Fatalf("rename: published %q, stored %q, audited %d", published, stored, renames)
+	}
+
 	tid := newTicket(t, e, ws.Agent.As(ws), "ada@example.com", nil)
 	path := "/v1/tickets/" + tid + "/panels/" + created.Panel.ID.String()
 	var d Data
