@@ -260,6 +260,12 @@
       "label": "Disposition en conversation",
       "hint": "Les messages du client à gauche, les réponses et notes de votre équipe à droite, comme dans un chat. Pleine largeur sur un écran étroit."
     },
+    "properties": {
+      "label": "Propriétés du ticket",
+      "hint": "Statut, priorité, responsable, équipe et étiquettes dans la colonne des détails, ou dans une barre au-dessus de la conversation, modifiables sur place. Avec la barre, la colonne des détails commence par le client et ce que vos applications savent de lui.",
+      "column": "Dans la colonne des détails",
+      "bar": "Dans une barre au-dessus de la conversation"
+    },
     "sounds": {
       "title": "Sons",
       "hint": "S’applique à ce navigateur. Le chat en direct utilise un son plus marqué ; les autres sons sont discrets.",
