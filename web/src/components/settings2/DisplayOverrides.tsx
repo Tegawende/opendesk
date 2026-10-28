@@ -171,10 +171,8 @@ function OverrideList<K extends string>({
   );
 }
 
-/** open always stays, and so does one way to finish a ticket (solved or closed): the API refuses the rest. */
-export function hideableStatus(k: TicketStatus, value: Overrides<TicketStatus>): boolean | "never" {
-  if (k === "open") return "never";
-  if (k === "solved") return !value.closed?.hidden;
-  if (k === "closed") return !value.solved?.hidden;
+/** Open and solved always stay available, as enforced by the API. */
+export function hideableStatus(k: TicketStatus, _value: Overrides<TicketStatus>): boolean | "never" {
+  if (k === "open" || k === "solved") return "never";
   return true;
 }

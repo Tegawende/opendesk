@@ -64,7 +64,7 @@ type DisplayOverride struct {
 	Color string `json:"color,omitempty" enum:"gray,red,orange,amber,yellow,lime,green,teal,cyan,blue,indigo,violet,purple,pink,rose"`
 	// Hidden is for status_labels only: the status leaves the menus agents pick from (a ticket
 	// already in it still shows it, and the API, automations and snoozing still set it).
-	Hidden bool `json:"hidden,omitempty" doc:"status_labels only: hide the status from the menus agents pick from. open cannot be hidden, nor solved and closed both"`
+	Hidden bool `json:"hidden,omitempty" doc:"status_labels only: hide the status from the menus agents pick from. open and solved cannot be hidden"`
 }
 
 func validOverrides(field string, in map[string]DisplayOverride, allowed []string) (map[string]any, error) {
@@ -76,8 +76,8 @@ func validOverrides(field string, in map[string]DisplayOverride, allowed []strin
 		if v.Hidden && field != "status_labels" {
 			return nil, httpx.Validation("only statuses can be hidden.")
 		}
-		if v.Hidden && k == domain.StatusOpen {
-			return nil, httpx.Validation("the open status cannot be hidden.")
+		if v.Hidden && (k == domain.StatusOpen || k == domain.StatusSolved) {
+			return nil, httpx.Validation("the open and solved statuses cannot be hidden.")
 		}
 		label := displayname.Normalize(v.Label)
 		if utf8.RuneCountInString(label) > 40 || strings.ContainsAny(label, "<>`") || strings.IndexFunc(label, unicode.IsControl) >= 0 {
@@ -100,10 +100,6 @@ func validOverrides(field string, in map[string]DisplayOverride, allowed []strin
 			o["hidden"] = true
 		}
 		out[k] = o
-	}
-	// Agents must keep a way to finish a ticket.
-	if in[domain.StatusSolved].Hidden && in[domain.StatusClosed].Hidden {
-		return nil, httpx.Validation("solved and closed cannot both be hidden.")
 	}
 	return out, nil
 }

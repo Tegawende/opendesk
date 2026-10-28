@@ -1,32 +1,54 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { q } from "@/lib/queries";
 import { afterEach, describe, expect, it } from "vitest";
 import { hideableStatus } from "@/components/settings2/DisplayOverrides";
 import { i18n, loadAgentCatalogs } from "@/i18n";
-import { finishStatus, finishVerb, finishWords, offeredStatuses } from "./fields";
+import { useDisplay, finishVerb, finishWords, offeredStatuses } from "./fields";
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 describe("hidden statuses", () => {
   const hidden = { pending: { hidden: true }, on_hold: { hidden: true }, solved: { hidden: true }, closed: { label: "Done" } };
 
   it("offers every status until the workspace hides some", () => {
     expect(offeredStatuses(undefined)).toEqual(["open", "pending", "on_hold", "solved", "closed"]);
-    expect(offeredStatuses(hidden)).toEqual(["open", "closed"]);
+    expect(offeredStatuses(hidden)).toEqual(["open", "solved", "closed"]);
   });
 
   it("keeps the ticket's current status in its menu, even hidden", () => {
-    expect(offeredStatuses(hidden, "on_hold")).toEqual(["open", "on_hold", "closed"]);
+    expect(offeredStatuses(hidden, "on_hold")).toEqual(["open", "on_hold", "solved", "closed"]);
   });
 
-  it("solves to closed where solved is hidden", () => {
-    expect(finishStatus(undefined)).toBe("solved");
-    expect(finishStatus({ pending: { hidden: true } })).toBe("solved");
-    expect(finishStatus(hidden)).toBe("closed");
+  it("Finish selects solved with hidden statuses or a Closed presentation label", async () => {
+    for (const labels of [hidden, { solved: { label: "Closed" }, closed: { hidden: true } }]) {
+      const client = new QueryClient();
+      client.setQueryData(q.workspace().queryKey, {
+        id: "w", name: "Acme", slug: "acme", widget_key: "widget", created_at: "2026-10-28T00:00:00Z",
+        avatar_url: null, avatar_source: null,
+        images: { help_center_logo: null, help_center_favicon: null, widget_avatar: null, widget_launcher: null },
+        settings: { status_labels: labels },
+      });
+      const host = document.createElement("div");
+      const root = createRoot(host);
+      function Finish() {
+        const display = useDisplay();
+        return createElement("button", { "data-status": display.finish }, display.status(display.finish));
+      }
+      await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(Finish))));
+      expect(host.querySelector("button")?.dataset.status).toBe("solved");
+      await act(async () => root.unmount());
+      client.clear();
+    }
   });
 
-  it("never lets open, or both solved and closed, be hidden", () => {
+  it("never lets open or solved be hidden", () => {
     expect(hideableStatus("open", {})).toBe("never");
     expect(hideableStatus("pending", {})).toBe(true);
-    expect(hideableStatus("closed", { solved: { hidden: true } })).toBe(false);
-    expect(hideableStatus("solved", { closed: { hidden: true } })).toBe(false);
-    expect(hideableStatus("solved", {})).toBe(true);
+    expect(hideableStatus("closed", { solved: { hidden: true } })).toBe(true);
+    expect(hideableStatus("solved", { closed: { hidden: true } })).toBe("never");
+    expect(hideableStatus("solved", {})).toBe("never");
   });
 });
 
@@ -35,10 +57,11 @@ describe("the finishing action's words", () => {
     await i18n.changeLanguage("en");
   });
   type Labels = Parameters<typeof finishWords>[0];
-  const prod = { solved: { label: "Resolved", hidden: true }, pending: { hidden: true }, closed: { label: "Closed" } };
+  const prod = { solved: { label: "Closed" }, pending: { hidden: true }, closed: { hidden: true } };
 
-  it("say solve while solved is offered, renamed or not", () => {
-    for (const labels of [undefined, { pending: { hidden: true } }, { solved: { label: "Resolved" } }] as Labels[]) {
+  it("say solve when solved keeps its built-in name", () => {
+    const cases: Labels[] = [undefined, { pending: { hidden: true } }, { solved: { label: "Solved" } }];
+    for (const labels of cases) {
       const w = finishWords(labels);
       expect(w.verb).toBe("solve");
       expect(w.button()).toBe("Solve");
@@ -52,8 +75,8 @@ describe("the finishing action's words", () => {
     }
   });
 
-  it("say close where solved is hidden and closed keeps its name", () => {
-    for (const labels of [prod, { solved: { hidden: true } }, { solved: { hidden: true }, closed: { label: " closed " } }] as Labels[]) {
+  it("say close when the semantic finish status is labelled Closed", () => {
+    for (const labels of [prod, { solved: { label: " closed " }, closed: { hidden: true } }] satisfies Labels[]) {
       const w = finishWords(labels);
       expect(w.verb).toBe("close");
       expect(w.button()).toBe("Close");
@@ -67,8 +90,8 @@ describe("the finishing action's words", () => {
     }
   });
 
-  it("mark as the workspace's own name for closed when it renamed it", () => {
-    const w = finishWords({ solved: { hidden: true }, closed: { label: "Done" } });
+  it("mark as the workspace's own finish label", () => {
+    const w = finishWords({ solved: { label: "Done" }, closed: { hidden: true } });
     expect(w.verb).toBe("mark");
     expect(w.button()).toBe("Mark as Done");
     expect(w.toast(42)).toBe("Marked #42 as Done");
