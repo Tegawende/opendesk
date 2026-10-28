@@ -157,7 +157,7 @@ export default function WorkspaceSettings() {
   const colorOk = !draft.settings.brand_color || hexRe.test(draft.settings.brand_color);
   // The workspace's help center is the default brand's.
   const helpUrl = defaultBrand ? helpCenterHref(defaultBrand) : defaultHelpUrl(ws.slug);
-  // Named the way the composer will say it with the statuses being edited: "Send and close" where solved is hidden.
+  // Named the way the composer will say it with the statuses being edited: "Send and close" when solved is labelled Closed.
   const finishButton = t("display.finishButton", { action: finishWords(draft.display.status_labels).sendTip() });
 
   return (

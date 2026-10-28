@@ -55,7 +55,7 @@ export type WorkspaceSettings = {
   collab_ticket_reply_to?: "address" | "mailbox";
   /** Which messages agents may delete: none, their own internal notes, or any agent's notes and replies. Admins may delete any. Default "own". */
   message_delete?: "off" | "own" | "all";
-  /** The composer shows "Send and solve" (or close, where solved is hidden) as a button next to Send, not only in its menu. Default false. */
+  /** The composer shows "Send and solve" (or close, when solved is labelled Closed) as a button next to Send, not only in its menu. Default false. */
   send_and_finish_button?: boolean;
   /** Display-only names and colours for the fixed statuses and priorities. */
   status_labels?: Partial<Record<TicketStatus, DisplayOverride>>;

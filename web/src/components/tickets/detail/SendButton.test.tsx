@@ -13,7 +13,7 @@ beforeAll(() => loadAgentCatalogs("fr"));
 const none = () => false;
 
 describe("sendChoices", () => {
-  const base = { side: false, current: "open" as TicketStatus, finish: "solved" as TicketStatus, hidden: none, button: false, fits: true };
+  const base = { side: false, current: "open", finish: "solved", hidden: none, button: false, fits: true } satisfies Parameters<typeof sendChoices>[0];
 
   it("keeps every status in the menu while the button is off", () => {
     expect(sendChoices(base)).toEqual({ button: null, menu: ["pending", "on_hold", "solved"] });
@@ -21,7 +21,6 @@ describe("sendChoices", () => {
 
   it("moves the finishing status to its own button, out of the menu", () => {
     expect(sendChoices({ ...base, button: true })).toEqual({ button: "solved", menu: ["pending", "on_hold"] });
-    expect(sendChoices({ ...base, button: true, finish: "closed", hidden: (s) => s === "solved" })).toEqual({ button: "closed", menu: ["pending", "on_hold"] });
   });
 
   it("folds the button back into the menu when it does not fit", () => {
@@ -130,13 +129,39 @@ describe("SendButton", () => {
     expect(await openMenu()).toEqual(["Send and mark pending", "Send and mark on hold"]);
   });
 
-  it("says it the way the ticket header does: close where solved is hidden, mark as a renamed closed", async () => {
-    const { named } = await render({ send_and_finish_button: true, status_labels: { solved: { hidden: true } } });
+  it("labels finishing as Close or a custom name while sending solved", async () => {
+    const { named, onSend } = await render({ send_and_finish_button: true, status_labels: { solved: { label: "Closed" }, closed: { hidden: true } } });
     expect(named("Send and close")).toBeTruthy();
+    await act(async () => named("Send and close")!.click());
+    expect(onSend).toHaveBeenCalledWith("solved");
     await act(async () => root.unmount());
     root = createRoot(host);
-    const renamed = await render({ send_and_finish_button: true, status_labels: { solved: { hidden: true }, closed: { label: "Done" } } });
+    const renamed = await render({ send_and_finish_button: true, status_labels: { solved: { label: "Done" }, closed: { hidden: true } } });
     expect(renamed.named("Send and mark as Done")).toBeTruthy();
+    await act(async () => renamed.named("Send and mark as Done")!.click());
+    expect(renamed.onSend).toHaveBeenCalledWith("solved");
+  });
+
+  it("sends solved even with older settings that hide solved", async () => {
+    const { onSend } = await render({
+      send_and_finish_button: true,
+      status_labels: { solved: { hidden: true }, pending: { hidden: true }, on_hold: { hidden: true } },
+    });
+    const finish = host.querySelector<HTMLButtonElement>("[data-send-finish]");
+    expect(finish).toBeTruthy();
+    await act(async () => finish?.click());
+    expect(onSend).toHaveBeenCalledWith("solved");
+  });
+
+  it("the send menu finishes as solved when terminal Closed is hidden", async () => {
+    const { onSend, openMenu } = await render({
+      status_labels: { solved: { label: "Closed" }, closed: { hidden: true }, pending: { hidden: true }, on_hold: { hidden: true } },
+    });
+    expect(await openMenu()).toEqual(["Send and mark closed"]);
+    const item = document.querySelector<HTMLElement>("[role='menuitem']");
+    expect(item).toBeTruthy();
+    await act(async () => item?.click());
+    expect(onSend).toHaveBeenCalledWith("solved");
   });
 
   it("follows the menu for a note, and offers no button in a side conversation", async () => {
@@ -168,7 +193,7 @@ describe("SendButton", () => {
 
   it("speaks French", async () => {
     await i18n.changeLanguage("fr");
-    const { named } = await render({ send_and_finish_button: true, status_labels: { solved: { hidden: true } } });
+    const { named } = await render({ send_and_finish_button: true, status_labels: { solved: { label: "Closed" }, closed: { hidden: true } } });
     expect(named("Envoyer")).toBeTruthy();
     expect(named("Envoyer et fermer")).toBeTruthy();
   });

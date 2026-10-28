@@ -35,12 +35,13 @@ export type SendLayout = "wide" | "folded" | "menu";
 export function sendChoices(o: {
   side: boolean;
   current: TicketStatus;
-  finish: TicketStatus;
+  finish: ReturnType<typeof useDisplay>["finish"];
   hidden: (s: TicketStatus) => boolean;
   button: boolean;
   fits: boolean;
 }): { button: TicketStatus | null; menu: TicketStatus[] } {
-  const options = (o.side ? (["on_hold"] as TicketStatus[]) : (["pending", "on_hold", o.finish] as TicketStatus[])).filter((s) => s !== o.current && !o.hidden(s));
+  const statuses: TicketStatus[] = o.side ? ["on_hold"] : ["pending", "on_hold", o.finish];
+  const options = statuses.filter((s) => s !== o.current && !o.hidden(s));
   const own = o.button && o.fits && options.includes(o.finish) ? o.finish : null;
   return { button: own, menu: options.filter((s) => s !== own) };
 }
