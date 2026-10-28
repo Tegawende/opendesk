@@ -8,13 +8,16 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/domain"
 )
 
 // Online time (contracts/api.md "Agents report"). The app's heartbeats, while a member's
 // availability is online, are kept in agent_presence as stretches of time: a heartbeat
 // extends the member's open stretch when the last one came less than PresenceGap ago, and
 // otherwise closes it and starts a new one. A change of availability away from online ends
-// the stretch. Viewers are never assigned work, so their time is not recorded.
+// the stretch. Viewers are never assigned work, so their time is not recorded. A workspace
+// that turns online time off (settings agent_online_time false) records nobody's, and
+// turning it off deletes what was recorded.
 
 // PresenceGap is the longest silence between two heartbeats of one stretch. The web app
 // beats every 2 minutes while a tab is visible and the iPhone app every 5 while it is open.
@@ -24,15 +27,18 @@ const PresenceGap = 10 * time.Minute
 // so a change of availability waits for it and the stretch never outlives the status.
 func recordPresence(ctx context.Context, tx pgx.Tx, wid, uid uuid.UUID) error {
 	var availability, role string
-	err := tx.QueryRow(ctx, `SELECT availability, role FROM members WHERE workspace_id = $1 AND user_id = $2 FOR SHARE`,
-		wid, uid).Scan(&availability, &role)
+	var on bool
+	err := tx.QueryRow(ctx, `SELECT m.availability, m.role, `+domain.OnlineTimeSQL+`
+		FROM members m JOIN workspaces w ON w.id = m.workspace_id
+		WHERE m.workspace_id = $1 AND m.user_id = $2 FOR SHARE OF m`,
+		wid, uid).Scan(&availability, &role, &on)
 	if db.IsNotFound(err) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	if availability != "online" || role == "viewer" {
+	if !on || availability != "online" || role == "viewer" {
 		return nil
 	}
 	tag, err := tx.Exec(ctx, `UPDATE agent_presence SET ended_at = now()
@@ -46,6 +52,13 @@ func recordPresence(ctx context.Context, tx pgx.Tx, wid, uid uuid.UUID) error {
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO agent_presence (workspace_id, user_id) VALUES ($1, $2)
 		ON CONFLICT (workspace_id, user_id) WHERE open DO NOTHING`, wid, uid)
+	return err
+}
+
+// removePresence deletes the workspace's online time when it turns online time off: what
+// it may not record, it does not keep either.
+func removePresence(ctx context.Context, tx pgx.Tx, wid uuid.UUID) error {
+	_, err := tx.Exec(ctx, `DELETE FROM agent_presence WHERE workspace_id = $1`, wid)
 	return err
 }
 

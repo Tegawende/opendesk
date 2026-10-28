@@ -346,7 +346,11 @@
     "gravatar": "Images Gravatar",
     "gravatarHint": "Envoie à Gravatar une empreinte des adresses e-mail des contacts pour rechercher leurs images.",
     "domainLogos": "Logos des entreprises",
-    "domainLogosHint": "Récupère le logo de chaque entreprise sur son site web."
+    "domainLogosHint": "Récupère le logo de chaque entreprise sur son site web.",
+    "reports": "Rapports",
+    "onlineTime": "Temps en ligne des agents",
+    "onlineTimeOn": "Enregistre le temps où chaque membre a opendesk ouvert avec le statut En ligne, pour Rapports → Agents. Désactivez-le là où son enregistrement demande le consentement de l’équipe ou l’accord d’un conseil d’entreprise.",
+    "onlineTimeOff": "Aucun temps en ligne n’est enregistré ni affiché dans les rapports. Enregistrer avec ce réglage désactivé supprime le temps en ligne enregistré jusqu’ici."
   },
   "display": {
     "title": "Statuts et priorités",

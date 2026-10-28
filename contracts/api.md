@@ -55,6 +55,7 @@ type WorkspaceSettings = { brand_color?: string; timezone?: string; help_center_
   undo_send_seconds?: 0 | 5 | 10 | 20 | 30 /* default 5: the app holds an agent's reply on an email (or any other non-chat) ticket this long before it POSTs it, with Undo (back into the composer) and Turn into internal note; nothing reaches the server until then, so the API itself never delays; 0 sends at once */;
   undo_send_chat_seconds?: 0 | 5 | 10 | 20 | 30 /* default 0: the same for replies on chat tickets, which go at once unless set */;
   send_and_finish_button?: boolean /* default false: the app's composer shows "Send and solve" (or "Send and close" when solved is labelled Closed; a custom finish label) as a segment before Send rather than only in its menu, in the same words as the ticket header's finish button; display only */;
+  agent_online_time?: boolean /* default true: heartbeats count toward each member's online time and the agents report shows it ("Agents report"); false records none, deletes the online time recorded so far (agent_presence), and the report answers online_time "off" */;
   status_labels?: Partial<Record<TicketStatus, DisplayOverride>>; priority_labels?: Partial<Record<Priority, DisplayOverride>> /* display only; the API values never change */ };
 type DisplayOverride = { label?: string /* 1..40, no < > */; color?: LabelColor; hidden?: boolean /* status_labels only: left out of the menus agents pick a status from (a ticket in it keeps it; the API, automations and snooze still set it); never open or solved; finishing always sets solved, including when its display label is Closed */ };
 type Membership = { workspace: Workspace; role: Role; suspended: boolean /* an instance admin suspended it: its routes answer 403 workspace_suspended (contracts/admin.md) */ };
@@ -282,7 +283,7 @@ type NotificationPreferences = {
 | PATCH | `/v1/me` | `{name?, avatar_url?, time_format?}` → `User`. `time_format` is account-wide, across workspaces; another value is `422`. `avatar_url` is a picture to copy: an https URL fetched and processed server-side (asynchronously; `member.updated` follows), `""` removes the picture |
 | PUT | `/v1/me/avatar` | multipart `file` (PNG, JPEG, GIF or WebP, at most 5 MB) → `User` with `avatar_source: "upload"`. Audit `user.avatar_updated` |
 | DELETE | `/v1/me/avatar` | → `User` with no picture; the next Google or GitHub sign-in brings the provider picture back. Audit `user.avatar_removed` |
-| POST | `/v1/me/heartbeat` | → 204. Marks the user seen (auto-away). The web app sends it every 2 minutes while a tab is visible, the iPhone app every 5 while open. With `OD-Workspace` it also counts toward the member's online time there ("Agents report") |
+| POST | `/v1/me/heartbeat` | → 204. Marks the user seen (auto-away). The web app sends it every 2 minutes while a tab is visible, the iPhone app every 5 while open. With `OD-Workspace` it also counts toward the member's online time there ("Agents report"), unless the workspace's `settings.agent_online_time` is false |
 | POST | `/v1/me/password` | `{current_password, new_password}` → 204 |
 | GET | `/v1/me/sessions` / DELETE `/v1/me/sessions/{id}` | paginated `[{id, user_agent, ip, created_at, last_used_at, current, client: "web"\|"desktop"\|"ios"}]` / revoke (deletes the session's push devices) |
 | POST | `/v1/me/devices` | `{platform: "ios", token?, relay_token?, environment: "production"\|"sandbox", app_version, name}` → `Device`. Exactly one of `token` (hex APNs token, `push: "direct"`) or `relay_token` (`push: "relay"`); the other mode answers `422 push_unavailable`. Upserts by token and binds the device to the calling session, which keeps one device (a new token replaces the old). Audit `push_device.registered` |
@@ -573,7 +574,7 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 | GET | `/v1/wiki/search?q=&limit=` | viewer (`wiki:read`) → `{data: WikiSearchHit[]}` (default 20, at most 50) |
 | GET | `/v1/search?q=&brand_id=` | → `{tickets: Ticket[], contacts: Contact[], articles: KbArticle[], wiki_pages: WikiSearchHit[]}` (5 each; each kind only with its read scope). `brand_id` (optional) narrows the articles to what that brand shows: its own and those of every brand |
 | GET | `/v1/reports/overview?from=&to=&team_id=&brand_id=` | → `{created, solved, open_now, first_response_p50_minutes, resolution_p50_minutes, csat_avg, csat_count, sla_breached, by_day: [{date, created, solved}], by_channel: {...}, by_severity: Record<Severity \| "none", number> /* tickets created in the range */, by_agent: [{user, solved, first_response_p50_minutes}], by_team: [{team_id: string \| null, created, solved, open_now, first_response_p50_minutes}], by_brand: [{brand_id, created, solved, open_now, first_response_p50_minutes}]}`. `team_id` (a team, or `none`) and `brand_id` narrow every figure. Private teams' tickets are counted, with no subjects or contacts |
-| GET | `/v1/reports/agents?from=&to=&team_id=&brand_id=` | → `{data: ReportAgent[], online_time: "all" \| "self" \| "none"}`, one row per member, most solved first; a member who is not an admin gets their own row only ("Agents report"). Same range, roles, scope and filters as the overview |
+| GET | `/v1/reports/agents?from=&to=&team_id=&brand_id=` | → `{data: ReportAgent[], online_time: "all" \| "self" \| "none" \| "off"}`, one row per member, most solved first; a member who is not an admin gets their own row only ("Agents report"). Same range, roles, scope and filters as the overview |
 | POST | `/v1/attachments` | multipart `file` → `Attachment` (unattached, linked when sent). Only whoever uploaded it (that user, or that API key) may send it in `attachment_ids` (`422` otherwise) |
 | GET | `/v1/attachments/{id}` | → 302 to signed URL or streamed. For img tags, the links messages carry are signed (`?exp=&sig=`) and work for one to two hours. A file on a ticket the caller may not see is `404` (contracts/teams.md "Visibility"); an upload not sent yet is its uploader's alone (`404` for anyone else) |
 
@@ -593,7 +594,7 @@ type ReportAgent = { user: UserRef;
   replies_per_solved: number | null;          // their public replies on the tickets of `solved` since each was created (also before the range), divided by solved; null when 0
   first_response_p50_minutes: number | null;  // the overview's by_agent figure: their tickets created in the range
   handle_p50_minutes: number | null;          // over `solved`: from the last assigned activity to them before the solve (else the ticket's creation) to solved_at
-  online_minutes: number | null;              // time in the app with availability online, inside the range; null when online_time is none
+  online_minutes: number | null;              // time in the app with availability online, inside the range; null when online_time is none or off
 };
 ```
 
@@ -601,9 +602,13 @@ A member's work and online time are personal, and `online_time` says what the ca
 for owners and admins (and API keys with `settings:read`), every row with online time; `self` for
 other members, their own row alone, with its online time (an empty `data` when they have no row,
 as a viewer or off the filtered team); `none` for other API keys, every row without online time
-(`online_minutes` null), as `tickets:read` already reads every ticket. Online time comes from
+(`online_minutes` null), as `tickets:read` already reads every ticket. A workspace can turn online
+time off (`settings.agent_online_time: false`, for instance where recording it needs the team's
+consent or a works council's agreement): turning it off deletes the workspace's stretches, nothing
+is recorded while it is off, and the report answers `off` to everyone, with each caller's rows as
+above and `online_minutes` null. Online time comes from
 `agent_presence`: each `POST /v1/me/heartbeat` with `OD-Workspace` from an owner, admin or agent
-whose `availability` is `online` extends their open stretch, or closes it at its last heartbeat
+whose `availability` is `online`, in a workspace with online time on, extends their open stretch, or closes it at its last heartbeat
 and starts a new one when the last came more than 10 minutes ago.
 Setting your own availability to `online` starts a stretch; leaving `online` ends it (now when
 you change it yourself, at the last heartbeat when someone else does). Stretches are kept 400 days

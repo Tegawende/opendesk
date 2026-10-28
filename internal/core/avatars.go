@@ -147,7 +147,7 @@ func (s *svc) registerAvatars(api huma.API) {
 		})
 
 	register(s, api, huma.Operation{OperationID: "heartbeat", Method: http.MethodPost, Path: "/v1/me/heartbeat",
-		Summary: "Mark yourself seen", Description: "Keeps auto-away from marking you away while the app is open, holds notification emails for the workspace in OD-Workspace, and counts toward your online time there while your availability is online.",
+		Summary: "Mark yourself seen", Description: "Keeps auto-away from marking you away while the app is open, holds notification emails for the workspace in OD-Workspace, and counts toward your online time there while your availability is online, unless the workspace turned online time off.",
 		Tags: []string{"Account"}, DefaultStatus: http.StatusNoContent},
 		func(ctx context.Context, _ *struct{}) (*struct{}, error) {
 			p, err := auth.RequireUser(ctx)
