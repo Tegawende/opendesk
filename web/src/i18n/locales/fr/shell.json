@@ -11,6 +11,8 @@
     "settings": "Paramètres",
     "manageViews": "Gérer les vues",
     "createView": "Créer une vue",
+    "viewSection": "Vues de la section {{name}}",
+    "viewSectionCurrent": "contient la vue ouverte",
     "collapse": "Réduire",
     "expand": "Développer la barre latérale",
     "open": "Ouvrir la navigation",

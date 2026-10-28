@@ -180,6 +180,19 @@ describe("mock backend", () => {
     expect((await call("POST", "/v1/public/csat/survey", { token: "demo" })).status).toBe(200);
   });
 
+  it("serves views in sections and keeps a view's section as the API does", async () => {
+    const seeded = (await call("GET", "/v1/views")).body.data as { section: string | null }[];
+    expect(new Set(seeded.map((v) => v.section).filter(Boolean))).toEqual(new Set(["Escalations"]));
+    const v = (await call("POST", "/v1/views", { name: "Refunds", shared: true, section: "  Billing   and plans " })).body;
+    expect(v.section).toBe("Billing and plans");
+    expect((await call("PATCH", `/v1/views/${v.id}`, { name: "Refunds due" })).body.section).toBe("Billing and plans");
+    expect((await call("PATCH", `/v1/views/${v.id}`, { section: "x".repeat(61) })).status).toBe(422);
+    expect((await call("PATCH", `/v1/views/${v.id}`, { section: "<b>x</b>" })).status).toBe(422);
+    expect((await call("PATCH", `/v1/views/${v.id}`, { section: "  " })).body.section).toBeNull();
+    expect((await call("PATCH", `/v1/views/${v.id}`, { section: "Delivery" })).body.section).toBe("Delivery");
+    expect((await call("PATCH", `/v1/views/${v.id}`, { section: null })).body.section).toBeNull();
+  });
+
   it("keeps an automation's phrase list one trimmed phrase per line", async () => {
     const action = [{ type: "set_status", value: "closed" }];
     const made = await call("POST", "/v1/automations", {

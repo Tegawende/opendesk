@@ -573,7 +573,7 @@ export type TicketFilters = {
   /** Custom field filters, ANDed (max 20). */
   fields?: FieldFilter[];
 };
-export type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number; /** Shared with this team. */ team_id?: string | null };
+export type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number; /** Shared with this team. */ team_id?: string | null; /** The sidebar heading it shows under (lib/viewSections). */ section?: string | null };
 export type SlaPolicy = {
   id: string;
   name: string;

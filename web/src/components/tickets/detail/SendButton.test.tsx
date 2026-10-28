@@ -193,9 +193,11 @@ describe("SendButton", () => {
 
   it("speaks French", async () => {
     await i18n.changeLanguage("fr");
-    const { named } = await render({ send_and_finish_button: true, status_labels: { solved: { label: "Closed" }, closed: { hidden: true } } });
+    const { named, onSend } = await render({ send_and_finish_button: true, status_labels: { solved: { label: "Closed" }, closed: { hidden: true } } });
     expect(named("Envoyer")).toBeTruthy();
     expect(named("Envoyer et fermer")).toBeTruthy();
+    await act(async () => named("Envoyer et fermer")!.click());
+    expect(onSend).toHaveBeenCalledWith("solved");
   });
 });
 

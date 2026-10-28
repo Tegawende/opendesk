@@ -360,7 +360,7 @@
     "hideFor": "Masquer {{name}} des menus",
     "showFor": "Afficher {{name}} dans les menus",
     "finishButton": "Bouton {{action}}",
-    "finishButtonHint": "Affichez à côté d’Envoyer, dans la zone de réponse, un bouton qui envoie et résout le ticket en un clic, et pas seulement dans le menu voisin. Si le statut résolu est masqué, il envoie et ferme."
+    "finishButtonHint": "Affichez à côté d’Envoyer, dans la zone de réponse, un bouton qui envoie et résout le ticket en un clic, et pas seulement dans le menu voisin. Il utilise le libellé de fin de l’espace de travail et définit toujours le statut sur résolu."
   },
   "danger": {
     "title": "Zone de danger",
