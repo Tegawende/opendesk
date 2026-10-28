@@ -9,10 +9,6 @@ on:
     types: [checks_requested]
   # A manual run checks everything, whatever changed.
   workflow_dispatch:
-    inputs:
-      ios_version:
-        description: "Also validate a signed iOS version without uploading"
-        type: string
 
 # Read-only by default. Jobs that need more ask for it themselves.
 permissions:
@@ -689,9 +685,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.ios == 'true'
     uses: ./.github/workflows/ios.yml
-    secrets: inherit
-    with:
-      version: ${{ inputs.ios_version || '' }}
 
   ci-status:
     name: CI status

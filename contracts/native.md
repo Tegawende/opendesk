@@ -10,10 +10,10 @@ Two native clients sit on the same public API as the web app (`contracts/api.md`
 Both work against opendesk Cloud and any self-hosted instance. The instance is chosen at
 runtime, never at build time.
 
-A `v*` release builds the server and desktop apps together and uploads the matching
-iOS version to TestFlight before publishing the GitHub release. iOS release builds
-use production push and App Attest entitlements. Apple processes each upload before
-testers can install it. Signing setup and validation are in `ios/README.md`.
+A `v*` release builds and publishes the server and desktop apps together. iOS
+Debug and Release simulator builds are part of required CI. Device distribution
+is separate; iOS release builds use production push and App Attest entitlements.
+Build instructions are in `ios/README.md`.
 
 ## Finding an instance
 

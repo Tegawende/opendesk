@@ -76,6 +76,11 @@ and desktop installers from that tag, then publishes one GitHub release. Its
 signed `SHA256SUMS` covers the server files, desktop installers, and update
 metadata. Desktop packaging must succeed before the release is published.
 
+To retry an unpublished release after fixing its workflow, run **Release** from
+`main` with `tag=v0.4.5`. Source files, image versions, and desktop installers come
+from that existing tag. The tag stays at its original commit. For a published
+release, rerun the failed jobs of its original workflow instead.
+
 Both full releases and desktop-only releases use `desktop-build.yml` to build
 and sign the apps, then `desktop-publish.yml` to refresh the update feed and
 redeploy the download page. The desktop feed is published after the versioned
