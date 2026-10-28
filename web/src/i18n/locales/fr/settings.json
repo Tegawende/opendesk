@@ -260,6 +260,10 @@
       "label": "Disposition en conversation",
       "hint": "Les messages du client à gauche, les réponses et notes de votre équipe à droite, comme dans un chat. Pleine largeur sur un écran étroit."
     },
+    "nextTicket": {
+      "label": "Après « {{action}} », ouvrir le ticket suivant",
+      "hint": "Aussi après un envoi avec un statut qui retire le ticket de la liste. Le ticket suivant de la liste ou de la vue d’où vous venez s’ouvre, avec ses filtres et son tri ; après le dernier, vous revenez à la liste. Annuler l’envoi vous ramène au ticket."
+    },
     "sounds": {
       "title": "Sons",
       "hint": "S’applique à ce navigateur. Le chat en direct utilise un son plus marqué ; les autres sons sont discrets.",
