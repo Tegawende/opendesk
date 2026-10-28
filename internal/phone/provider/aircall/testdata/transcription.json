@@ -1,0 +1,26 @@
+{
+  "transcription": {
+    "id": 32,
+    "call_id": 1290001,
+    "type": "call",
+    "content": {
+      "language": "fr-FR",
+      "utterances": [
+        {
+          "start_time": 0.5,
+          "end_time": 2.1,
+          "text": "Bonjour, LampTwist support.",
+          "participant_type": "internal",
+          "user_id": 9001
+        },
+        {
+          "start_time": 2.5,
+          "end_time": 6.0,
+          "text": "Hello, my bulb arrived broken.",
+          "participant_type": "external",
+          "phone_number": "+32470123456"
+        }
+      ]
+    }
+  }
+}

@@ -333,10 +333,7 @@ func (Adapter) Parse(body []byte) (provider.Event, error) {
 				return provider.Event{}, provider.ErrIgnored
 			}
 		} else {
-			ev.Kind, ev.Transcript = provider.KindTranscript, clip(transcriptText(d.Content), maxTranscript)
-			if ev.Transcript == "" {
-				return provider.Event{}, provider.ErrIgnored
-			}
+			ev.Kind = provider.KindTranscript
 		}
 		return ev, nil
 	}
@@ -522,6 +519,23 @@ func transcriptText(raw json.RawMessage) string {
 		}
 	}
 	return b.String()
+}
+
+// Transcript retrieves the content announced by transcription.created.
+func (a Adapter) Transcript(ctx context.Context, client *http.Client, creds map[string]string, callID string) (string, error) {
+	var out struct {
+		Transcription struct {
+			Content json.RawMessage `json:"content"`
+		} `json:"transcription"`
+	}
+	if err := a.do(ctx, client, creds, "transcription", http.MethodGet, "/calls/"+url.PathEscape(callID)+"/transcription", nil, &out); err != nil {
+		return "", err
+	}
+	text := clip(transcriptText(out.Transcription.Content), maxTranscript)
+	if text == "" {
+		return "", errors.New("aircall transcription not available")
+	}
+	return text, nil
 }
 
 // Lines lists the company's numbers (GET /v1/numbers), up to 500.

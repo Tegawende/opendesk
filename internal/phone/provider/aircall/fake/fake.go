@@ -9,6 +9,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,8 +32,9 @@ type Webhook struct {
 // Aircall is the fake API. Set RefuseAIEvents to answer 400 to a webhook asking for
 // Conversation Intelligence events, and Limit to answer 429 to everything.
 type Aircall struct {
-	RefuseAIEvents bool
-	Limit          bool
+	RefuseAIEvents      bool
+	Limit               bool
+	TranscriptionStatus int
 
 	mu       sync.Mutex
 	srv      *httptest.Server
@@ -132,6 +136,19 @@ func (f *Aircall) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/v1")
 	switch {
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/calls/") && strings.HasSuffix(path, "/transcription"):
+		if f.TranscriptionStatus != 0 {
+			w.WriteHeader(f.TranscriptionStatus)
+			return
+		}
+		_, file, _, _ := runtime.Caller(0)
+		raw, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../testdata/transcription.json"))
+		if err != nil {
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(raw)
 	case r.Method == http.MethodGet && path == "/company":
 		reply(w, 200, map[string]any{"company": map[string]any{"name": f.accounts[caller].company, "users_count": 8, "numbers_count": 10}})
 	case r.Method == http.MethodGet && path == "/numbers":

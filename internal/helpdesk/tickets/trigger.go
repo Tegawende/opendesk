@@ -52,6 +52,17 @@ func RunTrigger(ctx context.Context, d *deps.Deps, a jobs.TicketTriggerArgs) err
 		}
 	}
 	return d.DB.Tx(ctx, func(tx pgx.Tx) error {
+		if a.Trigger == jobs.TriggerCallEnded && a.CallID != nil {
+			var current *uuid.UUID
+			err := tx.QueryRow(ctx, `SELECT ticket_id FROM phone_calls WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, a.WorkspaceID, *a.CallID).Scan(&current)
+			if db.IsNotFound(err) || err == nil && current == nil {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			a.TicketID = *current
+		}
 		// Runs for one ticket share an advisory lock, so each sees the previous run's writes
 		// while agents can keep editing during a model call.
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('ticket_trigger:' || $1::text, 0))`, a.TicketID); err != nil {

@@ -101,7 +101,7 @@ func TestParseIntelligenceAndIgnored(t *testing.T) {
 	}
 	tr, err := Adapter{}.Parse(ai[1])
 	if err != nil || tr.Kind != provider.KindTranscript || tr.CallID != "1290001" ||
-		tr.Transcript != "Agent: Bonjour, LampTwist support.\nCustomer: Hello, my bulb arrived broken." {
+		tr.Transcript != "" {
 		t.Fatalf("transcript %+v %v", tr, err)
 	}
 	for _, body := range []string{

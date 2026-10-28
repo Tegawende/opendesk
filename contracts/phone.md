@@ -68,6 +68,7 @@ type Adapter interface {
     DeleteWebhook(ctx, *http.Client, credentials, id string) error
     Verify(body []byte, secret string) error
     Parse(body []byte) (Event, error) // ErrIgnored for events of no use
+    Transcript(ctx, *http.Client, credentials, callID string) (string, error)
     Lines(ctx, *http.Client, credentials) ([]Line, error)
     PushCard(ctx, *http.Client, credentials, callID string, Card) error
 }
@@ -130,6 +131,10 @@ named "Call from …" or "Call to …" and running the `ticket_created` automati
 deleted, spam and closed tickets are never reused. A call is placed once, on its first event,
 so the insight card can show its ticket; the ticket moves up (`updated_at`, `ticket.updated`
 with `changes: ["calls"]`) when the call lands on it and when it ends.
+
+Calls and their call activities move atomically to the destination when tickets merge.
+Queued `call_ended` work resolves the call’s current ticket while holding its row lock,
+so it uses the destination’s visibility and never reopens the merged source.
 
 ### Timeline
 
@@ -238,10 +243,14 @@ Docs: [API reference](https://developers.aircall.io/api-references),
   page for its media, `recording_short_url`/`voicemail_short_url` (three hours) else
   `recording`/`voicemail` (one hour) its direct links, `tags` and `comments` the team's.
   `direct_link` is an API URL (it needs the API key), so it is not kept.
+- `transcription.created` announces availability only. The inbound job fetches
+  `GET /v1/calls/:call_id/transcription` with the connection credentials after checking
+  that the call belongs on a ticket. Fetches use the provider timeout and response cap;
+  failures retry up to ten attempts, and rate-limit snoozes stop after 24 hours.
 - Insight card: `POST /v1/calls/:id/insight_cards` with a `title` and `shortText` lines.
 - Rate limit: Aircall allows a company a set number of requests a minute; a 429 snoozes the
   job until `X-AircallApi-Reset`. opendesk calls the API on connect, test, disconnect, the
-  lines list and one card per ringing inbound call.
+  lines list, transcript retrieval and one card per ringing inbound call.
 
 ## Security and operations
 

@@ -101,7 +101,15 @@ type inboundWorker struct {
 }
 
 func (w *inboundWorker) Work(ctx context.Context, job *river.Job[jobs.PhoneInboundArgs]) error {
-	return w.s.ProcessInbound(ctx, job.Args)
+	err := w.s.ProcessInbound(ctx, job.Args)
+	var limited *provider.RateLimited
+	if errors.As(err, &limited) {
+		if time.Since(job.CreatedAt) > 24*time.Hour {
+			return river.JobCancel(errors.New("phone provider retry deadline exceeded"))
+		}
+		return river.JobSnooze(limited.RetryAfter)
+	}
+	return err
 }
 
 // ProcessInbound applies one stored provider event to its call, once: the event row is
@@ -367,6 +375,16 @@ func (s *Service) applyIntelligence(ctx context.Context, tx pgx.Tx, c PhoneConne
 	}
 	if call.TicketID == nil {
 		return nil // a blocked contact's call keeps no content
+	}
+	if ev.Kind == provider.KindTranscript {
+		creds, err := s.credentials(c)
+		if err != nil {
+			return err
+		}
+		ev.Transcript, err = s.adapters[c.Provider].Transcript(ctx, s.http, creds, ev.CallID)
+		if err != nil {
+			return err
+		}
 	}
 	if ev.Summary != "" {
 		call.Summary = ev.Summary
