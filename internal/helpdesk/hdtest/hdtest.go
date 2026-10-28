@@ -378,10 +378,13 @@ func (r *Resp) Want(t testing.TB, status int) *Resp {
 	return r
 }
 
-// Jobs removes and returns the args of queued jobs of kind for the workspace.
+// Jobs removes and returns the args of queued jobs of kind for the workspace,
+// in insertion order so tests can control the order in which workers run.
 func (e *Env) Jobs(kind string, wid uuid.UUID) []json.RawMessage {
 	e.T.Helper()
-	rows, err := e.D.DB.Pool.Query(e.Ctx, `DELETE FROM river_job WHERE kind = $1 AND args->>'workspace_id' = $2 RETURNING args`,
+	rows, err := e.D.DB.Pool.Query(e.Ctx, `WITH removed AS (
+		DELETE FROM river_job WHERE kind = $1 AND args->>'workspace_id' = $2 RETURNING id, args
+	) SELECT args FROM removed ORDER BY id`,
 		kind, wid.String())
 	if err != nil {
 		e.T.Fatal(err)
