@@ -1,9 +1,14 @@
 package phone_test
 
 import (
+	"context"
 	"encoding/json"
+	"github.com/jackc/pgx/v5"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/useopendesk/opendesk/internal/domain"
@@ -178,5 +183,137 @@ func TestReview239BlockedTranscriptNotFetched(t *testing.T) {
 		if strings.HasSuffix(r, "/transcription") {
 			t.Fatal("blocked call fetched transcript")
 		}
+	}
+}
+
+func TestReview239CallPlacementDuringMerge(t *testing.T) {
+	h := newHarness(t)
+	var src, dst domain.Ticket
+	for _, out := range []*domain.Ticket{&src, &dst} {
+		h.e.Do("POST", "/v1/tickets", h.ws.Admin.As(h.ws), map[string]any{"subject": "Merge placement", "channel": "api", "kind": "note", "body_html": "<p>Existing</p>"}).Want(t, 201).JSON(t, out)
+	}
+	if src.ID.String() > dst.ID.String() {
+		t.Fatal("source must sort before destination")
+	}
+	contact := uuid.New()
+	h.e.Exec(`INSERT INTO contacts (id,workspace_id,name,phone) VALUES ($1,$2,'Caller','+32470123456')`, contact, h.ws.ID)
+	h.e.Exec(`UPDATE tickets SET contact_id=$2 WHERE id=$1`, src.ID, contact)
+	ctx, cancel := context.WithTimeout(h.e.Ctx, 15*time.Second)
+	defer cancel()
+	hold, err := h.e.D.DB.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hold.Rollback(context.Background())
+	var pid int32
+	if err := hold.QueryRow(ctx, `SELECT pg_backend_pid() FROM tickets WHERE id=$1 FOR UPDATE`, dst.ID).Scan(&pid); err != nil {
+		t.Fatal(err)
+	}
+	merged := make(chan *hdtest.Resp, 1)
+	go func() {
+		merged <- h.e.Do("POST", "/v1/tickets/"+src.ID.String()+"/merge", h.ws.Admin.As(h.ws), map[string]any{"into_id": dst.ID})
+	}()
+	wait := func(want int) {
+		t.Helper()
+		for {
+			var n int
+			h.e.Scalar(`WITH RECURSIVE behind(pid) AS (SELECT $1::int UNION SELECT a.pid FROM pg_stat_activity a, behind b WHERE b.pid=ANY(pg_blocking_pids(a.pid))) SELECT count(*)-1 FROM behind`, &n, pid)
+			if n >= want {
+				return
+			}
+			if ctx.Err() != nil {
+				t.Fatalf("waiters %d want %d", n, want)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	wait(1)
+	if code := h.send(t, h.recorded(t, "answered")[0]); code != 200 {
+		t.Fatal(code)
+	}
+	raw := h.e.Jobs(jobs.PhoneInboundArgs{}.Kind(), h.ws.ID)
+	if len(raw) != 1 {
+		t.Fatal(len(raw))
+	}
+	var a jobs.PhoneInboundArgs
+	if err := json.Unmarshal(raw[0], &a); err != nil {
+		t.Fatal(err)
+	}
+	processed := make(chan error, 1)
+	go func() { processed <- h.s.ProcessInbound(ctx, a) }()
+	wait(2)
+	if err := hold.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	(<-merged).Want(t, 200)
+	if err := <-processed; err != nil {
+		t.Fatal(err)
+	}
+	var owner uuid.UUID
+	h.e.Scalar(`SELECT ticket_id FROM phone_calls WHERE workspace_id=$1`, &owner, h.ws.ID)
+	var calls int
+	h.e.Scalar(`SELECT count(*) FROM activities WHERE ticket_id=$1 AND type='call'`, &calls, src.ID)
+	if owner == src.ID || calls != 0 {
+		t.Fatalf("call attached to merged source: owner=%s source=%s source entries=%d", owner, src.ID, calls)
+	}
+}
+
+func TestReview239MergeWhileCallDecisionWaits(t *testing.T) {
+	h := newHarness(t)
+	h.sendAll(t, h.recorded(t, "answered"))
+	src := h.ticketOfCall(t, "1290001")
+	var call uuid.UUID
+	h.e.Scalar(`SELECT id FROM phone_calls WHERE workspace_id=$1`, &call, h.ws.ID)
+	var dst domain.Ticket
+	h.e.Do("POST", "/v1/tickets", h.ws.Admin.As(h.ws), map[string]any{"subject": "Destination", "channel": "api", "kind": "note", "body_html": "<p>Existing</p>"}).Want(t, 201).JSON(t, &dst)
+	h.e.Do("POST", "/v1/automations", h.ws.Admin.As(h.ws), map[string]any{"name": "Decide on call", "trigger": "call_ended", "enabled": true, "conditions": []any{map[string]any{"field": "ai_decide", "op": "gt", "value": "0.5", "question": "Reopen?"}}, "actions": []any{map[string]any{"type": "set_status", "value": "open"}}}).Want(t, 201)
+	entered, release := make(chan struct{}), make(chan struct{})
+	prev := hd.GetAIHooks()
+	defer hd.SetAIHooks(prev)
+	hd.SetAIHooks(&hd.AIHooks{Decide: func(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, q []string) (map[string]float64, error) {
+		if tid == src.ID {
+			close(entered)
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		return map[string]float64{"Reopen?": 1}, nil
+	}})
+	ctx, cancel := context.WithTimeout(h.e.Ctx, 15*time.Second)
+	defer cancel()
+	ended := make(chan error, 1)
+	go func() {
+		ended <- tickets.RunTrigger(ctx, h.e.D, jobs.TicketTriggerArgs{WorkspaceID: h.ws.ID, TicketID: src.ID, CallID: &call, Trigger: jobs.TriggerCallEnded})
+	}()
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	merged := make(chan *hdtest.Resp, 1)
+	go func() {
+		merged <- h.e.Do("POST", "/v1/tickets/"+src.ID.String()+"/merge", h.ws.Admin.As(h.ws), map[string]any{"into_id": dst.ID})
+	}()
+	select {
+	case response := <-merged:
+		response.Want(t, 200)
+		h.e.Exec(`UPDATE tickets SET status='closed' WHERE id=$1`, dst.ID)
+		close(release)
+	case <-time.After(3 * time.Second):
+		close(release)
+		<-ended
+		<-merged
+		t.Fatal("merge blocked behind the model decision")
+	}
+	if err := <-ended; err != nil {
+		t.Fatal(err)
+	}
+	var sourceStatus, destinationStatus string
+	h.e.Scalar(`SELECT status FROM tickets WHERE id=$1`, &sourceStatus, src.ID)
+	h.e.Scalar(`SELECT status FROM tickets WHERE id=$1`, &destinationStatus, dst.ID)
+	if sourceStatus != "closed" || destinationStatus != "open" {
+		t.Fatalf("source=%s destination=%s", sourceStatus, destinationStatus)
 	}
 }

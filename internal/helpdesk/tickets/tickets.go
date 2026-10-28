@@ -903,14 +903,6 @@ func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uu
 	if src == dst {
 		return httpx.Validation("a ticket cannot be merged into itself")
 	}
-	// Call processors and call-ended triggers lock calls before tickets.
-	rows, err := tx.Query(ctx, `SELECT id FROM phone_calls WHERE workspace_id = $1 AND ticket_id IN ($2, $3) ORDER BY id FOR UPDATE`, wid, src, dst)
-	if err != nil {
-		return err
-	}
-	if _, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID]); err != nil {
-		return err
-	}
 	// Lock in id order so concurrent merges cannot deadlock.
 	first, second := src, dst
 	if second.String() < first.String() {
@@ -946,7 +938,7 @@ func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uu
 	if _, err := tx.Exec(ctx, `UPDATE messages SET ticket_id = $3 WHERE workspace_id = $1 AND ticket_id = $2`, wid, src, dst); err != nil {
 		return err
 	}
-	rows, err = tx.Query(ctx, `UPDATE activities SET ticket_id = $3 WHERE workspace_id = $1 AND ticket_id = $2 AND type = 'call' RETURNING id, data`, wid, src, dst)
+	rows, err := tx.Query(ctx, `UPDATE activities SET ticket_id = $3 WHERE workspace_id = $1 AND ticket_id = $2 AND type = 'call' RETURNING id, data`, wid, src, dst)
 	if err != nil {
 		return err
 	}

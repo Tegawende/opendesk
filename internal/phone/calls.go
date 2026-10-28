@@ -112,9 +112,20 @@ func (w *inboundWorker) Work(ctx context.Context, job *river.Job[jobs.PhoneInbou
 	return err
 }
 
+var errCallTicketMoved = errors.New("call ticket moved during inbound processing")
+
 // ProcessInbound applies one stored provider event to its call, once: the event row is
 // locked and marked processed in the same transaction as everything it changed.
 func (s *Service) ProcessInbound(ctx context.Context, a jobs.PhoneInboundArgs) error {
+	for {
+		err := s.processInbound(ctx, a)
+		if !errors.Is(err, errCallTicketMoved) {
+			return err
+		}
+	}
+}
+
+func (s *Service) processInbound(ctx context.Context, a jobs.PhoneInboundArgs) error {
 	return s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
 		var raw []byte
 		var done *time.Time
@@ -279,8 +290,24 @@ func outcome(c phoneCall) string {
 }
 
 func (s *Service) lockCall(ctx context.Context, tx pgx.Tx, c PhoneConnection, externalID string) (phoneCall, error) {
-	return scanCall(tx.QueryRow(ctx, callSelect+` WHERE workspace_id = $1 AND provider = $2 AND external_call_id = $3 FOR UPDATE`,
-		c.WorkspaceID, c.Provider, externalID))
+	before, err := scanCall(tx.QueryRow(ctx, callSelect+` WHERE workspace_id = $1 AND provider = $2 AND external_call_id = $3`, c.WorkspaceID, c.Provider, externalID))
+	if err != nil {
+		return before, err
+	}
+	if before.TicketID != nil {
+		var id uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id = $1 AND id = $2 FOR NO KEY UPDATE`, c.WorkspaceID, *before.TicketID).Scan(&id); err != nil {
+			return phoneCall{}, err
+		}
+	}
+	after, err := scanCall(tx.QueryRow(ctx, callSelect+` WHERE workspace_id = $1 AND provider = $2 AND external_call_id = $3 FOR UPDATE`, c.WorkspaceID, c.Provider, externalID))
+	if err != nil {
+		return after, err
+	}
+	if (before.TicketID == nil) != (after.TicketID == nil) || before.TicketID != nil && *before.TicketID != *after.TicketID {
+		return phoneCall{}, errCallTicketMoved
+	}
+	return after, nil
 }
 
 func (s *Service) applyCall(ctx context.Context, tx pgx.Tx, c PhoneConnection, ev provider.Event) error {
@@ -475,7 +502,7 @@ func (s *Service) place(ctx context.Context, tx pgx.Tx, c PhoneConnection, call 
 		err = tx.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id = $1 AND contact_id = $2 AND deleted_at IS NULL
 			AND merged_into_id IS NULL AND NOT spam
 			AND (status IN ('open', 'pending', 'on_hold') OR ($3::int > 0 AND status = 'solved' AND solved_at > now() - make_interval(days => $3::int)))
-			ORDER BY (status <> 'solved') DESC, CASE WHEN status = 'solved' THEN solved_at END DESC NULLS LAST, updated_at DESC LIMIT 1`, wid, cid, c.ReuseDays).Scan(&tid)
+			ORDER BY (status <> 'solved') DESC, CASE WHEN status = 'solved' THEN solved_at END DESC NULLS LAST, updated_at DESC LIMIT 1 FOR NO KEY UPDATE`, wid, cid, c.ReuseDays).Scan(&tid)
 		if err == nil {
 			call.TicketID = &tid
 			return nil

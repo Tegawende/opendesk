@@ -37,9 +37,20 @@ func (w *TriggerWorker) Work(ctx context.Context, job *river.Job[jobs.TicketTrig
 	return RunTrigger(ctx, w.D, job.Args)
 }
 
+var errCallTicketMoved = errors.New("call ticket moved during trigger")
+
 // RunTrigger applies SLA policies, automations, auto-assignment and the new ticket and
 // reply notifications for one ticket change, in one transaction.
 func RunTrigger(ctx context.Context, d *deps.Deps, a jobs.TicketTriggerArgs) error {
+	for {
+		err := runTrigger(ctx, d, a)
+		if !errors.Is(err, errCallTicketMoved) {
+			return err
+		}
+	}
+}
+
+func runTrigger(ctx context.Context, d *deps.Deps, a jobs.TicketTriggerArgs) error {
 	// A suspended workspace runs no automations (contracts/admin.md).
 	if suspended, err := domain.WorkspaceSuspended(ctx, d.DB.Pool, a.WorkspaceID); err != nil || suspended {
 		return err
@@ -54,7 +65,7 @@ func RunTrigger(ctx context.Context, d *deps.Deps, a jobs.TicketTriggerArgs) err
 	return d.DB.Tx(ctx, func(tx pgx.Tx) error {
 		if a.Trigger == jobs.TriggerCallEnded && a.CallID != nil {
 			var current *uuid.UUID
-			err := tx.QueryRow(ctx, `SELECT ticket_id FROM phone_calls WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, a.WorkspaceID, *a.CallID).Scan(&current)
+			err := tx.QueryRow(ctx, `SELECT ticket_id FROM phone_calls WHERE workspace_id = $1 AND id = $2`, a.WorkspaceID, *a.CallID).Scan(&current)
 			if db.IsNotFound(err) || err == nil && current == nil {
 				return nil
 			}
@@ -222,6 +233,18 @@ func (r *triggerRun) automations(ctx context.Context, trigger string, messageID 
 	}
 	if err := r.decide(ctx, list); err != nil {
 		return err
+	}
+	if r.callID != nil {
+		if _, err := lockTicket(ctx, r.tx, r.wid, r.tid); err != nil {
+			return err
+		}
+		var current *uuid.UUID
+		if err := r.tx.QueryRow(ctx, `SELECT ticket_id FROM phone_calls WHERE workspace_id = $1 AND id = $2`, r.wid, *r.callID).Scan(&current); err != nil {
+			return err
+		}
+		if current == nil || *current != r.tid {
+			return errCallTicketMoved
+		}
 	}
 	var changed []string
 	for _, a := range list {

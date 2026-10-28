@@ -133,8 +133,10 @@ so the insight card can show its ticket; the ticket moves up (`updated_at`, `tic
 with `changes: ["calls"]`) when the call lands on it and when it ends.
 
 Calls and their call activities move atomically to the destination when tickets merge.
-Queued `call_ended` work resolves the call’s current ticket while holding its row lock,
-so it uses the destination’s visibility and never reopens the merged source.
+Call updates lock the ticket before the call and recheck ownership after waiting.
+Queued `call_ended` work locks its ticket after its model decision and rechecks
+ownership before acting. If a merge moved the call, the run starts again on its
+current ticket, using the destination’s visibility and keeping the source closed.
 
 ### Timeline
 
