@@ -82,7 +82,7 @@ export function seedPhone(ws: WsData, agent: UserRef) {
     id: uuid(),
     email: null,
     name: "Lena Hoffmann",
-    phone: "+49 30 5557 1234",
+    phone: "+32 470 00 00 00",
     avatar_url: null,
     avatar_source: null,
     company: null,
@@ -114,7 +114,7 @@ export function seedPhone(ws: WsData, agent: UserRef) {
   entry(
     answeredAt - 30_000,
     callData({
-      number: "+493055571234",
+      number: "+32470000000",
       caller_name: "Lena Hoffmann",
       line: "DE - Support",
       line_id: "501",
@@ -142,7 +142,7 @@ export function seedPhone(ws: WsData, agent: UserRef) {
     callData({
       outcome: "missed",
       missed_reason: "out_of_opening_hours",
-      number: "+493055571234",
+      number: "+32470000000",
       caller_name: "Lena Hoffmann",
       line: "DE - Support",
       line_id: "501",

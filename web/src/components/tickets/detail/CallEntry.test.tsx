@@ -66,7 +66,7 @@ describe("CallEntry", () => {
     const el = await render(
       entry({
         caller_name: "Lena Hoffmann",
-        number: "+493055571234",
+        number: "+32470000000",
         line: "DE - Support",
         agent,
         answered_at: "2026-10-27T10:00:10Z",
