@@ -3,6 +3,7 @@ package hd
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,10 +20,17 @@ import (
 
 // Automation enums (contracts/api.md).
 var (
-	AutomationTriggers = []string{jobs.TriggerTicketCreated, jobs.TriggerCustomerReplied, jobs.TriggerAgentReplied, jobs.TriggerTicketUpdated}
+	AutomationTriggers = []string{jobs.TriggerTicketCreated, jobs.TriggerCustomerReplied, jobs.TriggerAgentReplied, jobs.TriggerTicketUpdated, jobs.TriggerCallEnded}
 	ConditionFields    = []string{"subject", "body", "from_email", "channel", "mailbox_id", "priority", "severity", "status", "tag", "sentiment", "ai_decide",
-		"assignee_id", "team_id", "brand_id", "widget_id", "received_at"}
-	ConditionOps = []string{"contains", "not_contains", "equals", "not_equals", "any", "none"}
+		"assignee_id", "team_id", "brand_id", "widget_id", "received_at",
+		"call_outcome", "call_direction", "call_missed_reason", "call_time", "call_line", "call_tag"}
+	// CallFields are the facts of the call a call_ended automation runs for
+	// (contracts/phone.md "Automations"); only that trigger takes them.
+	CallFields     = []string{"call_outcome", "call_direction", "call_missed_reason", "call_time", "call_line", "call_tag"}
+	CallOutcomes   = []string{"answered", "missed", "voicemail"}
+	CallDirections = []string{"inbound", "outbound"}
+	CallTimes      = []string{"business_hours", "outside_business_hours"}
+	ConditionOps   = []string{"contains", "not_contains", "equals", "not_equals", "any", "none"}
 	// PhraseFields take the phrase ops any and none: a list of phrases, one per line.
 	PhraseFields = []string{"subject", "body", "from_email", "received_at", "tag"}
 	ActionTypes  = []string{"set_status", "set_priority", "set_severity", "assign_user", "assign_replier", "assign_team", "add_tag", "remove_tag", "send_reply", "add_note", "mark_spam", "delete_ticket", "merge_into_open_ticket", "ai_triage", "set_field", "set_reply_address"}
@@ -47,7 +55,7 @@ const (
 )
 
 type Condition struct {
-	Field string `json:"field" maxLength:"60" doc:"subject, body, from_email, channel, mailbox_id, priority, severity, status, tag, sentiment, ai_decide, assignee_id, team_id, brand_id, widget_id, received_at, field.<key> (ticket custom field) or contact.field.<key>"`
+	Field string `json:"field" maxLength:"60" doc:"subject, body, from_email, channel, mailbox_id, priority, severity, status, tag, sentiment, ai_decide, assignee_id, team_id, brand_id, widget_id, received_at, field.<key> (ticket custom field), contact.field.<key>, or on call_ended: call_outcome, call_direction, call_missed_reason, call_time, call_line, call_tag"`
 	Op    string `json:"op" enum:"contains,not_contains,equals,not_equals,eq,ne,gt,gte,lt,lte,any,all,none,set,not_set" doc:"eq is an alias of equals, ne of not_equals; custom fields take the ops of their type"`
 	Value string `json:"value" maxLength:"5000" doc:"up to 500 characters; any and none on subject, body, from_email, received_at and tag: up to 100 phrases, one per line"`
 	// Question is the yes/no question of an ai_decide condition (contracts/ai.md "Automations").
@@ -213,6 +221,31 @@ func ValidateConditions(ctx context.Context, q db.Querier, wid uuid.UUID, cs []C
 				return nil, err
 			}
 			c.Value = id.String()
+		case "call_outcome", "call_direction", "call_time":
+			allowed := map[string][]string{"call_outcome": CallOutcomes, "call_direction": CallDirections, "call_time": CallTimes}[c.Field]
+			if !exact || !slices.Contains(allowed, c.Value) {
+				return nil, httpx.Validation(c.Field + " conditions use equals or not_equals with one of " + strings.Join(allowed, ", "))
+			}
+		case "call_missed_reason":
+			// The provider's own reason, such as out_of_opening_hours or no_available_agent.
+			if !exact || !callReason.MatchString(c.Value) {
+				return nil, httpx.Validation("call_missed_reason conditions use equals or not_equals with a reason such as out_of_opening_hours")
+			}
+		case "call_line":
+			// equals and not_equals name a line by its provider id (GET /v1/phone/lines),
+			// contains and not_contains read its name.
+			c.Value = strings.TrimSpace(c.Value)
+			if exact && !lineID.MatchString(c.Value) {
+				return nil, httpx.Validation("call_line conditions with equals or not_equals take a line's id, as GET /v1/phone/lines lists it")
+			}
+			if !exact && (!slices.Contains([]string{"contains", "not_contains"}, c.Op) || c.Value == "") {
+				return nil, httpx.Validation("call_line conditions use equals or not_equals with a line's id, or contains or not_contains with words of its name")
+			}
+		case "call_tag":
+			if !slices.Contains([]string{"equals", "not_equals", "contains", "not_contains"}, c.Op) || strings.TrimSpace(c.Value) == "" {
+				return nil, httpx.Validation(c.Field + " conditions use equals, not_equals, contains or not_contains with a name")
+			}
+			c.Value = strings.TrimSpace(c.Value)
 		case "received_at":
 			// The exact address the customer wrote to.
 			if !slices.Contains([]string{"equals", "not_equals", "contains", "any", "none"}, c.Op) {
@@ -223,6 +256,17 @@ func ValidateConditions(ctx context.Context, q db.Querier, wid uuid.UUID, cs []C
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+var (
+	callReason = regexp.MustCompile(`^[a-z][a-z0-9_]{0,59}$`)
+	// lineID is a provider's id for a line (Aircall: a number's id).
+	lineID = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,60}$`)
+)
+
+// UsesCallFields reports whether conditions read the facts of a call.
+func UsesCallFields(cs []Condition) bool {
+	return slices.ContainsFunc(cs, func(c Condition) bool { return slices.Contains(CallFields, c.Field) })
 }
 
 // Phrases splits the value of an any or none condition: one phrase per line, each

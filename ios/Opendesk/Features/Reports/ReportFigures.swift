@@ -104,7 +104,7 @@ struct ReportFigures {
     }
 
     var channels: [ReportSlice] {
-        let order = ["email", "chat", "api", "portal"]
+        let order = ["email", "chat", "api", "portal", "phone"]
         let keys = overview.byChannel.keys.sorted { (order.firstIndex(of: $0) ?? 99, $0) < (order.firstIndex(of: $1) ?? 99, $1) }
         return keys.compactMap { key in
             guard let value = overview.byChannel[key], value > 0 else { return nil }

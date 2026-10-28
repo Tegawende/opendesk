@@ -18,6 +18,7 @@ import { PriorityIcon, priorityOrder, SeverityChip, severityLabel, StatusIcon, s
 import { isSeverity, pct } from "@/lib/decisions";
 import { MessageItem, type ThreadActions } from "./MessageItem";
 import { LiveAgentReply } from "./AgentReply";
+import { CallEntry } from "./CallEntry";
 import { BotFace } from "@/components/bots/BotFace";
 import { isAIActor, OllieAvatar, useAssistantName } from "../ollie";
 import { fieldText, useDisplay, useTicketFields, type CustomField } from "../fields";
@@ -524,6 +525,8 @@ export function Timeline({
                       threadActions={lastInThread.has(it.m.id) ? threadActions : undefined}
                       threadFirst={firstInThread.has(it.m.id)}
                     />
+                  ) : it.a.type === "call" ? (
+                    <CallEntry a={it.a} />
                   ) : (
                     <ActivityLine a={it.a} />
                   )}

@@ -123,6 +123,7 @@ export default defineConfig({
                 { label: 'Identity verification', slug: 'guides/live-chat/identity-verification' },
               ],
             },
+            { label: 'Phone calls with Aircall', slug: 'guides/aircall' },
             { label: 'Brands and widgets', slug: 'guides/brands-and-widgets' },
             {
               label: 'Email templates',

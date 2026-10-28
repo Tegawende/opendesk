@@ -54,7 +54,7 @@ type listIn struct {
 	Tag        string `query:"tag" doc:"Comma-separated label names: tickets carrying any of them"`
 	TagNot     string `query:"tag_not" doc:"Comma-separated label names: tickets carrying none of them"`
 	Untagged   bool   `query:"untagged" doc:"Tickets carrying no label"`
-	Channel    string `query:"channel" enum:"email,chat,api,portal,"`
+	Channel    string `query:"channel" enum:"email,chat,api,portal,phone,"`
 	ChannelNot string `query:"channel_not" doc:"Comma-separated channels: tickets on none of them"`
 	ContactID  string `query:"contact_id"`
 	ContactNot string `query:"contact_not" doc:"Comma-separated contact ids: tickets whose contact is none of them"`
@@ -951,8 +951,28 @@ func merge(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uuid.UUID
 	if _, err := tx.Exec(ctx, `UPDATE messages SET ticket_id = $3 WHERE workspace_id = $1 AND ticket_id = $2`, wid, src, dst); err != nil {
 		return err
 	}
+	rows, err := tx.Query(ctx, `UPDATE activities SET ticket_id = $3 WHERE workspace_id = $1 AND ticket_id = $2 AND type = 'call' RETURNING id, data`, wid, src, dst)
+	if err != nil {
+		return err
+	}
+	type movedCallEntry struct {
+		ID   uuid.UUID
+		Data map[string]any
+	}
+	entries, err := pgx.CollectRows(rows, pgx.RowToStructByPos[movedCallEntry])
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if _, err := domain.UpdateActivity(ctx, tx, wid, entry.ID, entry.Data); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE phone_calls SET ticket_id = $3, updated_at = now() WHERE workspace_id = $1 AND ticket_id = $2`, wid, src, dst); err != nil {
+		return err
+	}
 	// Third-party threads go with their messages, and show on the target for everyone.
-	rows, err := tx.Query(ctx, `UPDATE ticket_threads SET ticket_id = $3, updated_at = now() WHERE workspace_id = $1 AND ticket_id = $2 RETURNING id`, wid, src, dst)
+	rows, err = tx.Query(ctx, `UPDATE ticket_threads SET ticket_id = $3, updated_at = now() WHERE workspace_id = $1 AND ticket_id = $2 RETURNING id`, wid, src, dst)
 	if err != nil {
 		return err
 	}
@@ -1034,7 +1054,7 @@ func merge(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uuid.UUID
 	if err := domain.PublishTicketUpdated(ctx, tx, wid, src, srcChanged); err != nil {
 		return err
 	}
-	return domain.PublishTicketUpdated(ctx, tx, wid, dst, []string{"messages", "tags", "last_message_at"})
+	return domain.PublishTicketUpdated(ctx, tx, wid, dst, []string{"messages", "calls", "tags", "last_message_at"})
 }
 
 func queryOf(ctx huma.Context) url.Values {

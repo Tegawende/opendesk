@@ -51,6 +51,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/jobs"
 	"github.com/useopendesk/opendesk/internal/mailer"
 	"github.com/useopendesk/opendesk/internal/natsx"
+	"github.com/useopendesk/opendesk/internal/phone"
 	"github.com/useopendesk/opendesk/internal/plan"
 	"github.com/useopendesk/opendesk/internal/push"
 	"github.com/useopendesk/opendesk/internal/sealed"
@@ -75,6 +76,7 @@ var areas = []area{
 	{ai.Register, ai.RegisterWorkers, ai.Periodic, ai.Background},
 	{integrations.Register, integrations.RegisterWorkers, integrations.Periodic, integrations.Background},
 	{supportchannels.Register, supportchannels.RegisterWorkers, supportchannels.Periodic, supportchannels.Background},
+	{phone.Register, phone.RegisterWorkers, phone.Periodic, phone.Background},
 	{assistant.Register, assistant.RegisterWorkers, assistant.Periodic, assistant.Background},
 	{knowledge.Register, knowledge.RegisterWorkers, knowledge.Periodic, knowledge.Background},
 	{bots.Register, bots.RegisterWorkers, bots.Periodic, bots.Background},

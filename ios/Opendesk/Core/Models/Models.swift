@@ -288,7 +288,7 @@ enum Severity: String, LenientEnum, CaseIterable, Identifiable {
 }
 
 enum Channel: String, LenientEnum, CaseIterable, Identifiable {
-    case email, chat, api, portal
+    case email, chat, api, portal, phone
     static let fallback = Channel.email
     var id: String { rawValue }
 
@@ -298,6 +298,7 @@ enum Channel: String, LenientEnum, CaseIterable, Identifiable {
         case .chat: "Chat"
         case .api: "API"
         case .portal: "Portal"
+        case .phone: "Phone"
         }
     }
 }

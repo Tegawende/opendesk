@@ -692,6 +692,9 @@ const sSupportChannels = settingsPage("/support-channels", "supportChannels", ()
     qc.ensureQueryData(q.teams()),
   ]),
 );
+const sPhone = settingsPage("/phone", "phone", () => import("./pages/settings/Phone"), (qc) =>
+  Promise.all([qc.ensureQueryData(q.phoneProviders()), qc.ensureQueryData(q.phoneConnections())]),
+);
 const sMailboxNew = createRoute({
   getParentRoute: () => settingsLayout,
   path: "/mailboxes/new",
@@ -982,6 +985,7 @@ const routeTree = rootRoute.addChildren([
       sRoutingRule,
       sMailboxes,
       sSupportChannels,
+      sPhone,
       sMailboxNew,
       sMailboxDetail,
       sMailAccounts,

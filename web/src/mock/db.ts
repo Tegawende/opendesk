@@ -1,6 +1,7 @@
 // The in-memory database behind mock mode.
 
 import type {
+  PhoneConnection,
   Activity,
   AIFeature,
   AISettings,
@@ -103,6 +104,8 @@ export type WsData = {
   threads: Thread[];
   originals: Record<string, string>;
   activities: Activity[];
+  /** Phone connections (contracts/phone.md; handlers/phone.ts). */
+  phone: PhoneConnection[];
   tags: Tag[];
   tagGroups: TagGroup[];
   customFields: CustomField[];

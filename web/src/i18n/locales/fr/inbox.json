@@ -849,6 +849,35 @@
     "back": "Retour aux équipes",
     "move": "Déplacer"
   },
+  "call": {
+    "withheld": "un numéro masqué",
+    "inProgress": "En cours",
+    "ringing": "Sonne",
+    "voicemail": "Messagerie vocale",
+    "missed": "Manqué",
+    "noAnswer": "Sans réponse",
+    "answered": "Répondu",
+    "outboundBy": "{{who}} a appelé {{caller}}",
+    "outbound": "Appel vers {{caller}}",
+    "inboundAnsweredBy": "{{caller}} a appelé, {{who}} a répondu",
+    "inbound": "Appel de {{caller}}",
+    "outsideHours": "En dehors des horaires d'ouverture",
+    "line": "Ligne {{line}}",
+    "playRecording": "Écouter l'enregistrement",
+    "playVoicemail": "Écouter le message vocal",
+    "openIn": "Ouvrir dans {{provider}}",
+    "summary": "Résumé",
+    "showTranscript": "Afficher la transcription",
+    "hideTranscript": "Masquer la transcription",
+    "reason": {
+      "out_of_opening_hours": "En dehors des horaires d'ouverture",
+      "short_abandoned": "Raccroché rapidement",
+      "abandoned_in_ivr": "Raccroché dans le menu",
+      "abandoned_in_classic": "Raccroché pendant l'attente",
+      "no_available_agent": "Aucun collègue disponible",
+      "agents_did_not_answer": "Personne n'a répondu"
+    }
+  },
   "panels": {
     "refresh": "Actualiser {{name}}",
     "collapse": "Masquer {{name}}",

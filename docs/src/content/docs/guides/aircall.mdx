@@ -1,0 +1,134 @@
+---
+title: Phone calls with Aircall
+description: Connect Aircall so every call lands on the caller's ticket, with who took it, its recording and summary, and automations for missed calls.
+---
+
+import Steps from '../../../components/Steps.astro';
+import Step from '../../../components/Step.astro';
+import Callout from '../../../components/Callout.astro';
+
+Connect [Aircall](https://aircall.io) and every call, inbound or outbound, is documented on the caller's ticket. The call shows in the ticket's timeline as one entry that follows it: ringing, answered by whom, how long it lasted, then its recording, the team's comments in Aircall and Aircall's AI summary when your plan has it. When a call ends, your automations can act on it: reopen the ticket of a missed call, add a note, raise its priority or assign it.
+
+Connecting needs the admin role. Open **Settings**, **Phone**, in the **Channels** group.
+
+## Connect Aircall
+
+<Steps>
+<Step title="Create an API key in Aircall">
+
+In the Aircall dashboard, open **Integrations & API**, then **API keys**, and create a key. Keep its **API ID** and **API token** at hand.
+
+</Step>
+<Step title="Paste it in opendesk">
+
+In **Settings**, **Phone**, click **Aircall** and paste the API ID and API token, then **Connect**. opendesk checks the key, names the connection after your Aircall company and registers its own webhook in your Aircall account, so calls start arriving at once.
+
+</Step>
+<Step title="Check that calls arrive">
+
+The connection says **Receiving calls** once its webhook is in place, and shows when the last call event came in. Make a test call to one of your Aircall numbers: a ticket for your number appears with the call on it.
+
+</Step>
+</Steps>
+
+<Callout type="note" title="Your other Aircall integrations stay as they are">
+
+opendesk only ever touches the one webhook it created. Webhooks of other tools, such as another helpdesk you are moving away from, keep working. Disconnecting removes opendesk's webhook alone.
+
+</Callout>
+
+If Aircall stops sending calls (it switches a webhook off when deliveries keep failing), the connection says so. Click **Test**: opendesk checks the key and registers its webhook again. Replace the key with the key button next to it.
+
+## Where a call goes
+
+opendesk finds the caller by their phone number. Numbers match however they are written on the contact (`+32 470 12 34 56`, `0032 470 12 34 56`), as long as they include the country code. A number opendesk has never seen becomes a new contact, named after the Aircall contact when there is one.
+
+The call then goes on:
+
+1. the caller's **open ticket** (open, pending or on hold), the most recently updated one;
+2. else their latest **solved** ticket, when it was solved within the time you choose under **Use a recently solved ticket** (7 days by default; **Never** to skip this);
+3. else a **new ticket** on the **Phone** channel, named "Call from" and the caller. Routing rules on the Phone channel send these tickets to a team.
+
+A call from a withheld number always opens a new ticket. A call from a contact you blocked goes on no ticket and runs no automation, like their email.
+
+## In the ticket
+
+Each call is one entry in the timeline. It shows:
+
+- who called whom, and for an answered call, the teammate who took it;
+- **Answered**, **Missed**, **Voicemail** or **No answer**, and while it is going, **Ringing** or **In progress**;
+- the talk time, the Aircall number (line) it came in on, and **Outside business hours** when it came outside your hours;
+- why a call was missed, in Aircall's words: outside opening hours, nobody answered, hung up in the menu and so on;
+- **Play recording** or **Play voicemail**, and **Open in Aircall** for a call Aircall keeps a recording or voicemail for. opendesk keeps links, never the audio: recordings stay in Aircall;
+- the comments and labels your team added in Aircall, and Aircall's AI summary and transcript when your plan has them.
+
+Teammates are matched by email: an Aircall user with the same email as a member is shown as that member. Turn on **Assign answered calls** and an answered call gives a ticket nobody has to the teammate who took it.
+
+<Callout type="note" title="Assign answered calls and auto-assignment">
+
+A call opens its ticket at the first ring, and the answer is only known when the call ends. If auto-assignment (or an automation on **A ticket is created**) gives the new ticket to someone while the phone rings, the ticket already has an owner when the call ends, and **Assign answered calls** leaves it with them. For the teammate who answered to own phone tickets, keep auto-assignment off for those tickets, for instance for the team your Phone routing rule sends them to.
+
+</Callout>
+
+## Missed calls: an automation
+
+What a missed call should do is yours to decide, with an automation on the trigger **A call ends**. This one reopens the caller's ticket, notes the missed call and raises its priority, for calls that came outside your business hours:
+
+<Steps>
+<Step title="Create the automation">
+
+In **Settings**, **Phone**, click **Create this automation** next to **Missed call outside opening hours**. It is created switched off, with these settings, for you to review. You can also build it yourself in **Settings**, **Automations**.
+
+</Step>
+<Step title="Check its conditions">
+
+- **When**: A call ends
+- **If** Call direction is Inbound
+- **and** Call outcome is Missed
+- **and** Call time is Outside business hours
+
+</Step>
+<Step title="Check its actions, then switch it on">
+
+- Set status to **Open**
+- Add a note: "Missed call outside opening hours: call back."
+- Set priority to **High**
+
+</Step>
+</Steps>
+
+**Call time** uses your business hours (**Settings**, **Business hours**), or the ticket's team hours when it has its own. If your phone line is open shorter hours than your team, say 2 to 5 PM, use **Missed call reason** is **Outside opening hours** instead: that is Aircall's own reason, from the opening hours of your Aircall number.
+
+Other conditions of **A call ends**:
+
+| Condition | Values |
+| --- | --- |
+| **Call outcome** | Answered, Missed, Voicemail |
+| **Call direction** | Inbound, Outbound |
+| **Call time** | Within business hours, Outside business hours |
+| **Missed call reason** | Outside opening hours, No teammate available, Nobody answered, Hung up in the menu, Hung up while waiting, Hung up quickly |
+| **Call line** | An Aircall number, such as "FR - B2B": route or label calls by the line they came in on |
+| **Call label** | A label your team put on the call in Aircall |
+
+Every other condition (team, status, labels, custom fields) and every action works as in other automations: add a label, assign a teammate or a team, send nothing to the customer.
+
+<Callout type="tip" title="Labels added after the call">
+
+Automations run once, a minute after the call ends, so labels your team adds right after hanging up count. A label or comment added in Aircall later still shows on the call's entry, but doesn't run the automations again.
+
+</Callout>
+
+## While a call rings
+
+With **Show the caller in Aircall** on, Aircall shows the agent who the caller is while their phone rings: their name (linked to the contact in opendesk), the ticket the call goes on and their latest tickets.
+
+## Calling from opendesk
+
+Phone numbers on contacts and in the ticket sidebar are phone links once Aircall is connected. Your computer opens them in your default phone app: set **Aircall Workspace** as the app for phone links (`tel:`) in your system settings, and a click starts the call in Aircall. The call then lands on the ticket like any other.
+
+## Good to know
+
+- Calls appear within seconds: Aircall sends each step of a call as it happens, and opendesk keeps one entry per call even when steps arrive late, twice or out of order.
+- The call's final details (duration, missed reason, recording) come about 30 seconds after hanging up, when Aircall finalizes the call.
+- A ticket a call opened is on the **Phone** channel: like a ticket made through the API, a reply written there stays on the ticket and is not emailed. To answer a caller by email, reply on their email ticket, or call them back.
+- Aircall SMS, two-way contact sync and connecting through the Aircall Marketplace are not part of this connection yet.
