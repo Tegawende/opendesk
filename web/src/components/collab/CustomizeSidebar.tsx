@@ -38,6 +38,7 @@ import { cleanSection, orderViews } from "@/lib/viewSections";
 import { q } from "@/lib/queries";
 import { ReorderButtons } from "@/components/settings2/bits";
 import { TeamDot, useTeamsCtx } from "@/components/tickets/teams";
+import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Menu, MenuChoice, MenuContent, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
@@ -267,8 +268,8 @@ export function CustomizeSidebar() {
       case "views":
         return orderViews(views ?? []).map((v) => ({
           key: v.id,
-          label: v.name,
-          icon: <Layers />,
+          label: viewName(v),
+          icon: <ViewIcon icon={v.icon} size={14} />,
           hideId: hid.view(v.id),
           pin: { kind: "view", id: v.id },
           badge: ticketBadge(hid.view(v.id), "views"),

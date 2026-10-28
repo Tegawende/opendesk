@@ -1,5 +1,5 @@
 import type { SupportChannelConnection, SupportChannelDelivery, SupportChannelDestination, SupportChannelOperations, SupportChannelProvider } from "@/lib/api/types";
-import { del, get, invalid, notFound, paginate, patch, post, respond } from "../router";
+import { del, get, HttpError, invalid, notFound, paginate, patch, post, respond } from "../router";
 import { nowIso, uuid } from "../util";
 
 const providers: SupportChannelProvider[] = [
@@ -168,10 +168,22 @@ export function registerSupportChannels() {
     if (!connection) throw notFound("Support channel");
     const external = String(ctx.body.external_channel_id ?? "").trim();
     if (!external) throw invalid("Enter the provider channel ID.");
+    const priorities = ["low", "normal", "high", "urgent"] as const;
+    const priority = priorities.find((value) => value === ctx.body.priority) ?? null;
+    if (ctx.body.priority !== undefined && priority === null) {
+      throw invalid("Priority must be low, normal, high, or urgent.");
+    }
+    if (destinations.some((destination) => destination.connection_id === connection.id && destination.external_channel_id === external)) {
+      throw new HttpError(409, "conflict", "That provider channel already has a destination.");
+    }
+    if (destinations.some((destination) => destination.connection_id === connection.id && (destination.team_id ?? "all") === (typeof ctx.body.team_id === "string" ? ctx.body.team_id : "all") && (destination.priority ?? "all") === (priority ?? "all"))) {
+      throw new HttpError(409, "conflict", "That team and priority already has a destination.");
+    }
     const row: SupportChannelDestination = {
       id: uuid(),
       connection_id: connection.id,
       team_id: typeof ctx.body.team_id === "string" ? ctx.body.team_id : null,
+      priority,
       external_channel_id: external,
       external_channel_name: String(ctx.body.external_channel_name ?? "").trim(),
       enabled: true,
