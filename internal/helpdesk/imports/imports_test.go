@@ -1584,4 +1584,3 @@ func TestSyncTakesOffTheLabelsTheSourceTookOff(t *testing.T) {
 		t.Errorf("%d of the labels left in the workspace, want 3", n)
 	}
 }
-
