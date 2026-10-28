@@ -47,34 +47,34 @@ export function useDisplay() {
     priority: (v: Priority) => s.priority_labels?.[v]?.label || priorityLabel(v),
     statusTone: (v: TicketStatus): Tone | undefined => (isTone(s.status_labels?.[v]?.color) ? (s.status_labels![v]!.color as Tone) : undefined),
     /** Whether the workspace hides the status from the agents' menus. */
-    hidden: (v: TicketStatus) => !!s.status_labels?.[v]?.hidden,
+    hidden: (v: TicketStatus) => v !== "solved" && !!s.status_labels?.[v]?.hidden,
     /** The statuses an agent may pick, keeping the ticket's current one. */
     statuses: (current?: TicketStatus) => offeredStatuses(s.status_labels, current),
-    /** What solving a ticket sets: solved, or closed where solved is hidden. */
-    finish: finishStatus(s.status_labels),
+    /** Finishing preserves surveys and reopening, regardless of its display label. */
+    finish: "solved" as const,
     /** The words for that action wherever it is offered. */
     finishWords: finishWords(s.status_labels),
   };
 }
 
 /**
- * How the UI names finishing a ticket: "solve" where it sets solved; "close" where it sets
- * closed under its own name; "mark" (as the workspace's name for it) where closed was renamed.
+ * How the UI names finishing a ticket, using the presentation label of solved.
  */
 export type FinishVerb = "solve" | "close" | "mark";
 
 export function finishVerb(labels: Record<string, Override> | undefined): FinishVerb {
-  if (finishStatus(labels) === "solved") return "solve";
-  const name = labels?.closed?.label?.trim().toLowerCase();
+  const name = labels?.solved?.label?.trim().toLowerCase();
+  const solvedNames = [statusLabel("solved"), i18n.t("indicators:status.solved", { lng: "en" })].map((n) => n.toLowerCase());
+  if (!name || solvedNames.includes(name)) return "solve";
   // A label that only spells the built-in name, in the agent's language or English, is no rename.
   const builtIn = [statusLabel("closed"), i18n.t("indicators:status.closed", { lng: "en" })].map((n) => n.toLowerCase());
-  return !name || builtIn.includes(name) ? "close" : "mark";
+  return builtIn.includes(name) ? "close" : "mark";
 }
 
 /** The finishing action's words at each place it shows, after finishVerb; solving keeps its own. */
 export function finishWords(labels: Record<string, Override> | undefined) {
   const verb = finishVerb(labels);
-  const status = labels?.closed?.label?.trim() ?? "";
+  const status = labels?.solved?.label?.trim() ?? "";
   const say = (solve: () => string, close: () => string, mark: () => string) => (verb === "solve" ? solve : verb === "close" ? close : mark)();
   return {
     verb,
@@ -97,12 +97,7 @@ export function finishWords(labels: Record<string, Override> | undefined) {
 
 /** The statuses in menu order without the ones the workspace hides; the ticket's current status stays. */
 export function offeredStatuses(labels: Record<string, Override> | undefined, current?: TicketStatus): TicketStatus[] {
-  return statusOrder.filter((s) => s === current || !labels?.[s]?.hidden);
-}
-
-/** solved, or closed when the workspace hides solved (it never hides both). */
-export function finishStatus(labels: Record<string, Override> | undefined): TicketStatus {
-  return labels?.solved?.hidden ? "closed" : "solved";
+  return statusOrder.filter((s) => s === "solved" || s === current || !labels?.[s]?.hidden);
 }
 
 export function hasValue(f: CustomField, v: FieldValue | undefined | null): boolean {
