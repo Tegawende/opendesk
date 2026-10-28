@@ -315,7 +315,7 @@ type LinkIcon = "external-link" | "store" | "shopping-cart" | "receipt" | "file-
   | "building" | "phone" | "mail" | "credit-card" | "map-pin" /* generic */
   | "shopify" | "stripe" | "paypal" | "square" | "linear" | "github" | "atlassian" | "sentry" | "notion" | "asana"
   | "monday" | "slack" | "discord" | "telegram" | "intercom" | "close" | "box" | "zapier" | "zendesk" | "helpscout"
-  | "freshdesk" /* the products whose logo the app ships */;
+  | "freshdesk" | "odoo" /* the products whose logo the app ships */;
 interface Line { quantity?: number; title: string; subtitle?: string; value?: Value; url?: string }
 interface Badge { text: string; tone: Tone }
 type Tone = "neutral" | "info" | "success" | "warning" | "danger";

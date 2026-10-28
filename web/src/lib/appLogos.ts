@@ -25,6 +25,7 @@ const APP_LOGOS = new Set([
   "helpscout",
   "freshdesk",
   "shopify",
+  "odoo",
 ]);
 
 /** Where each product's pages live, so a plain link to one shows its logo. */
@@ -55,6 +56,7 @@ const APP_HOSTS: [string, string][] = [
   ["freshdesk.com", "freshdesk"],
   ["myshopify.com", "shopify"],
   ["shopify.com", "shopify"],
+  ["odoo.com", "odoo"],
 ];
 
 /** The shipped logo for a product key, if any. */

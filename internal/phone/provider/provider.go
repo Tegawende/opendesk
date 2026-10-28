@@ -186,8 +186,9 @@ type Adapter interface {
 	Verify(body []byte, secret string) error
 	// Parse normalizes a verified webhook body; ErrIgnored for events of no use.
 	Parse(body []byte) (Event, error)
-	// Lines lists the account's numbers, for automation conditions.
+	// Transcript retrieves the content announced by a transcript event.
 	Transcript(ctx context.Context, client *http.Client, credentials map[string]string, callID string) (string, error)
+	// Lines lists the account's numbers, for automation conditions.
 	Lines(ctx context.Context, client *http.Client, credentials map[string]string) ([]Line, error)
 	// PushCard shows a card on a live call in the provider's app.
 	PushCard(ctx context.Context, client *http.Client, credentials map[string]string, callID string, card Card) error
