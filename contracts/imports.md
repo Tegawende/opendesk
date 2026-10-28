@@ -32,7 +32,9 @@ answers `409 import_running`.
 4. **Bring over what changed** (`POST /v1/imports/{id}/sync`) while the team switches over:
    tickets updated in the source since shortly before the last run began get their new
    messages, the source's status and any new labels; new tickets and new articles are
-   imported. Tickets that did not move in the source are skipped, articles already imported
+   imported. A ticket whose requester the source changed gets that customer as its contact
+   (the new messages are theirs), unless it is a chat or the team worked it here: it has a
+   message no import wrote, or its contact was changed here (`contact_changed`). Tickets that did not move in the source are skipped, articles already imported
    are left as they are, and a ticket deleted here stays deleted. CSV imports run once.
 5. **Undo** (`POST /v1/imports/{id}/undo`) removes everything the import created: tickets
    (with every message and attachment on them; a ticket with a message no import wrote, a

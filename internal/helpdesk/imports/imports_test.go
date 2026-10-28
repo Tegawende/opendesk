@@ -891,6 +891,83 @@ func TestSync(t *testing.T) {
 	e.Do("POST", "/v1/imports/"+x.ID.String()+"/sync", e.admin, nil).Want(t, 409)
 }
 
+// TestSyncFollowsTheSourcesRequester: a source that gives a ticket another customer after
+// it came over (Gorgias moves the automatic mail a shop sends to the buyer once they answer;
+// Zendesk and Front let an agent change the requester) has the sync give the ticket that
+// contact here, as it brings the source's status and assignee. A ticket the team works here
+// keeps its contact, and so does a live chat.
+func TestSyncFollowsTheSourcesRequester(t *testing.T) {
+	e := newEnv(t)
+	shop := source.Person{ID: "u7", Email: "info@shop.test", Name: "Shop"}
+	erin := source.Person{ID: "u8", Email: "erin@customer.test", Name: "Erin"}
+	mail := func(id, subject string) source.Ticket {
+		return source.Ticket{ID: id, Ref: "#" + id, Subject: subject, Status: "open", Channel: "email", Requester: &shop,
+			CreatedAt: base.Add(72 * time.Hour), UpdatedAt: base.Add(72 * time.Hour), Loaded: true,
+			Messages: []source.Message{{ID: id + "-1", Agent: true, AuthorID: "a1", Text: "Your order has shipped",
+				To: []string{erin.Email}, CreatedAt: base.Add(72 * time.Hour)}}}
+	}
+	e.f.tickets = append(e.f.tickets, mail("106", "Order shipped"), mail("107", "Order shipped"), mail("108", "Order shipped"))
+	x := e.start(t, e.zendeskBody())
+	if done := e.drive(t, x.ID); done.Status != StatusCompleted {
+		t.Fatalf("first run %s %s", done.Status, done.LastError)
+	}
+	contactOf := func(ref string) string {
+		t.Helper()
+		var email string
+		e.Scalar(`SELECT COALESCE(c.email::text, '') FROM tickets t JOIN contacts c ON c.id = t.contact_id WHERE t.id = $1`, &email, e.ticketByRef(t, ref))
+		return email
+	}
+	// The team writes a note on 107 here, and someone picks 108's contact here.
+	err := e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
+		_, err := domain.AddMessage(e.Ctx, tx, e.D.Jobs, domain.NewMessage{WorkspaceID: e.ws.ID, TicketID: e.ticketByRef(t, "107"), Kind: "note",
+			Direction: "outbound", AuthorType: "user", AuthorUserID: &e.ws.Admin.ID, BodyText: "Asked the carrier"})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dora uuid.UUID
+	e.Scalar(`SELECT id FROM contacts WHERE workspace_id = $1 AND email = 'dora@customer.test'`, &dora, e.ws.ID)
+	e.Do("PATCH", "/v1/tickets/"+e.ticketByRef(t, "108").String(), e.admin, map[string]any{"contact_id": dora.String()}).Want(t, 200)
+
+	// The buyer answers each mail and the source makes them its requester; the chat 104
+	// gets another requester too, and 101 none.
+	now := time.Now().UTC().Truncate(time.Second)
+	e.f.mu.Lock()
+	for i := range e.f.tickets {
+		tk := &e.f.tickets[i]
+		switch tk.ID {
+		case "106", "107", "108":
+			tk.Requester, tk.UpdatedAt = &erin, now
+			tk.Messages = append(tk.Messages, source.Message{ID: tk.ID + "-2", Author: erin, Text: "Where is it?", CreatedAt: now.Add(-time.Minute)})
+		case "104":
+			tk.Requester, tk.UpdatedAt = &erin, now
+		case "101":
+			tk.Requester, tk.UpdatedAt = nil, now
+		}
+	}
+	e.f.mu.Unlock()
+	e.Do("POST", "/v1/imports/"+x.ID.String()+"/sync", e.admin, nil).Want(t, 200)
+	if synced := e.drive(t, x.ID); synced.Status != StatusCompleted {
+		t.Fatalf("sync %s %s", synced.Status, synced.LastError)
+	}
+
+	if got := contactOf("106"); got != erin.Email {
+		t.Errorf("106's contact %q, want the source's new requester", got)
+	}
+	var author string
+	e.Scalar(`SELECT COALESCE(c.email::text, '') FROM import_records r JOIN messages m ON m.id = r.local_id
+		LEFT JOIN contacts c ON c.id = m.author_contact_id WHERE r.workspace_id = $1 AND r.kind = 'message' AND r.external_id = '106-2'`, &author, e.ws.ID)
+	if author != erin.Email {
+		t.Errorf("106's new message is by %q, want the new requester", author)
+	}
+	for ref, want := range map[string]string{"107": shop.Email, "108": "dora@customer.test", "104": "carol@customer.test", "101": "bob@customer.test"} {
+		if got := contactOf(ref); got != want {
+			t.Errorf("%s's contact %q, want %q kept", ref, got, want)
+		}
+	}
+}
+
 func TestCSVImport(t *testing.T) {
 	e := newEnv(t)
 	csvData := "Ticket ID,Subject,Body,From email,From name,Author type,Status,Priority,Tags,Created at\n" +
