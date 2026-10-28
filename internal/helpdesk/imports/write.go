@@ -966,7 +966,7 @@ func (w *writer) label(ctx context.Context, tx pgx.Tx, ticketID uuid.UUID, t *so
 		if id == nil {
 			continue
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO ticket_tags (ticket_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, ticketID, *id); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO ticket_tags (ticket_id, tag_id, local_owned) VALUES ($1, $2, false) ON CONFLICT DO NOTHING`, ticketID, *id); err != nil {
 			return nil, err
 		}
 		// names[0] is the import's own label when it has one.
@@ -979,8 +979,8 @@ func (w *writer) label(ctx context.Context, tx pgx.Tx, ticketID uuid.UUID, t *so
 
 // unlabel takes off a ticket the labels an earlier run gave it from the source (its record's
 // tag_ids) that the source no longer gives it (given). The import's own label stays, and so
-// does a label someone put on the ticket here since (a tagged activity, by a person, an API
-// key or an automation). A ticket recorded before its labels were stays as it is.
+// does a locally owned label, including one carried from a merged ticket.
+// A ticket recorded before its labels were stays as it is.
 func (w *writer) unlabel(ctx context.Context, tx pgx.Tx, externalID string, ticketID uuid.UUID, given []uuid.UUID) error {
 	keep := slices.Clone(given)
 	if w.x.Options.Tag != "" {
@@ -995,8 +995,7 @@ func (w *writer) unlabel(ctx context.Context, tx pgx.Tx, externalID string, tick
 	_, err := tx.Exec(ctx, `DELETE FROM ticket_tags tt USING import_records r
 		WHERE r.workspace_id = $1 AND r.source = $2 AND r.account_key = $3 AND r.kind = 'ticket' AND r.external_id = $4
 		  AND tt.ticket_id = $5 AND tt.tag_id = ANY(r.tag_ids) AND NOT (tt.tag_id = ANY($6))
-		  AND NOT EXISTS (SELECT 1 FROM activities a JOIN tags g ON g.id = tt.tag_id
-			WHERE a.workspace_id = $1 AND a.ticket_id = $5 AND a.type = 'tagged' AND lower(a.data->>'tag') = lower(g.name))`,
+		  AND NOT tt.local_owned`,
 		w.x.WorkspaceID, w.x.Source, w.x.AccountKey, externalID, ticketID, keep)
 	return err
 }

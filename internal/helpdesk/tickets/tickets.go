@@ -965,8 +965,8 @@ func merge(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uuid.UUID
 			return err
 		}
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO ticket_tags (ticket_id, tag_id) SELECT $2, tag_id FROM ticket_tags WHERE ticket_id = $1
-		ON CONFLICT DO NOTHING`, src, dst); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO ticket_tags (ticket_id, tag_id, local_owned) SELECT $2, tag_id, local_owned FROM ticket_tags WHERE ticket_id = $1
+		ON CONFLICT (ticket_id, tag_id) DO UPDATE SET local_owned = ticket_tags.local_owned OR EXCLUDED.local_owned`, src, dst); err != nil {
 		return err
 	}
 	// Recompute the target's conversation fields from its messages.
