@@ -50,6 +50,7 @@ import { AI_TONE, tone } from "@/lib/tones";
 import { useDebounced } from "@/components/contacts/hooks";
 import { useAI } from "@/lib/ai";
 import { sortTeams, TeamDot, useTeamsCtx } from "@/components/tickets/teams";
+import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import type { SearchResults } from "@/lib/api/types";
 import { useCollab, useMailAccounts } from "@/lib/collab/hooks";
 import { compose } from "@/lib/collab/compose";
@@ -354,11 +355,11 @@ export function CommandPalette() {
                     key={v.id}
                     // Its section finds it too, and reads beside it.
                     value={`go view ${v.name} ${cleanSection(v.section)}`}
-                    icon={<Layers />}
+                    icon={<ViewIcon icon={v.icon} size={16} />}
                     hint={cleanSection(v.section) || tNav("titles.view")}
                     onSelect={() => go(() => void navigate({ to: "/views/$viewId/{-$ticketId}", params: { viewId: v.id, ticketId: undefined } }))}
                   >
-                    {v.name}
+                    {viewName(v)}
                   </Item>
                 ))}
                 <Item value="go contacts" keywords={[tNav("titles.contacts")]} icon={<Users />} onSelect={() => go(() => void navigate({ to: "/contacts/{-$contactId}", params: { contactId: undefined } }))}>

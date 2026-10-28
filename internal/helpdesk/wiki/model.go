@@ -241,7 +241,7 @@ func cleanIcon(s string) (string, error) {
 	if s == "" {
 		return "", nil
 	}
-	if len(s) > 64 || !isEmoji(s) {
+	if len(s) > 64 || !hd.IsEmoji(s) {
 		return "", httpx.Validation("icon must be one emoji")
 	}
 	return s, nil

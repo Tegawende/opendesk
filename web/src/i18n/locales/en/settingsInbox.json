@@ -88,6 +88,27 @@
     "reorderSectionAria": "Reorder the {{name}} section. Hold Alt and press the arrow keys to move it with its views.",
     "sectionChars": "Section names can't contain < or >.",
     "needName": "Give the view a name.",
+    "icon": {
+      "label": "Icon",
+      "change": "Change",
+      "preview": "In the sidebar",
+      "none": "None",
+      "tabs": {
+        "emoji": "Emoji",
+        "icon": "Icon",
+        "text": "Text"
+      },
+      "searchEmoji": "Search or paste an emoji",
+      "searchIcon": "Search icons",
+      "noMatch": "Nothing matches.",
+      "textLabel": "Letters or digits",
+      "textPlaceholder": "PO",
+      "textHint": "One or two letters or digits, shown on a small tile.",
+      "colour": "Colour",
+      "colourEmoji": "An emoji keeps its own colours.",
+      "done": "Done",
+      "hint": "Shown beside the name in the sidebar, so the view is easy to spot."
+    },
     "visibleTitle": "Visible to everyone",
     "audience": {
       "me": "Only you see it in your sidebar.",

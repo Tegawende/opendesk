@@ -13,6 +13,7 @@ import { ActivePill, Count, Label, NavTip, rowActive, rowBase, rowIdle, rowShape
 import { AccountTags } from "@/components/collab/AccountTags";
 import { AccountDot, boxIcon, FolderGlyph } from "@/components/collab/bits";
 import { TeamDot } from "@/components/tickets/teams";
+import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { Tooltip } from "@/components/ui/tooltip";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
 import type { WaitingScope } from "@/components/tickets/useUrgentChats";
@@ -248,8 +249,8 @@ export function buildRow(item: { kind: string; id: string }, d: WorkspaceData, c
       const key = hid.view(v.id);
       return {
         key,
-        label: v.name,
-        icon: <Layers />,
+        label: viewName(v),
+        icon: <ViewIcon icon={v.icon} />,
         badge: { kind: "ticket", sections: [...via, "views"], nums: ticketRowNumbers(d.counts, key) },
         link: { kind: "view", viewId: v.id },
         waiting: ctx.waiting?.({ kind: "view", id: v.id }),
