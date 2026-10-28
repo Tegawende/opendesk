@@ -1,5 +1,5 @@
 // The sidebar with Collab on: the member's sections in their order, with Favorites
-// (pinned boxes, folders, accounts, views and teams) and Mail, kept short: All inboxes,
+// (pinned boxes, folders, accounts, views, view sections and teams) and Mail, kept short: All inboxes,
 // Shared with me and Assigned to me while they hold something, then one row per account
 // (its folders unfold on request) with its own Assigned to me under it while it has some. Unread counts come from GET /v1/collab/counts, kept
 // fresh by collab.changed events.
@@ -7,13 +7,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { AlertCircle, ChevronRight, Layers, Plus, SlidersHorizontal } from "lucide-react";
-import { Fragment, type ReactNode } from "react";
+import { Fragment, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivePill, Count, Label, NavTip, rowActive, rowBase, rowIdle, rowShape, Section } from "@/app/sidebarParts";
-import { buildRow, NavItemRow, useMailLocation, useRowLabels, type MailHere } from "@/components/spaces/rows";
+import { useFoldedSections, useOpenView, ViewSectionGroup } from "@/app/ViewSectionGroup";
+import { buildRow, NavItemRow, rowNumber, useMailLocation, useRowLabels, type MailHere, type RowModel } from "@/components/spaces/rows";
 import { useWaitingFor } from "@/components/tickets/useUrgentChats";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { MailAccount, MailBox, MailCounts, MailFolder, SidebarPrefs, SidebarSectionId } from "@/lib/api/types";
+import type { MailAccount, MailBox, MailCounts, MailFolder, SidebarPin, SidebarPrefs, SidebarSectionId, View } from "@/lib/api/types";
 import { accountAssignedNumbers, accountNumbers, allInboxNumbers, folderNumbers, listBoxNumbers, type RowNumbers } from "@/lib/collab/badges";
 import { ACCOUNT_BOXES, accountName, buildFolderTree, flattenTree, folderWithRole } from "@/lib/collab/boxes";
 import { useAllFolders, useMailAccounts, useSaveSidebarPrefs } from "@/lib/collab/hooks";
@@ -22,6 +23,7 @@ import { collabUi } from "@/lib/collab/ui";
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
 import { useOpenWorkspaceData } from "@/lib/spaces/hooks";
+import { findSection } from "@/lib/viewSections";
 import { AccountTags } from "./AccountTags";
 import { AccountDot, boxIcon, FolderGlyph } from "./bits";
 import { RowMenu, type RowMenuProps } from "./RowMenu";
@@ -404,7 +406,11 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
   );
 }
 
-/** Favorites: the pinned rows of every kind, each drawn by the shared row renderer (components/spaces/rows.tsx). */
+/**
+ * Favorites: the pinned rows of every kind, each drawn by the shared row renderer
+ * (components/spaces/rows.tsx), and pinned view sections with their views, folded here on
+ * their own (app/ViewSectionGroup.tsx).
+ */
 export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail: boolean; first: boolean }) {
   const { t } = useTranslation("collab");
   const waitingFor = useWaitingFor();
@@ -412,38 +418,78 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
   const labels = useRowLabels();
   const data = useOpenWorkspaceData();
   const navigate = useNavigate();
+  const [folded, toggle] = useFoldedSections("favorites");
+  const openView = useOpenView();
   if (!data) return null;
   // A favorite is unpinned rather than hidden, and reads Favorites' number first, then its own section's.
-  const pins = livePins(prefs, (pin) => buildRow(pin, data, { labels, via: ["favorites"], here, waiting: waitingFor }));
+  const ctx = { labels, via: ["favorites"] as SidebarSectionId[], here, waiting: waitingFor };
+  const pins = livePins<Favorite>(prefs, (pin) => {
+    if (pin.kind !== "view_section") {
+      const model = buildRow(pin, data, ctx);
+      return model && { kind: "row", model };
+    }
+    // Every view of the section the member sees, those hidden from Views too, like a pinned view.
+    const section = findSection(data.views ?? [], pin.id);
+    return section && { kind: "section", name: section.name, views: section.views };
+  });
   if (!pins.length) return null;
+  const menuFor = (model: RowModel, pin: SidebarPin) => (row: ReactElement) => (
+    <RowMenu
+      enabled
+      prefs={prefs}
+      rail={rail}
+      label={model.label}
+      badge={model.badge && { key: model.key, kind: model.badge.kind, sections: model.badge.sections, numbers: model.badge.nums }}
+      pin={pin}
+      settings={
+        pin.kind === "account"
+          ? { label: t("rowMenu.accountSettings"), onSelect: () => void navigate({ to: "/settings/mail-accounts/$accountId", params: { accountId: pin.id } }) }
+          : undefined
+      }
+    >
+      {row}
+    </RowMenu>
+  );
+  const viewRow = (v: View) => buildRow({ kind: "view", id: v.id }, data, ctx);
   return (
     <Section id="favorites" label={t("nav.favorites")} rail={rail} first={first}>
-      {pins.map(({ pin, target }) => (
-        <Fragment key={`${pin.kind}:${pin.id}`}>
-          <NavItemRow
-            model={target}
+      {pins.map(({ pin, target }, i) => {
+        if (target.kind === "row")
+          return (
+            <Fragment key={`${pin.kind}:${pin.id}`}>
+              <NavItemRow model={target.model} rail={rail} prefs={prefs} menu={menuFor(target.model, pin)} />
+            </Fragment>
+          );
+        return (
+          <ViewSectionGroup
+            key={`${pin.kind}:${pin.id}`}
+            name={target.name}
+            views={target.views}
             rail={rail}
-            prefs={prefs}
-            menu={(row) => (
-              <RowMenu
-                enabled
-                prefs={prefs}
-                rail={rail}
-                label={target.label}
-                badge={target.badge && { key: target.key, kind: target.badge.kind, sections: target.badge.sections, numbers: target.badge.nums }}
-                pin={pin}
-                settings={
-                  pin.kind === "account"
-                    ? { label: t("rowMenu.accountSettings"), onSelect: () => void navigate({ to: "/settings/mail-accounts/$accountId", params: { accountId: pin.id } }) }
-                    : undefined
-                }
-              >
-                {row}
+            folded={folded.has(pin.id)}
+            onToggle={() => toggle(pin.id)}
+            divider={i > 0}
+            openView={openView}
+            row={(v) => {
+              const model = viewRow(v);
+              return model && <NavItemRow model={model} rail={rail} prefs={prefs} nested={!rail} menu={menuFor(model, { kind: "view", id: v.id })} />;
+            }}
+            count={(v) => {
+              const model = viewRow(v);
+              return model ? rowNumber(model, prefs).n : undefined;
+            }}
+            waiting={(v) => waitingFor({ kind: "view", id: v.id })}
+            menu={(header) => (
+              <RowMenu enabled prefs={prefs} rail={rail} label={target.name} pin={pin}>
+                {header}
               </RowMenu>
             )}
           />
-        </Fragment>
-      ))}
+        );
+      })}
     </Section>
   );
 }
+
+/** What a favorite shows: one row, or a pinned view section and its views. */
+type Favorite = { kind: "row"; model: RowModel } | { kind: "section"; name: string; views: View[] };

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { View } from "@/lib/api/types";
-import { cleanSection, clipSection, groupViews, matchSection, orderViews, readFolded, sectionProblem, viewSections, writeFolded } from "./viewSections";
+import { cleanSection, clipSection, findSection, groupViews, matchSection, orderViews, readFolded, sectionProblem, viewSections, writeFolded } from "./viewSections";
 
 const view = (name: string, position: number, section?: string | null): View => ({ id: name, name, shared: true, filters: {}, position, section });
 const names = (vs: View[]) => vs.map((v) => v.name);
@@ -73,6 +73,24 @@ describe("section names", () => {
   });
 });
 
+describe("findSection", () => {
+  const views = [view("Urgent", 0), view("Damaged", 1, "After  sales"), view("Bugs", 2, "Escalations"), view("Refund", 3, "after sales")];
+
+  it("finds a pinned section by its key, spelled as its first view spells it, with every view of that name", () => {
+    const s = findSection(views, "after sales");
+    expect(s?.name).toBe("After sales");
+    expect(names(s?.views ?? [])).toEqual(["Damaged", "Refund"]);
+  });
+
+  it("finds nothing once no view names it: renamed or emptied", () => {
+    expect(findSection(views, "returns")).toBeNull();
+    expect(findSection([view("Damaged", 1, "Claims")], "after sales")).toBeNull();
+    expect(findSection([view("Damaged", 1, null)], "after sales")).toBeNull();
+    // A view's own name is not a section.
+    expect(findSection(views, "urgent")).toBeNull();
+  });
+});
+
 describe("folded sections", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -86,6 +104,15 @@ describe("folded sections", () => {
     expect(readFolded("w1", "u2").size).toBe(0);
     writeFolded("w1", "u1", new Set());
     expect(readFolded("w1", "u1").size).toBe(0);
+  });
+
+  it("fold under Views and in Favorites each on their own", () => {
+    writeFolded("w1", "u1", new Set(["after sales"]), "favorites");
+    expect([...readFolded("w1", "u1", "favorites")]).toEqual(["after sales"]);
+    expect(readFolded("w1", "u1").size).toBe(0);
+    writeFolded("w1", "u1", new Set(["escalations"]));
+    expect([...readFolded("w1", "u1", "favorites")]).toEqual(["after sales"]);
+    expect(localStorage.getItem("od-nav-favorite-sections:w1:u1")).toBe('["after sales"]');
   });
 
   it("read as none when storage fails or holds something else", () => {

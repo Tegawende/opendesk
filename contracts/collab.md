@@ -683,7 +683,7 @@ interface CollabStatus {
 interface SidebarPrefs {
   order: string[]              // section ids, top to bottom: "favorites", "inbox", "mail", "teams", "views", "workspace" (the default)
   hidden: string[]             // "section:<id>", "box:<box>", "account:<id>", "folder:<id>", "folder:<inbox|starred|...>", "view:<id>", "team:<id>", "ticket_folder:<id>"
-  pinned: { kind: "box" | "folder" | "account" | "view" | "team" | "ticket_folder"; id: string }[]  // shown under Favorites, in order, at most 30
+  pinned: { kind: "box" | "folder" | "account" | "view" | "team" | "ticket_folder" | "view_section"; id: string }[]  // shown under Favorites, in order, at most 30
   expanded_accounts: string[]  // account ids whose folders show in the sidebar; folded by default (the mail page has every folder)
   mark_read_on_open: boolean   // default true
   unified_inbox: boolean       // default true: "All inboxes" on top of the Mail section
@@ -698,8 +698,17 @@ its own rows instead; a whole section in a Space follows these preferences.
 
 Every member has them, with or without Collab. Without Collab they arrange the ticket side: the
 order of Favorites, Inbox, Teams, Views and Workspace, hidden rows and sections, favorites of inbox
-folders, teams and views, and their numbers. The Mail section, mail rows and favorites, `unified_inbox`,
+folders, teams, views and view sections, and their numbers. The Mail section, mail rows and favorites, `unified_inbox`,
 `mark_read_on_open`, `mail_tabs` and `auto_pins` are Collab's: kept as saved, used once it is on.
+
+**View sections in Favorites.** A `view_section` favorite names a view section (contracts/api.md,
+`/v1/views` `section`) by its name in lower case with spaces collapsed, as the sidebar matches views to
+a section, so personal, team and shared views of that name all show under it. Favorites shows it as
+the Views section does: a header that folds, per member and in that browser, apart from the fold under
+Views, and the views of that section the member sees, those hidden from Views included (like a pinned
+view). When no view names the section any more (renamed or emptied) the favorite is skipped, kept as
+saved and counted in the 30, and shows again once a view takes the name back. In another workspace's
+Favorites shown in a Space, its views show as rows of their own.
 
 **All inboxes in Favorites.** When a member of a workspace with Collab first sees two accounts,
 `GET /v1/collab/sidebar` pins All inboxes (`{kind: "box", id: "inbox"}`) to the top of Favorites,

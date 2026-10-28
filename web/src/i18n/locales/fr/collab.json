@@ -48,6 +48,7 @@
     "hide": "Masquer {{name}}",
     "pin": "Épingler {{name}} aux favoris",
     "unpin": "Désépingler {{name}}",
+    "viewSection": "Section",
     "moveUp": "Monter {{name}}",
     "moveDown": "Descendre {{name}}",
     "items": "{{count}} éléments",

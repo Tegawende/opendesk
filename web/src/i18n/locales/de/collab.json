@@ -47,6 +47,7 @@
     "hide": "{{name}} ausblenden",
     "pin": "{{name}} an Favoriten anheften",
     "unpin": "{{name}} von Favoriten lösen",
+    "viewSection": "Abschnitt",
     "moveUp": "{{name}} nach oben",
     "moveDown": "{{name}} nach unten",
     "items": "{{count}} Einträge",

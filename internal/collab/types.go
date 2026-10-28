@@ -351,9 +351,10 @@ type CollabStorage struct {
 	Full           bool  `json:"full" doc:"Past twice the allowance: new mail waits at the provider"`
 }
 
-// SidebarPin is one favorite in the sidebar.
+// SidebarPin is one favorite in the sidebar. A view_section names a view section
+// (views.section) by its name in lower case, spaces collapsed.
 type SidebarPin struct {
-	Kind string `json:"kind" enum:"box,folder,account,view,team,ticket_folder"`
+	Kind string `json:"kind" enum:"box,folder,account,view,team,ticket_folder,view_section"`
 	ID   string `json:"id" maxLength:"100"`
 }
 

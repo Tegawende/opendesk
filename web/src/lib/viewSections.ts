@@ -60,21 +60,34 @@ export const orderViews = (views: readonly View[]): View[] => groupViews(views).
 /** The sections in use, in sidebar order, each spelled as its first view spells it. */
 export const viewSections = (views: readonly View[]): string[] => groupViews(views).flatMap((e) => (e.kind === "section" ? [e.name] : []));
 
+/**
+ * The section a favorite names (contracts/collab.md SidebarPrefs.pinned, kind view_section): its
+ * `sectionKey`. Null once no view the member sees names it (renamed or emptied): the favorite
+ * is skipped, not removed, and comes back with the name.
+ */
+export function findSection(views: readonly View[], key: string): Extract<ViewEntry, { kind: "section" }> | null {
+  for (const e of groupViews(views)) if (e.kind === "section" && e.key === key) return e;
+  return null;
+}
+
 /** The spelling a typed section takes: an existing section's when it names one, so case never splits a section. */
 export function matchSection(typed: string, existing: readonly string[]): string {
   const name = cleanSection(typed);
   return existing.find((s) => sectionKey(s) === sectionKey(name)) ?? name;
 }
 
-const FOLDED_KEY = "od-nav-view-sections";
+/** Where a section folds: under Views, or pinned to Favorites, each on its own. */
+export type FoldPlace = "views" | "favorites";
 
-/** Where a member's folded sections are kept in this browser: per workspace and member. */
-const foldedKey = (workspaceId: string, userId: string) => `${FOLDED_KEY}:${workspaceId}:${userId}`;
+const FOLDED_KEY: Record<FoldPlace, string> = { views: "od-nav-view-sections", favorites: "od-nav-favorite-sections" };
+
+/** Where a member's folded sections are kept in this browser: per place, workspace and member. */
+const foldedKey = (workspaceId: string, userId: string, place: FoldPlace) => `${FOLDED_KEY[place]}:${workspaceId}:${userId}`;
 
 /** The sections a member folded in the sidebar (by `sectionKey`). */
-export function readFolded(workspaceId: string, userId: string): Set<string> {
+export function readFolded(workspaceId: string, userId: string, place: FoldPlace = "views"): Set<string> {
   try {
-    const raw = JSON.parse(localStorage.getItem(foldedKey(workspaceId, userId)) ?? "[]");
+    const raw = JSON.parse(localStorage.getItem(foldedKey(workspaceId, userId, place)) ?? "[]");
     return new Set(Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : []);
   } catch {
     return new Set();
@@ -82,10 +95,10 @@ export function readFolded(workspaceId: string, userId: string): Set<string> {
 }
 
 /** Keeps the folded sections; storage that is unavailable only forgets them. */
-export function writeFolded(workspaceId: string, userId: string, folded: ReadonlySet<string>) {
+export function writeFolded(workspaceId: string, userId: string, folded: ReadonlySet<string>, place: FoldPlace = "views") {
   try {
-    if (folded.size) localStorage.setItem(foldedKey(workspaceId, userId), JSON.stringify([...folded]));
-    else localStorage.removeItem(foldedKey(workspaceId, userId));
+    if (folded.size) localStorage.setItem(foldedKey(workspaceId, userId, place), JSON.stringify([...folded]));
+    else localStorage.removeItem(foldedKey(workspaceId, userId, place));
   } catch {
     /* storage unavailable */
   }
