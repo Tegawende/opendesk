@@ -150,9 +150,11 @@ struct AccountPasskeysSection: View {
                 .presentationCornerRadius(Theme.Radius.sheet)
         }
         .accountConfirm($confirm)
+        #if DEBUG
         .onChange(of: env.router.demoAction) { _, _ in handleDemo() }
         .onAppear(perform: handleDemo)
         .onChange(of: store.passkeysLoaded) { _, _ in handleDemo() }
+        #endif
     }
 
     private func row(_ passkey: Passkey) -> some View {

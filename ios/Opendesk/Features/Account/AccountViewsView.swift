@@ -40,9 +40,11 @@ struct AccountViewsView: View {
             .accountConfirm($confirm)
             .task { await store.loadViews() }
             .onChange(of: env.directory.views) { _, _ in Task { await store.loadViews() } }
+            #if DEBUG
             .onAppear(perform: handleDemo)
             .onChange(of: env.router.demoAction) { _, _ in handleDemo() }
             .onChange(of: store.viewsLoaded) { _, _ in handleDemo() }
+            #endif
     }
 
     @ViewBuilder

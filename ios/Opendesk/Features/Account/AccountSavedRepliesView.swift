@@ -40,9 +40,11 @@ struct AccountSavedRepliesView: View {
             .accountConfirm($confirm)
             .task { await store.loadReplies() }
             .onChange(of: env.directory.savedReplies) { _, _ in Task { await store.loadReplies() } }
+            #if DEBUG
             .onAppear(perform: handleDemo)
             .onChange(of: env.router.demoAction) { _, _ in handleDemo() }
             .onChange(of: store.repliesLoaded) { _, _ in handleDemo() }
+            #endif
     }
 
     @ViewBuilder

@@ -59,8 +59,10 @@ private struct AccountHome: View {
                 .presentationDetents([.large])
                 .presentationCornerRadius(Theme.Radius.sheet)
         }
+        #if DEBUG
         .onAppear { handleDemo(env.router.demoAction) }
         .onChange(of: env.router.demoAction) { _, action in handleDemo(action) }
+        #endif
     }
 
     // MARK: Sections

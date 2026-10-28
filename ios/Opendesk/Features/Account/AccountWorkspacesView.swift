@@ -33,8 +33,10 @@ struct AccountWorkspacesView: View {
                 .presentationDetents([.height(330)])
                 .presentationCornerRadius(Theme.Radius.sheet)
         }
+        #if DEBUG
         .onAppear(perform: handleDemo)
         .onChange(of: env.router.demoAction) { _, _ in handleDemo() }
+        #endif
     }
 
     private func handleDemo() {
