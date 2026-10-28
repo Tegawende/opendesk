@@ -45,9 +45,11 @@ answers `409 import_running`.
    it on the ticket here. Local ownership is stored on `ticket_tags.local_owned`, independent
    of the label's name, and follows both manual and imported merges without changing the
    original audit timeline. Existing relations are conservatively kept when migrating from
-   name-only history. The import's own label stays, and so does the label itself. A ticket whose requester the source changed gets that customer as its contact
+   name-only history. The import's own label stays, and so does the label itself.
+   A ticket whose requester the source changed gets that customer as its contact
    (the new messages are theirs), unless it is a chat or the team worked it here: it has a
-   message no import wrote, or its contact was changed here (`contact_changed`). Tickets that did not move in the source are skipped, articles already imported
+   message no import wrote, or its contact was changed here (`contact_changed`).
+   Tickets that did not move in the source are skipped, articles already imported
    are left as they are, and a ticket deleted here stays deleted. CSV imports run once.
 5. **Undo** (`POST /v1/imports/{id}/undo`) removes everything the import created: tickets
    (with every message and attachment on them; a ticket with a message no import wrote, a
