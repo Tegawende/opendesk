@@ -34,6 +34,7 @@ import (
 // and private answers.
 type fakeAdapter struct {
 	posts       []string
+	channels    []string
 	interactive []channel.Message
 	cleared     []string
 	responses   []string
@@ -61,8 +62,9 @@ func (*fakeAdapter) Verify(http.Header, []byte, map[string]string) error { retur
 func (*fakeAdapter) Parse(http.Header, []byte) (channel.WebhookResult, error) {
 	return channel.WebhookResult{}, nil
 }
-func (*fakeAdapter) CreateThread(context.Context, *http.Client, map[string]string, string, channel.Ticket) (channel.Thread, error) {
-	return channel.Thread{}, errors.New("not used")
+func (f *fakeAdapter) CreateThread(_ context.Context, _ *http.Client, _ map[string]string, destination string, ticket channel.Ticket) (channel.Thread, error) {
+	f.channels = append(f.channels, destination)
+	return channel.Thread{ID: ticket.ID, RootID: ticket.ID, ChannelID: destination}, nil
 }
 func (f *fakeAdapter) Post(_ context.Context, _ *http.Client, _ map[string]string, _, text string) error {
 	f.posts = append(f.posts, text)
@@ -127,6 +129,95 @@ func newWorkflow(t *testing.T) *workflow {
 			ids.New(), ws.ID, c.ID, external, user)
 	}
 	return &workflow{e: e, ws: ws, s: s, fake: fake, c: c, ticket: ticket}
+}
+
+func TestDispatchRoutesByTeamAndPriority(t *testing.T) {
+	w := newWorkflow(t)
+	e := w.e
+	team := ids.New()
+	otherTeam := ids.New()
+	e.Exec(`INSERT INTO teams(id,workspace_id,name) VALUES($1,$3,'Priority'),($2,$3,'Other')`, team, otherTeam, w.ws.ID)
+
+	addDestination := func(channelID string, teamID *uuid.UUID, priority *string) {
+		e.Exec(`INSERT INTO support_channel_destinations(id,workspace_id,connection_id,team_id,priority,external_channel_id)
+			VALUES($1,$2,$3,$4,$5,$6)`, ids.New(), w.ws.ID, w.c.ID, teamID, priority, channelID)
+	}
+	high, urgent := "high", "urgent"
+	addDestination("team", &team, nil)
+	addDestination("team-high", &team, &high)
+	addDestination("priority-high", nil, &high)
+	addDestination("priority-urgent", nil, &urgent)
+
+	for _, tc := range []struct {
+		name     string
+		teamID   *uuid.UUID
+		priority string
+		channel  string
+	}{
+		{name: "team and priority", teamID: &team, priority: high, channel: "team-high"},
+		{name: "team before priority", teamID: &team, priority: urgent, channel: "team"},
+		{name: "priority before fallback", teamID: &otherTeam, priority: urgent, channel: "priority-urgent"},
+		{name: "fallback", teamID: &otherTeam, priority: "low", channel: "C1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var ticket domain.Ticket
+			if err := e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
+				var err error
+				ticket, err = domain.CreateTicket(e.Ctx, tx, domain.NewTicket{
+					WorkspaceID: w.ws.ID, Subject: "Priority route", Channel: domain.ChannelEmail,
+					Priority: tc.priority, TeamID: tc.teamID,
+				})
+				return err
+			}); err != nil {
+				t.Fatal(err)
+			}
+			var seq int64
+			e.Scalar(`SELECT seq FROM events WHERE workspace_id=$1 AND type='ticket.created' AND data->'ticket'->>'id'=$2`, &seq, w.ws.ID, ticket.ID.String())
+			if err := w.s.dispatch(e.Ctx, jobs.SupportChannelDispatchArgs{WorkspaceID: w.ws.ID, EventSeq: seq}); err != nil {
+				t.Fatal(err)
+			}
+			if got := w.fake.channels[len(w.fake.channels)-1]; got != tc.channel {
+				t.Fatalf("routed to %q, want %q", got, tc.channel)
+			}
+			e.Exec(`UPDATE tickets SET priority='normal' WHERE id=$1`, ticket.ID)
+			threads := len(w.fake.channels)
+			if err := w.s.dispatch(e.Ctx, jobs.SupportChannelDispatchArgs{WorkspaceID: w.ws.ID, EventSeq: seq}); err != nil {
+				t.Fatal(err)
+			}
+			if len(w.fake.channels) != threads {
+				t.Fatal("priority change created another provider thread")
+			}
+		})
+	}
+
+	t.Run("team move follows the team route", func(t *testing.T) {
+		var ticket domain.Ticket
+		if err := e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
+			var err error
+			ticket, err = domain.CreateTicket(e.Ctx, tx, domain.NewTicket{
+				WorkspaceID: w.ws.ID, Subject: "Team move", Channel: domain.ChannelEmail,
+				Priority: urgent, TeamID: &otherTeam,
+			})
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		var seq int64
+		e.Scalar(`SELECT seq FROM events WHERE workspace_id=$1 AND type='ticket.created' AND data->'ticket'->>'id'=$2`, &seq, w.ws.ID, ticket.ID.String())
+		if err := w.s.dispatch(e.Ctx, jobs.SupportChannelDispatchArgs{WorkspaceID: w.ws.ID, EventSeq: seq}); err != nil {
+			t.Fatal(err)
+		}
+		if got := w.fake.channels[len(w.fake.channels)-1]; got != "priority-urgent" {
+			t.Fatalf("routed to %q, want priority-urgent", got)
+		}
+		e.Exec(`UPDATE tickets SET team_id=$2 WHERE id=$1`, ticket.ID, team)
+		if err := w.s.dispatch(e.Ctx, jobs.SupportChannelDispatchArgs{WorkspaceID: w.ws.ID, EventSeq: seq}); err != nil {
+			t.Fatal(err)
+		}
+		if got := w.fake.channels[len(w.fake.channels)-1]; got != "team" {
+			t.Fatalf("team move stayed on %q, want team", got)
+		}
+	})
 }
 
 var eventCounter int

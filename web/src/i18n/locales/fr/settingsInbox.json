@@ -124,6 +124,14 @@
     "create": "Créer la vue",
     "saved": "Vue enregistrée",
     "created": "Vue créée",
+    "duplicate": "Dupliquer",
+    "duplicateTitle": "Dupliquer la vue",
+    "copyName": "{{name}} (copie)",
+    "copyPersonal": {
+      "everyone": "Cette copie n’est visible que par vous, car seuls les admins créent des vues pour tout le monde.",
+      "team": "Cette copie n’est visible que par vous, car seuls les admins et les chefs d’équipe de {{team}} créent ses vues.",
+      "anyTeam": "Cette copie n’est visible que par vous, car seuls les admins et les chefs d’équipe créent les vues d’une équipe."
+    },
     "clear": "Effacer {{field}}",
     "allTickets": "Tous les tickets",
     "filters": {

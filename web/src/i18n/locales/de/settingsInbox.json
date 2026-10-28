@@ -122,6 +122,14 @@
     "create": "Ansicht erstellen",
     "saved": "Ansicht gespeichert",
     "created": "Ansicht erstellt",
+    "duplicate": "Duplizieren",
+    "duplicateTitle": "Ansicht duplizieren",
+    "copyName": "{{name}} (Kopie)",
+    "copyPersonal": {
+      "everyone": "Diese Kopie siehst nur du, denn Ansichten für alle erstellen nur Admins.",
+      "team": "Diese Kopie siehst nur du, denn die Ansichten von {{team}} erstellen nur Admins und die Leitung des Teams.",
+      "anyTeam": "Diese Kopie siehst nur du, denn die Ansichten eines Teams erstellen nur Admins und seine Leitung."
+    },
     "clear": "{{field}} leeren",
     "allTickets": "Alle Tickets",
     "filters": {

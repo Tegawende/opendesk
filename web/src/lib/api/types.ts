@@ -1057,6 +1057,7 @@ export type SupportChannelDestination = {
   id: string;
   connection_id: string;
   team_id: string | null;
+  priority: "low" | "normal" | "high" | "urgent" | null;
   external_channel_id: string;
   external_channel_name: string;
   enabled: boolean;

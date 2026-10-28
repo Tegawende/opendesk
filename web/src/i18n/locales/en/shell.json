@@ -11,6 +11,7 @@
     "settings": "Settings",
     "manageViews": "Manage views",
     "createView": "Create a view",
+    "duplicateView": "Duplicate",
     "viewSection": "Views in {{name}}",
     "viewSectionCurrent": "contains the open view",
     "collapse": "Collapse",

@@ -301,6 +301,8 @@ describe("mock backend", () => {
     const team = (await call("GET", "/v1/teams")).body.data.find((x: { private: boolean }) => !x.private);
     const notes = await call("POST", "/v1/support-channels/destinations", { connection_id: created.body.id, team_id: team.id, external_channel_id: "C2", include_notes: true });
     expect(notes.body.include_notes).toBe(true);
+    const urgent = await call("POST", "/v1/support-channels/destinations", { connection_id: created.body.id, team_id: team.id, priority: "urgent", external_channel_id: "C3" });
+    expect(urgent.body.priority).toBe("urgent");
     expect((await call("DELETE", `/v1/support-channels/destinations/${plain.body.id}`)).status).toBe(204);
     expect((await call("DELETE", `/v1/support-channels/connections/${created.body.id}`)).status).toBe(204);
     expect((await call("GET", "/v1/support-channels/destinations")).body.data).toEqual([]);

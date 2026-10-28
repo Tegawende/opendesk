@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowUpRight, AtSign, Building2, FolderClosed, Globe, Inbox, Lock, MoreHorizontal, Pencil, Plus, Search, Tag, Trash2, UserRound, Users, UsersRound, X } from "lucide-react";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { ArrowUpRight, AtSign, Building2, Copy, FolderClosed, Globe, Inbox, Lock, MoreHorizontal, Pencil, Plus, Search, Tag, Trash2, UserRound, Users, UsersRound, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsPage, Section, ListRow } from "@/components/layout";
@@ -25,6 +25,7 @@ import { ViewIconField } from "@/components/settings2/ViewIconField";
 import { ViewIcon, viewIconTone, viewName } from "@/components/tickets/ViewIcon";
 import { Segmented } from "@/components/ui/tabs";
 import { viewAudience, viewAudienceHint, viewDeleteBody } from "@/components/settings2/viewAudience";
+import { canWriteView, copyPersonalNote, copyView, makeRoom, viewRights } from "@/components/settings2/viewCopy";
 import { cleanFilters, clearField, fieldOps, filterOp, hasFilter, joinList, splitList, withOp, type FilterOp, type OpField } from "@/components/settings2/viewFilters";
 import {
   CompaniesPick,
@@ -48,7 +49,7 @@ import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
 import type { Channel, Priority, Severity, TicketFilters, TicketStatus, View, ViewIcon as ViewIconValue } from "@/lib/api/types";
 import { q, qk, upsertInList } from "@/lib/queries";
-import { atLeast, useRole } from "@/lib/session";
+import { atLeast, useRole, useUser } from "@/lib/session";
 import { cn } from "@/lib/cn";
 import { cleanSection, clipSection, groupViews, matchSection, orderViews, sectionKey, sectionProblem, viewSections, type ViewEntry } from "@/lib/viewSections";
 
@@ -224,6 +225,14 @@ export default function Views() {
   const confirm = useConfirm();
   const [editing, setEditing] = useState<View | "new" | null>(null);
   const navigate = useNavigate();
+  // The copy being made: from a row's menu here, or ?duplicate=<id> (the sidebar's Duplicate).
+  const [copying, setCopying] = useState<View | null>(null);
+  const search = useSearch({ from: "/app/settings/views" });
+  const copyOf = copying ?? (canEdit && search.duplicate ? views?.find((v) => v.id === search.duplicate) : undefined);
+  const closeCopy = () => {
+    setCopying(null);
+    if (search.duplicate) void navigate({ to: "/settings/views", search: {}, replace: true });
+  };
 
   // In the sidebar's order: a section's views together, at its first view's place.
   const sorted = useMemo(() => orderViews(views ?? []), [views]);
@@ -312,7 +321,11 @@ export default function Views() {
           />
         )}
       </Section>
-      {editing && <ViewDrawer view={editing === "new" ? null : editing} nextPosition={sorted.length} onClose={() => setEditing(null)} />}
+      {copyOf ? (
+        <ViewDrawer key={copyOf.id} view={null} copyOf={copyOf} views={sorted} nextPosition={sorted.length} onClose={closeCopy} />
+      ) : (
+        editing && <ViewDrawer view={editing === "new" ? null : editing} views={sorted} nextPosition={sorted.length} onClose={() => setEditing(null)} />
+      )}
     </SettingsPage>
   );
 
@@ -367,6 +380,9 @@ export default function Views() {
                           <MenuItem icon={<Pencil />} onSelect={() => setEditing(v)}>
                             {t("common.edit")}
                           </MenuItem>
+                          <MenuItem icon={<Copy />} onSelect={() => setCopying(v)}>
+                            {t("views.duplicate")}
+                          </MenuItem>
                           <MenuItem
                             icon={<ArrowUpRight />}
                             onSelect={() =>
@@ -407,25 +423,33 @@ export default function Views() {
   }
 }
 
-function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPosition: number; onClose: () => void }) {
+/**
+ * The view editor: `view` to change one, else a new view, started from a copy of `copyOf`
+ * (Duplicate) that is saved right after it.
+ */
+function ViewDrawer({ view, copyOf, views, nextPosition, onClose }: { view: View | null; copyOf?: View; views: View[]; nextPosition: number; onClose: () => void }) {
   const { t } = useTranslation("settingsInbox");
   useTranslation("indicators");
   const qc = useQueryClient();
   const confirm = useConfirm();
-  const [name, setName] = useState(view?.name ?? "");
-  const [shared, setShared] = useState(view?.shared ?? true);
-  const [teamId, setTeamId] = useState<string | null>(view?.team_id ?? null);
-  const [icon, setIcon] = useState<ViewIconValue | null>(view?.icon ?? null);
-  const [section, setSection] = useState(cleanSection(view?.section));
-  const inUse = viewSections(useQuery(q.views()).data ?? []);
-  // The sections offered: those in use, and one just typed until it is saved.
-  const sections = section && !inUse.some((s) => sectionKey(s) === sectionKey(section)) ? [...inUse, section] : inUse;
   const { teams: allTeams } = useTeams();
+  const role = useRole();
+  const me = useUser();
+  const rights = viewRights(atLeast(role, "admin"), allTeams, me.id);
+  // What the editor starts from: the view, the copy, or a blank view.
+  const [start] = useState(() => view ?? (copyOf ? copyView(copyOf, t("views.copyName", { name: copyOf.name }), rights) : null));
+  const [name, setName] = useState(start?.name ?? "");
+  const [shared, setShared] = useState(start?.shared ?? true);
+  const [teamId, setTeamId] = useState<string | null>(start?.team_id ?? null);
+  const [icon, setIcon] = useState<ViewIconValue | null>(start?.icon ?? null);
+  const [section, setSection] = useState(cleanSection(start?.section));
+  const inUse = viewSections(useQuery(q.views()).data ?? []);
+  const sections = section && !inUse.some((s) => sectionKey(s) === sectionKey(section)) ? [...inUse, section] : inUse;
   const { t: tt } = useTranslation("settingsTeams");
-  const [f, setF] = useState<TicketFilters>(view?.filters ?? { status: ["open"] });
+  const [f, setF] = useState<TicketFilters>(start?.filters ?? { status: ["open"] });
   // The operator each row shows; it stays put while the row has no value yet.
   const [ops, setOps] = useState<Record<OpField, FilterOp>>(() => {
-    const init = view?.filters ?? {};
+    const init = start?.filters ?? {};
     return { tag: filterOp(init, "tag"), team: filterOp(init, "team"), mailbox: filterOp(init, "mailbox"), channel: filterOp(init, "channel") };
   });
   const [error, setError] = useState<string | null>(null);
@@ -443,15 +467,17 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
   );
 
   const initial = JSON.stringify({
-    name: view?.name ?? "",
-    shared: view?.shared ?? true,
-    teamId: view?.team_id ?? null,
-    section: cleanSection(view?.section),
-    f: view?.filters ?? { status: ["open"] },
-    icon: view?.icon ?? null,
+    name: start?.name ?? "",
+    shared: start?.shared ?? true,
+    teamId: start?.team_id ?? null,
+    section: cleanSection(start?.section),
+    f: start?.filters ?? { status: ["open"] },
+    icon: start?.icon ?? null,
   });
   const dirty = JSON.stringify({ name, shared, teamId, section, f, icon }) !== initial;
   const audience = viewAudience({ shared, team_id: teamId });
+  // The original is for people the person may not create views for, so the copy is theirs alone.
+  const madePersonal = copyOf && start ? viewAudience(copyOf) !== viewAudience(start) : false;
 
   const requestClose = () => {
     if (!dirty) return onClose();
@@ -463,19 +489,29 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
   };
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const filters = cleanFilters(f);
-      return view
-        ? api.views.update(view.id, { name: name.trim(), shared: teamId ? false : shared, team_id: teamId, filters, section: section || null, icon })
-        : api.views.create({
-            name: name.trim(),
-            shared: teamId ? false : shared,
-            team_id: teamId,
-            section: section || null,
-            filters,
-            icon,
-            position: nextPosition,
-          });
+      if (view) return api.views.update(view.id, { name: name.trim(), shared: teamId ? false : shared, team_id: teamId, filters, section: section || null, icon });
+      const position = copyOf ? copyOf.position + 1 : nextPosition;
+      const created = await api.views.create({
+        // A copy keeps every other field of the original.
+        ...start,
+        name: name.trim(),
+        shared: teamId ? false : shared,
+        team_id: teamId,
+        filters,
+        section: section || null,
+        icon,
+        position,
+      });
+      if (copyOf) {
+        // The views after the original move down one, so the copy sits right after it.
+        const moves = makeRoom(views, copyOf.id, position, (v) => canWriteView(rights, v));
+        const done = await Promise.allSettled(moves.map((m) => api.views.update(m.id, { position: m.position })));
+        if (done.some((r) => r.status === "rejected")) toast.error(t("views.reorderFailed"));
+        void qc.invalidateQueries({ queryKey: qk.views });
+      }
+      return created;
     },
     onSuccess: (v) => {
       upsertInList(qc, qk.views, v);
@@ -511,7 +547,7 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
     <Drawer
       open
       onOpenChange={(o) => !o && requestClose()}
-      title={view ? t("views.editTitle") : t("views.new")}
+      title={view ? t("views.editTitle") : copyOf ? t("views.duplicateTitle") : t("views.new")}
       width={480}
       onEscapeKeyDown={(e) => {
         if (dirty) {
@@ -605,6 +641,11 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
               </div>
               <Switch checked={shared} onCheckedChange={setShared} aria-label={t("views.visibleTitle")} />
             </div>
+          )}
+          {madePersonal && copyOf && (
+            <p className="-mt-3 text-[12px] text-fg-3">
+              {copyPersonalNote(t, copyOf, allTeams)}
+            </p>
           )}
 
           <div>

@@ -1,8 +1,9 @@
-// The sidebar row's own menu: which number it shows (with what each would show), pin it to
-// Favorites, hide it, and an account's settings. It opens on right-click, long-press or the Menu key, and from the row's
-// ⋯ button, which takes the number's place on hover and keyboard focus (not in the rail).
-// Every member has it, with or without Collab; `enabled` false leaves the row as it is.
-// Saved at once with PUT /v1/collab/sidebar.
+// The sidebar row's own menu: the row's actions (a view's Duplicate), which number it shows
+// (with what each would show), pin it to Favorites, hide it, and an account's settings. It
+// opens on right-click, long-press or the Menu key, and from the row's ⋯ button, which takes
+// the number's place on hover and keyboard focus (not in the rail). Every member has it, with
+// or without Collab; with `enabled` false it holds the row's actions alone, and a row without
+// any is left as it is. Saved at once with PUT /v1/collab/sidebar.
 
 import { Ellipsis, EyeOff, Pin, PinOff, Settings, SlidersHorizontal } from "lucide-react";
 import { forwardRef, useRef, type ReactElement, type ReactNode } from "react";
@@ -53,12 +54,15 @@ export type RowMenuProps = {
   /** A Gmail label or Outlook category: its colour is chosen here too. */
   labelColor?: { folder: MailFolder; provider: string };
   /** What the row needs done first (an account to reconnect), on top of the menu. */
-  action?: { label: string; icon: ReactNode; onSelect: () => void };
+  action?: RowAction;
+  /** The row's own actions (a view's Duplicate), next in the menu; they show with `enabled` false too. */
+  items?: RowAction[];
   /** Opens what the row is set up in (an account's settings), beside Customize sidebar. */
   settings?: { label: string; onSelect: () => void };
   children: ReactElement;
 } & Omit<React.HTMLAttributes<HTMLElement>, "children">;
 
+type RowAction = { label: string; icon: ReactNode; onSelect: () => void };
 type ItemProps = { children: ReactNode; icon?: ReactNode; onSelect?: () => void; disabled?: boolean };
 type ChoiceProps = { children: ReactNode; checked: boolean; onSelect: () => void; hint?: ReactNode };
 
@@ -73,13 +77,13 @@ const contextParts: Parts = { Label: ContextMenuLabel, Choice: ContextMenuChoice
 const dropdownParts: Parts = { Label: MenuLabel, Choice: MenuChoice, Item: MenuItem, Separator: MenuSeparator };
 
 /** Forwards props and ref to its one child, so it can sit inside the rail's tooltip. */
-export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ enabled, prefs, badge, pin, hideId, rail, label, labelColor, action, settings, children, ...rest }, ref) {
+export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ enabled, prefs, badge, pin, hideId, rail, label, labelColor, action, items, settings, children, ...rest }, ref) {
   const { t } = useTranslation("collab");
   const save = useSaveSidebarPrefs();
   const setColor = useSetLabelColor();
   // A choice made with the pointer leaves focus off the ⋯ button, so the row shows its new number at once.
   const byPointer = useRef(false);
-  if (!enabled)
+  if (!enabled && !items?.length)
     return (
       <Slot.Root ref={ref} {...rest}>
         {children}
@@ -91,16 +95,9 @@ export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ 
   const own = badge ? prefs.badges[badge.key] : undefined;
   const pinned = pin ? isPinned(prefs, pin) : false;
 
-  const body = ({ Label, Choice, Item, Separator }: Parts) => (
+  // Collab's part: the number, the label colour, pin, hide, customize.
+  const prefsBody = ({ Label, Choice, Item, Separator }: Parts) => (
     <>
-      {action && (
-        <>
-          <Item icon={action.icon} onSelect={action.onSelect}>
-            {action.label}
-          </Item>
-          <Separator />
-        </>
-      )}
       {badge && (
         <>
           <Label>{t("rowMenu.number")}</Label>
@@ -156,6 +153,26 @@ export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ 
       <Item icon={<SlidersHorizontal />} onSelect={() => collabUi.customize(true)}>
         {t("rowMenu.customize")}
       </Item>
+    </>
+  );
+
+  const body = ({ Label, Choice, Item, Separator }: Parts) => (
+    <>
+      {action && (
+        <>
+          <Item icon={action.icon} onSelect={action.onSelect}>
+            {action.label}
+          </Item>
+          <Separator />
+        </>
+      )}
+      {items?.map((x) => (
+        <Item key={x.label} icon={x.icon} onSelect={x.onSelect}>
+          {x.label}
+        </Item>
+      ))}
+      {enabled && items?.length ? <Separator /> : null}
+      {enabled && prefsBody({ Label, Choice, Item, Separator })}
     </>
   );
 

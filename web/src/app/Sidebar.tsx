@@ -4,7 +4,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, EyeOff, Inbox, Keyboard, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
+import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, Copy, EyeOff, Inbox, Keyboard, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Fragment, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
@@ -348,6 +348,7 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
   const { data: counts } = useQuery(q.counts());
   const { data: views } = useQuery(q.views());
   const role = useRole();
+  const navigate = useNavigate();
   const { t } = useTranslation("shell");
   // The member's hidden rows, numbers, favorites and menus apply with or without Collab;
   // Collab adds the Mail section (contracts/collab.md SidebarPrefs).
@@ -439,6 +440,11 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                     badge={{ key: hid.view(v.id), kind: "ticket", sections: ["views"], numbers: nums }}
                     pin={{ kind: "view", id: v.id }}
                     hideId={hid.view(v.id)}
+                    items={
+                      atLeast(role, "agent")
+                        ? [{ label: t("nav.duplicateView"), icon: <Copy />, onSelect: () => void navigate({ to: "/settings/views", search: { duplicate: v.id } }) }]
+                        : undefined
+                    }
                     rail={rail}
                     label={viewName(v)}
                   >
