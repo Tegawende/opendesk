@@ -105,6 +105,7 @@ var linkIcons = map[string]bool{
 	"shopify": true, "stripe": true, "paypal": true, "square": true, "linear": true, "github": true, "atlassian": true,
 	"sentry": true, "notion": true, "asana": true, "monday": true, "slack": true, "discord": true, "telegram": true,
 	"intercom": true, "close": true, "box": true, "zapier": true, "zendesk": true, "helpscout": true, "freshdesk": true,
+	"odoo": true,
 }
 
 func toneOf(s string) string {

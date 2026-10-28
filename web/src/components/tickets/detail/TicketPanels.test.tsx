@@ -260,6 +260,7 @@ describe("URL ticket panel", () => {
               links: [
                 { label: "Open in the shop", url: "https://admin.shopify.com/store/lumen-store/orders/1001", icon: "shopify" },
                 { label: "Open in the ERP", url: "https://erp.example.com/odoo/sales/42", icon: "receipt" },
+                { label: "Open in Odoo", url: "https://acme.odoo.com/odoo/sales/42", icon: "odoo" },
                 { label: "carrier", url: "https://carrier.example/t/JD0123" },
                 { label: "Odd", url: "https://odd.example/x", icon: "rocket" },
               ],
@@ -271,7 +272,7 @@ describe("URL ticket panel", () => {
     );
     const doc = new DOMParser().parseFromString(html, "text/html");
     const links = [...doc.querySelectorAll("article a[aria-label]")];
-    expect(links.map((a) => a.getAttribute("aria-label"))).toEqual(["Open in the shop", "Open in the ERP", "carrier", "Odd"]);
+    expect(links.map((a) => a.getAttribute("aria-label"))).toEqual(["Open in the shop", "Open in the ERP", "Open in Odoo", "carrier", "Odd"]);
     for (const a of links) {
       expect(a.getAttribute("target")).toBe("_blank");
       expect(a.getAttribute("rel")).toBe("noopener noreferrer");
@@ -279,12 +280,13 @@ describe("URL ticket panel", () => {
     expect(links[0].getAttribute("href")).toBe("https://admin.shopify.com/store/lumen-store/orders/1001");
     // The title keeps its own link.
     expect(doc.querySelector('h4 a[href="https://erp.example.com/so/42"]')).not.toBeNull();
-    // Shopify's shipped logo, the receipt drawn as an icon, a letter for no icon or one the app does not know.
+    // Shopify's and Odoo's shipped logos, the receipt drawn as an icon, a letter for no icon or one the app does not know.
     expect(links[0].querySelector("img")?.getAttribute("src")).toBe("/logos/apps/shopify.svg");
     expect(links[1].querySelector("svg.lucide-receipt")).not.toBeNull();
-    expect(links[2].textContent).toBe("C");
-    expect(links[3].textContent).toBe("O");
-    expect(links[3].querySelector("img")).toBeNull();
+    expect(links[2].querySelector("img")?.getAttribute("src")).toBe("/logos/apps/odoo.svg");
+    expect(links[3].textContent).toBe("C");
+    expect(links[4].textContent).toBe("O");
+    expect(links[4].querySelector("img")).toBeNull();
     // Nothing but the app's own pictures.
     for (const img of doc.querySelectorAll("img")) expect(img.getAttribute("src")).toMatch(/^\/logos\/apps\//);
     const row = doc.querySelector('a[aria-label="PDF"]');
