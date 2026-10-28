@@ -127,6 +127,7 @@ export function useThreadAction() {
     onSuccess: (r: { threads: MailThread[] }) => patchThreads(qc, r?.threads ?? []),
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: qk.mailCounts });
+      void qc.invalidateQueries({ queryKey: qk.overview });
     },
   });
 }

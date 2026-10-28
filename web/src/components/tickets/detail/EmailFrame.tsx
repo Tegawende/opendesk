@@ -46,9 +46,20 @@ export function EmailFrame({ html, title, className }: { html: string; title: st
       root.ownerDocument.body.style.overflowY = full > MAX_HEIGHT ? "auto" : "hidden";
       setHeight((prev) => (Math.abs(prev - h) > 1 ? h : prev));
     };
+    // Keyboard events inside a frame do not bubble to the reading pane.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      const forwarded = new KeyboardEvent("keydown", { key: event.key, code: event.code, bubbles: true, cancelable: true,
+        ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey });
+      if (!document.dispatchEvent(forwarded)) event.preventDefault();
+    };
+    let frameDoc: Document | null = null;
     const onLoad = () => {
       observer?.disconnect();
-      const root = frame.contentDocument?.getElementById("od-email");
+      frameDoc?.removeEventListener("keydown", onKey);
+      frameDoc = frame.contentDocument;
+      frameDoc?.addEventListener("keydown", onKey);
+      const root = frameDoc?.getElementById("od-email");
       if (!root) return;
       fit();
       observer = new ResizeObserver(fit);
@@ -60,6 +71,7 @@ export function EmailFrame({ html, title, className }: { html: string; title: st
     return () => {
       frame.removeEventListener("load", onLoad);
       observer?.disconnect();
+      frameDoc?.removeEventListener("keydown", onKey);
     };
   }, [doc]);
 

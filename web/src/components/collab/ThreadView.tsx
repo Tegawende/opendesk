@@ -45,6 +45,7 @@ import { isApiError } from "@/lib/api/client";
 import { patchThreads } from "@/lib/collab/cache";
 import { compose } from "@/lib/collab/compose";
 import { accountCategories, PRIMARY } from "@/lib/collab/categories";
+import { useReadOnOpen } from "@/lib/collab/useReadOnOpen";
 import { useMailAccounts } from "@/lib/collab/hooks";
 import { hasReplyAll, replyTarget, type ComposeMode } from "@/lib/collab/recipients";
 import { identitySignature, ownEmails, replyIdentity } from "@/lib/collab/identities";
@@ -223,7 +224,6 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
   const scroller = useRef<HTMLDivElement>(null);
   const [below, setBelow] = useState(false);
   const [flash, setFlash] = useState(false);
-  const marked = useRef<string | null>(null);
   // The people panel: docked when there is room (and kept as the member left it), else a sheet.
   const wide = useWide();
   const [docked, setDocked] = useState(readPanel);
@@ -280,11 +280,7 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
   // current conversation: a copy kept from an earlier visit can predate the new mail
   // that made it unread, so a stale copy waits for its refetch.
   const current = !!detail && !isFetching && (isFetchedAfterMount || !isStale);
-  useEffect(() => {
-    if (!detail || !current || !detail.can_act || !markReadOnOpen || marked.current === detail.thread.id) return;
-    marked.current = detail.thread.id;
-    if (detail.thread.unread) onAction("read", { silent: true });
-  }, [detail, current, markReadOnOpen, onAction]);
+  useReadOnOpen({ detail, current, enabled: markReadOnOpen, onAction });
 
   const all = useMemo(() => detail?.messages ?? [], [detail]);
   const messages = useMemo(() => all.filter((m) => !m.draft), [all]);

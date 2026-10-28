@@ -500,6 +500,11 @@
     "waitUploads": "En attente des importations",
     "andStatus": "{{label}} et définir le statut",
     "andMark": "{{label}} et marquer {{status}}",
+    "noteAndFinish": {
+      "solve": "Ajouter une note et résoudre",
+      "close": "Ajouter une note et fermer",
+      "mark": "Ajouter une note et marquer comme {{status}}"
+    },
     "sending": "Envoi en cours",
     "sent": "Envoyé",
     "replyingAs": "Répondre en tant que",

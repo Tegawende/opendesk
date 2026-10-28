@@ -379,7 +379,9 @@
     "reset": "Reset",
     "resetFor": "Reset {{name}}",
     "hideFor": "Hide {{name}} from the menus",
-    "showFor": "Show {{name}} in the menus"
+    "showFor": "Show {{name}} in the menus",
+    "finishButton": "{{action}} button",
+    "finishButtonHint": "Show a button next to Send in the reply box that sends and solves the ticket in one click, not only in the menu beside it. It uses the workspace’s finish label and always sets the status to solved."
   },
   "danger": {
     "title": "Danger zone",
