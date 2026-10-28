@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +40,21 @@ type lookupRequest struct {
 	Contact     lookupContact `json:"contact"`
 	// Refresh is true when an agent asked again (the panel's refresh button).
 	Refresh bool `json:"refresh"`
+	// Locale is the viewer's interface language, a lowercase base language tag ("fr", "en",
+	// "de"), so the URL can answer in it; left out when the reader's app did not say.
+	Locale string `json:"locale,omitempty"`
+}
+
+// localeRe is a viewer's language as a panel's request carries it: a base language tag.
+var localeRe = regexp.MustCompile(`^[a-z]{2,3}$`)
+
+// viewerLocale is the language the reader's app said it shows (GET …/panels/{panelId}?locale=fr),
+// or "" for anything but a lowercase base language tag.
+func viewerLocale(s string) string {
+	if localeRe.MatchString(s) {
+		return s
+	}
+	return ""
 }
 
 type lookupTicket struct {
@@ -124,7 +140,7 @@ func (s *Service) readHTTP(ctx context.Context, x *row, sub subject, d *Data) (t
 	if sub.Emails == nil {
 		sub.Emails = []string{}
 	}
-	body, err := json.Marshal(lookupRequest{PanelID: x.ID, WorkspaceID: x.WorkspaceID, Refresh: sub.Refresh,
+	body, err := json.Marshal(lookupRequest{PanelID: x.ID, WorkspaceID: x.WorkspaceID, Refresh: sub.Refresh, Locale: sub.Locale,
 		Ticket:  lookupTicket{ID: sub.TicketID, Number: sub.TicketNumber, Subject: sub.Subject, References: sub.References},
 		Contact: lookupContact{ID: sub.ContactID, Email: sub.Email, Name: sub.Name, Emails: sub.Emails, Phone: sub.Phone}})
 	if err != nil {
