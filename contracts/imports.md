@@ -32,7 +32,14 @@ answers `409 import_running`.
 4. **Bring over what changed** (`POST /v1/imports/{id}/sync`) while the team switches over:
    tickets updated in the source since shortly before the last run began get their new
    messages, the source's status and any new labels; new tickets and new articles are
-   imported. Tickets that did not move in the source are skipped, articles already imported
+   imported. A source that merges a ticket into another moves its messages there with their
+   ids (Front; the merged one then answers with a redirect or leaves the listings): the
+   copy here that holds them is merged into the survivor's, new to the import or not, as
+   `POST /v1/tickets/{id}/merge` does (messages, threads and labels move, both timelines log
+   `merged` by `system` with `via: "import"`, `ticket.updated` for both), but closed without
+   automations, notifications or archiving in the mailbox's provider. A copy that also holds
+   a message no import wrote (the team worked it here) or one the source keeps in another
+   ticket stays as it is, with the moved messages. A moved message is never written twice. Tickets that did not move in the source are skipped, articles already imported
    are left as they are, and a ticket deleted here stays deleted. CSV imports run once.
 5. **Undo** (`POST /v1/imports/{id}/undo`) removes everything the import created: tickets
    (with every message and attachment on them; a ticket with a message no import wrote, a
