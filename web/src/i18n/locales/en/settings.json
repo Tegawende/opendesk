@@ -371,13 +371,15 @@
   },
   "display": {
     "title": "Statuses and priorities",
-    "description": "Rename or recolour them for your team. Only the display changes; filters, automations and the API keep working as before.",
+    "description": "Rename or recolour them for your team, and hide the statuses you don't use from the menus agents pick from. A ticket already in a hidden status keeps it; filters, automations and the API keep working as before.",
     "statuses": "Statuses",
     "priorities": "Priorities",
     "labelFor": "Name shown for {{name}}",
     "colourFor": "Colour for {{name}}",
     "reset": "Reset",
-    "resetFor": "Reset {{name}}"
+    "resetFor": "Reset {{name}}",
+    "hideFor": "Hide {{name}} from the menus",
+    "showFor": "Show {{name}} in the menus"
   },
   "danger": {
     "title": "Danger zone",

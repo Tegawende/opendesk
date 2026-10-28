@@ -57,6 +57,24 @@
     "snoozed": "Snoozed",
     "linkCopied": "Link copied"
   },
+  "finish": {
+    "close": {
+      "button": "Close",
+      "command": "Close ticket",
+      "toast": "Closed #{{number}}",
+      "quick": "Close #{{number}}",
+      "tip": "Close the focused ticket",
+      "sendTip": "Send and close"
+    },
+    "mark": {
+      "button": "Mark as {{status}}",
+      "command": "Mark ticket as {{status}}",
+      "toast": "Marked #{{number}} as {{status}}",
+      "quick": "Mark #{{number}} as {{status}}",
+      "tip": "Mark the focused ticket as {{status}}",
+      "sendTip": "Send and mark as {{status}}"
+    }
+  },
   "row": {
     "unknown": "Unknown",
     "noSubject": "(no subject)",

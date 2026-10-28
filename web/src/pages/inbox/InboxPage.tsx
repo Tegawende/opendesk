@@ -26,7 +26,7 @@ import { SummaryStrip, loadedCounts, stripCounts } from "@/components/tickets/Su
 import { WaitingBanner, chatWait, useAgentOn } from "@/components/tickets/waiting";
 import { useUpdateTicket } from "@/components/tickets/useTicketActions";
 import { intent } from "@/components/tickets/motion";
-import { focusField, missingForSolve, useTicketFields } from "@/components/tickets/fields";
+import { focusField, missingForSolve, useDisplay, useTicketFields } from "@/components/tickets/fields";
 import { atLeast, useRole, useSession } from "@/lib/session";
 import { paneCss, setLiveWidth, usePaneWidth } from "@/lib/panes";
 import { useDocumentTitle } from "@/app/RootLayout";
@@ -133,6 +133,7 @@ export default function InboxPage() {
   const canEdit = atLeast(useRole(), "agent");
   const update = useUpdateTicket();
   const { data: ticketFields } = useTicketFields();
+  const display = useDisplay();
   const { data: views } = useQuery(q.views());
   const { data: counts } = useQuery(q.counts());
   const me = useSession((s) => s.user);
@@ -313,9 +314,9 @@ export default function InboxPage() {
       setTimeout(() => focusField(missing[0].key), 400);
       return;
     }
-    update.mutate({ id: t.id, patch: { status: done ? "open" : "solved" } });
+    update.mutate({ id: t.id, patch: { status: done ? "open" : display.finish } });
     toast.success(
-      done ? tr("toast.reopened", { number: t.number }) : tr("toast.solved", { number: t.number }),
+      done ? tr("toast.reopened", { number: t.number }) : display.finishWords.toast(t.number),
       done ? undefined : { action: { label: tr("toast.undo"), onClick: () => update.mutate({ id: t.id, patch: { status: t.status } }) } },
     );
   }

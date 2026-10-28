@@ -57,6 +57,24 @@
     "snoozed": "Zurückgestellt",
     "linkCopied": "Link kopiert"
   },
+  "finish": {
+    "close": {
+      "button": "Schließen",
+      "command": "Ticket schließen",
+      "toast": "#{{number}} geschlossen",
+      "quick": "#{{number}} schließen",
+      "tip": "Fokussiertes Ticket schließen",
+      "sendTip": "Senden und schließen"
+    },
+    "mark": {
+      "button": "Als {{status}} markieren",
+      "command": "Ticket als {{status}} markieren",
+      "toast": "#{{number}} als {{status}} markiert",
+      "quick": "#{{number}} als {{status}} markieren",
+      "tip": "Fokussiertes Ticket als {{status}} markieren",
+      "sendTip": "Senden und als {{status}} markieren"
+    }
+  },
   "row": {
     "unknown": "Unbekannt",
     "noSubject": "(kein Betreff)",

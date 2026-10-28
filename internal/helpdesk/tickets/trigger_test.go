@@ -470,7 +470,8 @@ var csatLink = regexp.MustCompile(`/csat#t=([A-Za-z0-9_-]+)&score=$`)
 
 func TestCSAT(t *testing.T) {
 	e, ws := newEnv(t)
-	e.SetSettings(ws, map[string]any{"csat_enabled": true, "brand_color": "#0A0A0A"})
+	e.SetSettings(ws, map[string]any{"csat_enabled": true, "brand_color": "#0A0A0A",
+		"status_labels": map[string]any{"solved": map[string]any{"label": "Closed"}, "closed": map[string]any{"hidden": true}}})
 	e.Exec(`UPDATE brands SET name = 'Margin Help', color = '#2563EB' WHERE workspace_id = $1`, ws.ID)
 	tk := createTicket(t, e, ws, map[string]any{"contact": map[string]any{"email": "rate@example.com"}})
 	e.Do("PATCH", "/v1/tickets/"+tk.ID.String(), ws.Agent.As(ws), map[string]any{"status": "solved"}).Want(t, 200)

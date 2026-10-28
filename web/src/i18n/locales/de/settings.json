@@ -371,13 +371,15 @@
   },
   "display": {
     "title": "Status und Prioritäten",
-    "description": "Benenne sie für dein Team um oder gib ihnen andere Farben. Nur die Anzeige ändert sich; Filter, Automatisierungen und die API funktionieren wie bisher.",
+    "description": "Benenne sie für dein Team um, gib ihnen andere Farben und blende Status, die ihr nicht nutzt, in den Menüs aus. Ein Ticket, das schon einen ausgeblendeten Status hat, behält ihn; Filter, Automatisierungen und die API funktionieren wie bisher.",
     "statuses": "Status",
     "priorities": "Prioritäten",
     "labelFor": "Angezeigter Name für {{name}}",
     "colourFor": "Farbe für {{name}}",
     "reset": "Zurücksetzen",
-    "resetFor": "{{name}} zurücksetzen"
+    "resetFor": "{{name}} zurücksetzen",
+    "hideFor": "{{name}} in den Menüs ausblenden",
+    "showFor": "{{name}} in den Menüs anzeigen"
   },
   "danger": {
     "title": "Gefahrenbereich",
