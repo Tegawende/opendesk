@@ -60,7 +60,8 @@ describe("the finishing action's words", () => {
   const prod = { solved: { label: "Closed" }, pending: { hidden: true }, closed: { hidden: true } };
 
   it("say solve when solved keeps its built-in name", () => {
-    for (const labels of [undefined, { pending: { hidden: true } }, { solved: { label: "Solved" } }] satisfies Labels[]) {
+    const cases: Labels[] = [undefined, { pending: { hidden: true } }, { solved: { label: "Solved" } }];
+    for (const labels of cases) {
       const w = finishWords(labels);
       expect(w.verb).toBe("solve");
       expect(w.button()).toBe("Solve");
