@@ -1,8 +1,8 @@
-// Rename and recolour statuses and priorities for this workspace. Display
-// only: the API values never change. Shapes follow `status_labels` and
+// Rename and recolour statuses and priorities for this workspace, and hide
+// statuses from the agents' menus. Display only: the API values never change. Shapes follow `status_labels` and
 // `priority_labels` in the workspace settings contract.
 
-import { RotateCcw } from "lucide-react";
+import { Eye, EyeOff, RotateCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PriorityIcon, StatusIcon, priorityLabel, priorityOrder, statusLabel, statusOrder } from "@/components/indicators";
 import { Popover } from "@/components/ui/popover";
@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
 import { priorityTone, statusTone, tone as tones, type Tone } from "@/lib/tones";
 import { ColorSwatchPicker } from "./ColorSwatchPicker";
 
-export type DisplayOverride = { label?: string; color?: Tone };
+export type DisplayOverride = { label?: string; color?: Tone; hidden?: boolean };
 export type Overrides<K extends string> = Partial<Record<K, DisplayOverride>>;
 
 const labelRe = /^[^<>]{0,40}$/;
@@ -43,6 +43,7 @@ export function DisplayOverridesEditor({
         icon={(k) => <StatusIcon status={k} />}
         value={statuses}
         onChange={onStatuses}
+        hideable={hideableStatus}
         disabled={disabled}
       />
       <OverrideList
@@ -68,6 +69,7 @@ function OverrideList<K extends string>({
   value,
   onChange,
   disabled,
+  hideable,
 }: {
   title: string;
   keys: K[];
@@ -77,6 +79,8 @@ function OverrideList<K extends string>({
   value: Overrides<K>;
   onChange: (v: Overrides<K>) => void;
   disabled?: boolean;
+  /** Whether a key may be hidden now (statuses only); "never" shows no toggle. */
+  hideable?: (k: K, value: Overrides<K>) => boolean | "never";
 }) {
   const { t } = useTranslation("settings");
   useTranslation("indicators");
@@ -84,6 +88,7 @@ function OverrideList<K extends string>({
     const next: DisplayOverride = { ...value[k], ...patch };
     if (!next.label) delete next.label;
     if (!next.color || next.color === defaultTones[k]) delete next.color;
+    if (!next.hidden) delete next.hidden;
     const out = { ...value };
     if (Object.keys(next).length) out[k] = next;
     else delete out[k];
@@ -96,10 +101,11 @@ function OverrideList<K extends string>({
         {keys.map((k) => {
           const o = value[k] ?? {};
           const hue = o.color ?? defaultTones[k];
-          const changed = !!(o.label || o.color);
+          const changed = !!(o.label || o.color || o.hidden);
+          const canHide = hideable?.(k, value) ?? "never";
           const bad = !!o.label && !labelRe.test(o.label);
           return (
-            <div key={k} className="group flex h-10 items-center gap-2.5">
+            <div key={k} className={cn("group flex h-10 items-center gap-2.5", o.hidden && "opacity-60")}>
               <span className="flex w-5 justify-center">{icon(k)}</span>
               <TextInput
                 inputSize="sm"
@@ -128,6 +134,20 @@ function OverrideList<K extends string>({
               >
                 <ColorSwatchPicker value={hue} onChange={(c) => set(k, { color: c })} size="sm" className="w-[124px]" label={t("display.colourFor", { name: defaults(k) })} />
               </Popover>
+              {canHide !== "never" && (
+                <Tooltip content={t(o.hidden ? "display.showFor" : "display.hideFor", { name: defaults(k) })}>
+                  <button
+                    type="button"
+                    aria-label={t(o.hidden ? "display.showFor" : "display.hideFor", { name: defaults(k) })}
+                    aria-pressed={!!o.hidden}
+                    disabled={disabled || (!o.hidden && !canHide)}
+                    onClick={() => set(k, { hidden: !o.hidden })}
+                    className="flex size-7 shrink-0 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-hover hover:text-fg disabled:opacity-40"
+                  >
+                    {o.hidden ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                  </button>
+                </Tooltip>
+              )}
               <Tooltip content={t("display.reset")}>
                 <button
                   type="button"
@@ -149,4 +169,10 @@ function OverrideList<K extends string>({
       </div>
     </div>
   );
+}
+
+/** Open and solved always stay available, as enforced by the API. */
+export function hideableStatus(k: TicketStatus, _value: Overrides<TicketStatus>): boolean | "never" {
+  if (k === "open" || k === "solved") return "never";
+  return true;
 }

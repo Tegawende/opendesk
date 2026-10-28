@@ -165,6 +165,23 @@ func TestThreadingPlusAddressAndSubjectTag(t *testing.T) {
 	}
 }
 
+func TestReplyToSolvedTicketWithClosedLabelReopensSame(t *testing.T) {
+	w := newWorld(t)
+	m := w.mailbox(InboundForwarding, OutboundSystem, nil)
+	from := customer()
+	tk, ours := firstTicket(t, w, m, from)
+	mustExec(t, w.d, `UPDATE workspaces SET settings = settings || '{"status_labels":{"solved":{"label":"Closed"},"closed":{"hidden":true}}}'::jsonb WHERE id = $1`, w.wid)
+	mustExec(t, w.d, `UPDATE tickets SET status = 'solved', solved_at = now() WHERE id = $1`, tk.ID)
+	id := w.receive(m, fixture(t, "gmail_reply.eml", "{{FROM}}", from, "{{TO}}", w.forwardAddr(m, ""), "{{ID}}", crypto.RandomString(8),
+		"{{IRT}}", ours, "{{N}}", itoa(tk.Number)))
+	if msg := w.messageFor(id); msg.TicketID != tk.ID {
+		t.Fatal("reply must stay on the solved ticket")
+	}
+	if got := w.ticket(tk.ID); got.Status != "open" || got.SolvedAt != nil {
+		t.Fatalf("reopened ticket %+v", got)
+	}
+}
+
 func TestReplyToClosedTicketOpensNew(t *testing.T) {
 	w := newWorld(t)
 	m := w.mailbox(InboundForwarding, OutboundSystem, nil)

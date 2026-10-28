@@ -192,6 +192,8 @@
     "openTicket": "Ouvrir le ticket",
     "selectTicket": "Sélectionner le ticket",
     "solveFocusedTicket": "Résoudre le ticket actif",
+    "closeFocusedTicket": "Fermer le ticket actif",
+    "markFocusedTicket": "Marquer le ticket actif comme {{status}}",
     "openAndReply": "Ouvrir et répondre",
     "closeTicketOrClearSelection": "Fermer le ticket ou effacer la sélection",
     "reply": "Répondre",
@@ -202,6 +204,8 @@
     "moveToTeam": "Déplacer vers une équipe",
     "snooze": "Mettre en veille",
     "solve": "Résoudre",
+    "closeTicket": "Fermer",
+    "markTicket": "Marquer comme {{status}}",
     "send": "Envoyer",
     "description": "La plupart des actions dans opendesk sont accessibles sans souris.",
     "draftWithOllie": "Rédiger une réponse avec Ollie dans la zone de réponse"

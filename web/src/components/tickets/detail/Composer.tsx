@@ -31,6 +31,7 @@ import { variableText } from "./composerTemplates";
 import { ReplySignature } from "./ReplySignature";
 import { ReplyPreview } from "./ReplyPreview";
 import { StatusIcon, statusLabel } from "../bits";
+import { useDisplay } from "../fields";
 import { useTicketViewers } from "../presence";
 import { useUpdateTicket } from "../useTicketActions";
 import { ComposerAiMenu, ComposerAiStatus, ComposerSources, useComposerAi } from "@/components/ai/ticket/ComposerAi";
@@ -187,6 +188,7 @@ function useSendThread(ticket: Ticket) {
 
 export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: boolean }>(function Composer({ ticket, disabled }, ref) {
   const { t } = useTranslation("inbox");
+  const display = useDisplay();
   useTranslation("indicators");
   useTranslation("ui");
   const reduced = useReducedMotion();
@@ -510,7 +512,7 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && e.shiftKey) {
       e.preventDefault();
       // Solving is not on offer while asking a third party.
-      if (mode !== "thread") submit("solved");
+      if (mode !== "thread") submit(display.finish);
       return true;
     }
     return false;
@@ -1050,7 +1052,10 @@ function SendButton({
   useTranslation("indicators");
   const side = !!sideTo;
   const label = note ? t("composer.addNote") : t("composer.send");
-  const options: TicketStatus[] = (side ? (["on_hold"] as TicketStatus[]) : (["pending", "on_hold", "solved"] as TicketStatus[])).filter((s) => s !== current);
+  const display = useDisplay();
+  const options: TicketStatus[] = (side ? (["on_hold"] as TicketStatus[]) : (["pending", "on_hold", display.finish] as TicketStatus[])).filter(
+    (s) => s !== current && !display.hidden(s),
+  );
   const includes = !!include && (include.quoted > 0 || include.files.length > 0);
   const menu = options.length > 0 || includes;
   const along = useIncludeSummary(include);
@@ -1106,7 +1111,7 @@ function SendButton({
                 <M.Item key={s} disabled={disabled} onSelect={() => onSend(s)} className="flex h-8 cursor-default items-center gap-2 rounded-md px-2 text-[12.5px] outline-none data-[disabled]:opacity-50 data-[highlighted]:bg-hover">
                   <StatusIcon status={s} />
                   <span className="flex-1 whitespace-nowrap">{t("composer.andMark", { label, status: statusLabel(s).toLowerCase() })}</span>
-                  {s === "solved" && <Kbd className="ml-3 shrink-0">mod shift enter</Kbd>}
+                  {s === display.finish && <Kbd className="ml-3 shrink-0">mod shift enter</Kbd>}
                 </M.Item>
               ))}
             </M.Content>

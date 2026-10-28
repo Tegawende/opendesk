@@ -199,6 +199,9 @@ export default function TicketDetail({
   };
 
   const solved = t?.status === "solved" || t?.status === "closed";
+  // Named after what finishing sets here: solve, or close where the workspace hides solved.
+  const finish = display.finishWords;
+  const finishLabel = finish.button();
   const solve = () => {
     if (!t || !canEdit) return;
     // Required fields: point at the first empty one instead of a refused solve.
@@ -209,9 +212,9 @@ export default function TicketDetail({
       toast.error(tr("fields.fill", { name: missing.map((f) => f.name).join(", ") }));
       return;
     }
-    update.mutate({ id: t.id, patch: { status: solved ? "open" : "solved" } });
+    update.mutate({ id: t.id, patch: { status: solved ? "open" : display.finish } });
     toast.success(
-      solved ? tr("toast.reopened", { number: t.number }) : tr("toast.solved", { number: t.number }),
+      solved ? tr("toast.reopened", { number: t.number }) : finish.toast(t.number),
       solved ? undefined : { action: { label: tr("toast.undo"), onClick: () => update.mutate({ id: t.id, patch: { status: t.status } }) } },
     );
     if (solved) return;
@@ -288,14 +291,14 @@ export default function TicketDetail({
             run: () => update.mutate({ id: t.id, patch: { severity: s } }),
           })),
         ...(t.severity ? [{ id: "severity-clear", label: tr("commands.clearSeverity"), keywords: ["severity"], icon: <SeverityChip severity={null} />, run: () => update.mutate({ id: t.id, patch: { severity: null } }) }] : []),
-        { id: "solve", label: solved ? tr("commands.reopen") : tr("commands.solve"), shortcut: "e", icon: <CircleCheck />, run: solve },
+        { id: "solve", label: solved ? tr("commands.reopen") : finish.command(), shortcut: "e", icon: <CircleCheck />, run: solve },
         { id: "merge", label: tr("detail.merge"), icon: <GitMerge />, run: () => setMergeOpen(true) },
         { id: "spam", label: t.spam ? tr("detail.notSpam") : tr("detail.markSpam"), icon: <ShieldAlert />, run: spam },
       ],
     });
     return () => usePageCommands.setState({ commands: [] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t?.id, t?.status, t?.spam, t?.severity, canEdit, aiOn, teamsCtx.hasTeams, tr, tAi, indicatorText]);
+  }, [t?.id, t?.status, t?.spam, t?.severity, canEdit, aiOn, teamsCtx.hasTeams, tr, tAi, indicatorText, display.finish, finishLabel]);
 
   if (ticket.isError) {
     return (
@@ -371,7 +374,7 @@ export default function TicketDetail({
         )}
         {t && canEdit && (
           <div className="flex items-center gap-1">
-            <Tooltip content={solved ? tr("detail.reopen") : tr("detail.solve")} shortcut="e">
+            <Tooltip content={solved ? tr("detail.reopen") : finish.verb === "solve" ? finishLabel : finish.command()} shortcut="e">
               <Button
                 size="sm"
                 variant="secondary"
@@ -387,8 +390,9 @@ export default function TicketDetail({
                   </Morph>
                 }
                 onClick={solve}
+                aria-label={solved || finish.verb === "solve" ? undefined : finish.command()}
               >
-                <span className="max-sm:sr-only">{solved ? tr("detail.reopen") : tr("detail.solve")}</span>
+                <span className="max-sm:sr-only">{solved ? tr("detail.reopen") : finishLabel}</span>
               </Button>
             </Tooltip>
             <SnoozeMenu

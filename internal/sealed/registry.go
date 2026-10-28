@@ -36,6 +36,7 @@ var Columns = []Column{
 	{"collab_accounts", "id", "credentials_enc"},             // Collab mail account credentials
 	{"phone_connections", "id", "credentials_enc"},           // phone provider API credentials
 	{"phone_connections", "id", "webhook_secret_enc"},        // phone provider webhook tokens
+	{"ticket_panels", "id", "secret_enc"},                    // ticket panel Shopify tokens and signing secrets
 }
 
 // NotSealed are the bytea columns that hold no d.Box output: hashes, public keys and

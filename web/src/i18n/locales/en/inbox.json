@@ -57,6 +57,24 @@
     "snoozed": "Snoozed",
     "linkCopied": "Link copied"
   },
+  "finish": {
+    "close": {
+      "button": "Close",
+      "command": "Close ticket",
+      "toast": "Closed #{{number}}",
+      "quick": "Close #{{number}}",
+      "tip": "Close the focused ticket",
+      "sendTip": "Send and close"
+    },
+    "mark": {
+      "button": "Mark as {{status}}",
+      "command": "Mark ticket as {{status}}",
+      "toast": "Marked #{{number}} as {{status}}",
+      "quick": "Mark #{{number}} as {{status}}",
+      "tip": "Mark the focused ticket as {{status}}",
+      "sendTip": "Send and mark as {{status}}"
+    }
+  },
   "row": {
     "unknown": "Unknown",
     "noSubject": "(no subject)",
@@ -878,5 +896,47 @@
       "no_available_agent": "No teammate available",
       "agents_did_not_answer": "Nobody answered"
     }
+  },
+  "panels": {
+    "refresh": "Refresh {{name}}",
+    "collapse": "Hide {{name}}",
+    "expand": "Show {{name}}",
+    "noContact": "The contact has no email to look up.",
+    "empty": "Nothing about this contact.",
+    "emptyShopify": "No customer with this email in the store.",
+    "error": "Couldn’t load: {{message}}",
+    "retry": "Try again",
+    "orders_one": "{{count}} order",
+    "orders_other": "{{count}} orders",
+    "spent": "{{amount}} spent",
+    "noOrders": "No recent orders.",
+    "cancelled": "Cancelled",
+    "openCustomer": "Open the customer in Shopify",
+    "openOrder": "Open order {{number}} in Shopify",
+    "track": "Track",
+    "status": {
+      "paid": "Paid",
+      "pending": "Payment pending",
+      "authorized": "Authorized",
+      "partially_paid": "Partly paid",
+      "refunded": "Refunded",
+      "partially_refunded": "Partly refunded",
+      "voided": "Voided",
+      "expired": "Expired",
+      "fulfilled": "Fulfilled",
+      "unfulfilled": "Unfulfilled",
+      "partially_fulfilled": "Partly fulfilled",
+      "in_progress": "In progress",
+      "on_hold": "On hold",
+      "scheduled": "Scheduled",
+      "restocked": "Restocked"
+    },
+    "cancelledOn": "Cancelled {{date}}",
+    "unitPrice": "Unit price",
+    "shipping": "Shipping",
+    "discountCodes_one": "Discount code",
+    "discountCodes_other": "Discount codes",
+    "refunded": "{{amount}} refunded",
+    "openLink": "Open {{name}}"
   }
 }

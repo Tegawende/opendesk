@@ -57,6 +57,24 @@
     "snoozed": "Mis en attente",
     "linkCopied": "Lien copié"
   },
+  "finish": {
+    "close": {
+      "button": "Fermer",
+      "command": "Fermer le ticket",
+      "toast": "#{{number}} fermé",
+      "quick": "Fermer #{{number}}",
+      "tip": "Fermer le ticket ciblé",
+      "sendTip": "Envoyer et fermer"
+    },
+    "mark": {
+      "button": "Marquer comme {{status}}",
+      "command": "Marquer le ticket comme {{status}}",
+      "toast": "#{{number}} marqué comme {{status}}",
+      "quick": "Marquer #{{number}} comme {{status}}",
+      "tip": "Marquer le ticket ciblé comme {{status}}",
+      "sendTip": "Envoyer et marquer comme {{status}}"
+    }
+  },
   "row": {
     "unknown": "Inconnu",
     "noSubject": "(sans objet)",
@@ -854,5 +872,49 @@
       "no_available_agent": "Aucun collègue disponible",
       "agents_did_not_answer": "Personne n'a répondu"
     }
+  },
+  "panels": {
+    "refresh": "Actualiser {{name}}",
+    "collapse": "Masquer {{name}}",
+    "expand": "Afficher {{name}}",
+    "noContact": "Le contact n’a pas d’e-mail à rechercher.",
+    "empty": "Rien sur ce contact.",
+    "emptyShopify": "Aucun client avec cet e-mail dans la boutique.",
+    "error": "Chargement impossible : {{message}}",
+    "retry": "Réessayer",
+    "orders_one": "{{count}} commande",
+    "orders_many": "{{count}} commandes",
+    "orders_other": "{{count}} commandes",
+    "spent": "{{amount}} dépensés",
+    "noOrders": "Aucune commande récente.",
+    "cancelled": "Annulée",
+    "openCustomer": "Ouvrir le client dans Shopify",
+    "openOrder": "Ouvrir la commande {{number}} dans Shopify",
+    "track": "Suivre",
+    "status": {
+      "paid": "Payée",
+      "pending": "Paiement en attente",
+      "authorized": "Autorisée",
+      "partially_paid": "Payée en partie",
+      "refunded": "Remboursée",
+      "partially_refunded": "Remboursée en partie",
+      "voided": "Annulée",
+      "expired": "Expirée",
+      "fulfilled": "Expédiée",
+      "unfulfilled": "Non expédiée",
+      "partially_fulfilled": "Expédiée en partie",
+      "in_progress": "En cours",
+      "on_hold": "En attente",
+      "scheduled": "Planifiée",
+      "restocked": "Remise en stock"
+    },
+    "cancelledOn": "Annulée le {{date}}",
+    "unitPrice": "Prix unitaire",
+    "shipping": "Livraison",
+    "discountCodes_one": "Code de réduction",
+    "discountCodes_many": "Codes de réduction",
+    "discountCodes_other": "Codes de réduction",
+    "refunded": "Remboursé : {{amount}}",
+    "openLink": "Ouvrir {{name}}"
   }
 }

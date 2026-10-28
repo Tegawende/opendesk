@@ -192,6 +192,8 @@
     "openTicket": "Open ticket",
     "selectTicket": "Select ticket",
     "solveFocusedTicket": "Solve focused ticket",
+    "closeFocusedTicket": "Close focused ticket",
+    "markFocusedTicket": "Mark focused ticket as {{status}}",
     "openAndReply": "Open and reply",
     "closeTicketOrClearSelection": "Close ticket or clear selection",
     "reply": "Reply",
@@ -202,6 +204,8 @@
     "moveToTeam": "Move to team",
     "snooze": "Snooze",
     "solve": "Solve",
+    "closeTicket": "Close",
+    "markTicket": "Mark as {{status}}",
     "send": "Send",
     "description": "Most things in opendesk work without a mouse.",
     "draftWithOllie": "Draft a reply with Ollie, in the reply box"

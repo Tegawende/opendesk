@@ -208,7 +208,7 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
             <AlarmClock className="size-3.5" />
           </QuickButton>
           {!done && (
-            <QuickButton label={tr("quick.solve", { number: t.number })} shortcut="e" onClick={() => onQuick(t, "solve")}>
+            <QuickButton label={display.finishWords.quick(t.number)} shortcut="e" onClick={() => onQuick(t, "solve")}>
               <Check className="size-3.5" />
             </QuickButton>
           )}

@@ -16,12 +16,13 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { ContactCard } from "@/components/contacts/ContactCard";
 import { api } from "@/lib/api/endpoints";
 import { OlliePanel } from "@/components/ai/ticket/OlliePanel";
-import { ChannelIcon, channelLabel, PriorityIcon, priorityOrder, SeverityChip, severityHint, severityLabel, severityOrder, slaState, StatusIcon, statusOrder } from "../bits";
+import { ChannelIcon, channelLabel, PriorityIcon, priorityOrder, SeverityChip, severityHint, severityLabel, severityOrder, slaState, StatusIcon } from "../bits";
 import { aiDecisions } from "@/lib/decisions";
 import { LabelPicker } from "./LabelPicker";
 import { SetByOllie, useAISet, useOllieNote } from "../ollie";
 import { FieldsSection } from "./FieldsSection";
 import { TicketLinks } from "./TicketLinks";
+import { TicketPanels } from "./TicketPanels";
 import { SideConversations } from "./SideConversations";
 import { importedFrom } from "@/components/imports/sources";
 import { useDisplay, type FieldPatch, type TicketWithFields } from "../fields";
@@ -267,7 +268,7 @@ export function TicketProperties({
             {...openFor("status")}
             value={t.status}
             placeholder={tr("props.setStatus")}
-            items={statusOrder.map((s) => ({ value: s, label: display.status(s), icon: <StatusIcon status={s} /> }))}
+            items={display.statuses(t.status).map((s) => ({ value: s, label: display.status(s), icon: <StatusIcon status={s} /> }))}
             onSelect={(v) => patch({ status: v as TicketStatus })}
             trigger={
               <PropButton disabled={!canEdit}>
@@ -480,6 +481,9 @@ export function TicketProperties({
           {t.contact ? <ContactCard contactId={t.contact.id} compact excludeTicketId={t.id} /> : <p className="text-xs text-fg-4">{tr("props.noContact")}</p>}
         </div>
       </section>
+
+      {/* What Shopify or the workspace's own systems know about the contact. */}
+      <TicketPanels ticketId={t.id} />
 
       <section className="flex flex-col gap-1.5 px-4 py-3.5 text-[12px]">
         <h3 className="label-caps mb-1">{tr("props.details")}</h3>

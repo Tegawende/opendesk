@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyArt, EmptyFact, EmptyState, GhostList } from "@/components/ui/empty";
 import { AnimatedNumber } from "@/components/motion";
 import { CheckBurst } from "@/components/tickets/CheckBurst";
+import { useDisplay } from "@/components/tickets/fields";
 import { shell } from "@/app/shellStore";
 
 const ghost = <GhostList variant="tickets" />;
@@ -59,6 +60,7 @@ export function InboxEmpty({
   tab?: TeamTab;
 }) {
   const { t } = useTranslation("inbox");
+  const finish = useDisplay().finishWords;
   const navigate = useNavigate();
   const me = useSession((s) => s.user?.id);
   const toFolder = (f: FolderId) => void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: f, ticketId: undefined } });
@@ -188,8 +190,8 @@ export function InboxEmpty({
           description={t("empty.solved.description")}
           action={<Button onClick={() => toFolder("open")}>{t("empty.goOpen")}</Button>}
           tips={[
-            { kbd: "e", label: t("empty.tips.solve") },
-            { kbd: "mod shift enter", label: t("empty.tips.sendSolve") },
+            { kbd: "e", label: finish.tip() },
+            { kbd: "mod shift enter", label: finish.sendTip() },
           ]}
         >
           {avg != null && n > 0 ? (

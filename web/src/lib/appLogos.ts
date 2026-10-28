@@ -1,5 +1,5 @@
 // Logos of the products opendesk connects to (integrations, contracts/integrations.md;
-// support channels, contracts/support-channels.md; phone systems, contracts/phone.md) and imports from: each vendor's own mark, shipped in public/logos/apps and drawn for
+// support channels, contracts/support-channels.md; phone systems, contracts/phone.md; ticket panels) and imports from: each vendor's own mark, shipped in public/logos/apps and drawn for
 // a light background. Keys are the catalog's provider keys and the import sources.
 
 const APP_LOGOS = new Set([
@@ -24,6 +24,7 @@ const APP_LOGOS = new Set([
   "zendesk",
   "helpscout",
   "freshdesk",
+  "shopify",
 ]);
 
 /** Where each product's pages live, so a plain link to one shows its logo. */
@@ -52,6 +53,8 @@ const APP_HOSTS: [string, string][] = [
   ["helpscout.net", "helpscout"],
   ["helpscout.com", "helpscout"],
   ["freshdesk.com", "freshdesk"],
+  ["myshopify.com", "shopify"],
+  ["shopify.com", "shopify"],
 ];
 
 /** The shipped logo for a product key, if any. */

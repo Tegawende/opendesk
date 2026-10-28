@@ -112,6 +112,7 @@ view to its owner.
 | `support_channel_destination.created` / `support_channel_destination.deleted` | agents | — | `{ "support_channel_destination": Destination }` / `{ "support_channel_destination_id" }` |
 | `phone_connection.created` / `phone_connection.updated` / `phone_connection.deleted` | agents | admins (`private`, `user:<uid>`) | `{ "phone_connection": PhoneConnection }` / `{ "phone_connection_id" }` (`contracts/phone.md`; never credentials). Updated on settings, rotated credentials and every new health state |
 | `ticket_link.created` / `ticket_link.deleted` | agents | — | `{ "ticket_id", "link": Link }` / `{ "ticket_id", "link_id" }` |
+| `ticket_panel.created` / `ticket_panel.updated` / `ticket_panel.deleted` | agents | — | `{ "panel": TicketPanel }` / `{ "panel_id" }` (`contracts/integrations.md` "Ticket panels"; never a token, a secret or a URL's path). Updated too when a lookup finds the credentials refused, or working again |
 | `import.created` / `import.updated` | agents | — | `{ "import": Import }` (`contracts/imports.md`; never credentials). `updated` on every state change and as it writes, at most once a second and after every page. Imported tickets, messages, contacts and articles publish no events of their own: refetch lists |
 | `collab.changed` / `collab.accounts` | agents | scoped to people | ids only (contracts/collab.md "Events") |
 | `chat.typing` (not stored; gateway only) | public | `contact:<wid>:<cid>` | `{ "ticket_id": "...", "user": {"id","name"} }` |

@@ -81,6 +81,17 @@ type fakeGmail struct {
 	settings fakeGmailSettings
 	// drafts are the drafts API and label colours (drafts_test.go).
 	drafts fakeGmailDrafts
+	// beforeDraftUpload, when set, runs as a draft upload arrives, before the fake takes
+	// its lock: a test pauses a save there (ai_drafts_test.go).
+	beforeDraftUpload func()
+	hookMu            sync.Mutex // guards beforeDraftUpload
+}
+
+// onDraftUpload sets (or, with nil, clears) beforeDraftUpload.
+func (g *fakeGmail) onDraftUpload(f func()) {
+	g.hookMu.Lock()
+	defer g.hookMu.Unlock()
+	g.beforeDraftUpload = f
 }
 
 type gmailFakeMsg struct {
@@ -124,6 +135,12 @@ func (g *fakeGmail) record(kind string, id string) {
 }
 
 func (g *fakeGmail) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	g.hookMu.Lock()
+	hook := g.beforeDraftUpload
+	g.hookMu.Unlock()
+	if hook != nil && strings.Contains(r.URL.Path, "/upload/gmail/v1/users/me/drafts") {
+		hook()
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if r.Header.Get("Authorization") == "" {
@@ -896,6 +913,43 @@ func TestGmailBusy(t *testing.T) {
 	}
 	if a = w.reload(a); a.Status != "active" || a.SyncFailures != 0 || a.LastError != "" {
 		t.Fatalf("back: %s %d %q", a.Status, a.SyncFailures, a.LastError)
+	}
+}
+
+// TestPace: an account's calls wait for a place while its provider's are taken, and for
+// their turn at its rate.
+func TestPace(t *testing.T) {
+	s := &service{paceLimits: map[string]paceLimit{ProviderMicrosoft: {perSecond: 20, burst: 1, atOnce: 2}}, paced: map[uuid.UUID]*pace{}}
+	a := &accountRow{ID: uuid.New(), Provider: ProviderMicrosoft}
+	if s.pace(a) != s.pace(a) || s.pace(&accountRow{ID: uuid.New(), Provider: ProviderIMAP}) != nil {
+		t.Fatal("one pace per account, none for IMAP")
+	}
+	ctx := context.Background()
+	r1, err1 := s.pace(a).wait(ctx)
+	r2, err2 := s.pace(a).wait(ctx)
+	if err1 != nil || err2 != nil {
+		t.Fatal(err1, err2)
+	}
+	short, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+	if _, err := s.pace(a).wait(short); err == nil {
+		t.Fatal("a third call at once did not wait for a place")
+	}
+	r1()
+	r2()
+	start := time.Now()
+	for range 3 {
+		r, err := s.pace(a).wait(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r()
+	}
+	if d := time.Since(start); d < 80*time.Millisecond {
+		t.Fatalf("three calls at 20 a second took %s", d)
+	}
+	if r, err := (*pace)(nil).wait(ctx); err != nil || r == nil {
+		t.Fatal("no pace")
 	}
 }
 
