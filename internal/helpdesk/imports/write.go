@@ -852,6 +852,8 @@ func (w *writer) follow(ctx context.Context, tx pgx.Tx, ticketID uuid.UUID, curr
 		return current, err
 	}
 	return id, nil
+}
+
 // written is which of msgs an earlier run wrote (their message records).
 func (w *writer) written(ctx context.Context, q db.Querier, msgs []source.Message) (map[string]bool, error) {
 	out := map[string]bool{}
