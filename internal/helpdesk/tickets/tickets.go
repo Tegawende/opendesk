@@ -900,6 +900,19 @@ func deleteTicket(ctx context.Context, tx pgx.Tx, wid, id uuid.UUID) error {
 
 // mergeTickets moves src's messages and tags into dst and closes src.
 func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uuid.UUID, actor Actor) error {
+	return merge(ctx, tx, d, wid, src, dst, actor, false)
+}
+
+// MergeFromSource merges src into dst because the source of an import merged them there
+// (contracts/imports.md "Bring over what changed"): src's messages, third-party threads and
+// labels move to dst and both timelines say so, as a person's merge, but src is closed the
+// way a sync closes a ticket its source retired, starting nothing (no automation,
+// notification or archiving in the mailbox's provider). The caller checks both tickets.
+func MergeFromSource(ctx context.Context, tx pgx.Tx, wid, src, dst uuid.UUID) error {
+	return merge(ctx, tx, nil, wid, src, dst, Actor{Type: "system", Meta: map[string]any{"via": "import"}}, true)
+}
+
+func merge(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uuid.UUID, actor Actor, quiet bool) error {
 	if src == dst {
 		return httpx.Validation("a ticket cannot be merged into itself")
 	}
@@ -952,8 +965,8 @@ func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uu
 			return err
 		}
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO ticket_tags (ticket_id, tag_id) SELECT $2, tag_id FROM ticket_tags WHERE ticket_id = $1
-		ON CONFLICT DO NOTHING`, src, dst); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO ticket_tags (ticket_id, tag_id, local_owned) SELECT $2, tag_id, local_owned FROM ticket_tags WHERE ticket_id = $1
+		ON CONFLICT (ticket_id, tag_id) DO UPDATE SET local_owned = ticket_tags.local_owned OR EXCLUDED.local_owned`, src, dst); err != nil {
 		return err
 	}
 	// Recompute the target's conversation fields from its messages.
@@ -982,9 +995,19 @@ func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uu
 		WHERE workspace_id = $1 AND id = $2`, wid, src, dst); err != nil {
 		return err
 	}
-	closed := domain.StatusClosed
-	if _, err := applyPatch(ctx, tx, d, wid, src, actor, Patch{Status: &closed, Snooze: Opt[time.Time]{Set: true, Null: true}}, applyOpts{}); err != nil {
-		return err
+	srcChanged := []string{"merged_into", "message_count"}
+	if quiet {
+		if _, err := tx.Exec(ctx, `UPDATE tickets SET status = 'closed', solved_at = COALESCE(solved_at, now()),
+			closed_at = COALESCE(closed_at, now()), waiting_since = NULL, unanswered_count = 0, snoozed_until = NULL
+			WHERE workspace_id = $1 AND id = $2`, wid, src); err != nil {
+			return err
+		}
+		srcChanged = append(srcChanged, "status")
+	} else {
+		closed := domain.StatusClosed
+		if _, err := applyPatch(ctx, tx, d, wid, src, actor, Patch{Status: &closed, Snooze: Opt[time.Time]{Set: true, Null: true}}, applyOpts{}); err != nil {
+			return err
+		}
 	}
 	// The source's timeline names the target only when everyone who sees the source may see
 	// it too: a target in another, private team stays unnamed.
@@ -1008,7 +1031,7 @@ func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uu
 	if _, err := domain.LogActivity(ctx, tx, wid, dst, actor.Type, actor.UserID, "merged", from); err != nil {
 		return err
 	}
-	if err := domain.PublishTicketUpdated(ctx, tx, wid, src, []string{"merged_into", "message_count"}); err != nil {
+	if err := domain.PublishTicketUpdated(ctx, tx, wid, src, srcChanged); err != nil {
 		return err
 	}
 	return domain.PublishTicketUpdated(ctx, tx, wid, dst, []string{"messages", "tags", "last_message_at"})

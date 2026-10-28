@@ -891,80 +891,144 @@ func TestSync(t *testing.T) {
 	e.Do("POST", "/v1/imports/"+x.ID.String()+"/sync", e.admin, nil).Want(t, 409)
 }
 
-// TestSyncFollowsTheSourcesRequester: a source that gives a ticket another customer after
-// it came over (Gorgias moves the automatic mail a shop sends to the buyer once they answer;
-// Zendesk and Front let an agent change the requester) has the sync give the ticket that
-// contact here, as it brings the source's status and assignee. A ticket the team works here
-// keeps its contact, and so does a live chat.
-func TestSyncFollowsTheSourcesRequester(t *testing.T) {
+// TestSyncFollowsTheSourcesMerges: a source that merges a ticket into another moves its
+// messages there with their ids (Gorgias, Front). The merged ticket then leaves the
+// listings (Gorgias: GET /tickets/{id} answers with the survivor) or answers with a
+// redirect (Front: 301 on its messages, so Load marks it to skip). A sync merges its copy
+// here into the survivor's, as a person's merge but starting nothing, also when the
+// survivor is new to the import; it never merges a ticket the team worked here or one that
+// still holds another source ticket's messages, and never writes a moved message twice.
+func TestSyncFollowsTheSourcesMerges(t *testing.T) {
 	e := newEnv(t)
-	shop := source.Person{ID: "u7", Email: "info@shop.test", Name: "Shop"}
-	erin := source.Person{ID: "u8", Email: "erin@customer.test", Name: "Erin"}
-	mail := func(id, subject string) source.Ticket {
-		return source.Ticket{ID: id, Ref: "#" + id, Subject: subject, Status: "open", Channel: "email", Requester: &shop,
-			CreatedAt: base.Add(72 * time.Hour), UpdatedAt: base.Add(72 * time.Hour), Loaded: true,
-			Messages: []source.Message{{ID: id + "-1", Agent: true, AuthorID: "a1", Text: "Your order has shipped",
-				To: []string{erin.Email}, CreatedAt: base.Add(72 * time.Hour)}}}
+	now := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	carol := source.Person{ID: "u2", Email: "carol@customer.test", Name: "Carol"}
+	msg := func(id string) source.Message {
+		return source.Message{ID: id, Author: carol, Text: "Message " + id, CreatedAt: now.Add(-time.Hour)}
 	}
-	e.f.tickets = append(e.f.tickets, mail("106", "Order shipped"), mail("107", "Order shipped"), mail("108", "Order shipped"))
-	x := e.start(t, e.zendeskBody())
+	ticket := func(id string, msgs ...source.Message) source.Ticket {
+		return source.Ticket{ID: id, Ref: "#" + id, Subject: "Order " + id, Status: "open", Channel: "email", Requester: &carol,
+			CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: now, Loaded: true, Messages: msgs}
+	}
+	e.f.mu.Lock()
+	e.f.scan.Tickets, e.f.scan.Articles, e.f.scan.HasArticles, e.f.articles = 8, 0, false, nil
+	e.f.tickets = []source.Ticket{
+		ticket("201", msg("201-1")), ticket("202", msg("202-1")), ticket("203", msg("203-1")),
+		ticket("204", msg("204-1")), ticket("205", msg("205-1")), ticket("206", msg("206-1")),
+		ticket("207", msg("207-1")), ticket("208", msg("208-1"), msg("208-2")),
+	}
+	e.f.mu.Unlock()
+	body := e.zendeskBody()
+	body["options"] = map[string]any{"tickets": true, "articles": false, "attachments": true, "since": nil, "mailbox_id": nil,
+		"tag": "zendesk-import", "statuses": "keep", "articles_as_drafts": false}
+	x := e.start(t, body)
 	if done := e.drive(t, x.ID); done.Status != StatusCompleted {
-		t.Fatalf("first run %s %s", done.Status, done.LastError)
+		t.Fatalf("first run %s (problems %+v)", done.Status, done.Problems)
 	}
-	contactOf := func(ref string) string {
-		t.Helper()
-		var email string
-		e.Scalar(`SELECT COALESCE(c.email::text, '') FROM tickets t JOIN contacts c ON c.id = t.contact_id WHERE t.id = $1`, &email, e.ticketByRef(t, ref))
-		return email
+	local := map[string]uuid.UUID{}
+	for _, ref := range []string{"201", "202", "203", "204", "205", "206", "207", "208"} {
+		local[ref] = e.ticketByRef(t, ref)
 	}
-	// The team writes a note on 107 here, and someone picks 108's contact here.
+	// The team writes a note on 206 here.
 	err := e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
-		_, err := domain.AddMessage(e.Ctx, tx, e.D.Jobs, domain.NewMessage{WorkspaceID: e.ws.ID, TicketID: e.ticketByRef(t, "107"), Kind: "note",
-			Direction: "outbound", AuthorType: "user", AuthorUserID: &e.ws.Admin.ID, BodyText: "Asked the carrier"})
+		_, err := domain.AddMessage(e.Ctx, tx, e.D.Jobs, domain.NewMessage{WorkspaceID: e.ws.ID, TicketID: local["206"], Kind: "note",
+			Direction: "outbound", AuthorType: "user", AuthorUserID: &e.ws.Admin.ID, BodyText: "Called the carrier"})
 		return err
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var dora uuid.UUID
-	e.Scalar(`SELECT id FROM contacts WHERE workspace_id = $1 AND email = 'dora@customer.test'`, &dora, e.ws.ID)
-	e.Do("PATCH", "/v1/tickets/"+e.ticketByRef(t, "108").String(), e.admin, map[string]any{"contact_id": dora.String()}).Want(t, 200)
+	e.Exec(`DELETE FROM river_job WHERE args->>'workspace_id' = $1`, e.ws.ID.String())
+	_, seq := e.Events(e.ws.ID, 0)
 
-	// The buyer answers each mail and the source makes them its requester; the chat 104
-	// gets another requester too, and 101 none.
-	now := time.Now().UTC().Truncate(time.Second)
+	// The source merges 202 into 201 and 203 into 210, a ticket it made since (both merged
+	// ones leave the listings), and 205 into 204 (205 answers with a redirect: Load skips
+	// it); 206, worked here, into 207; and moves 208's first message into 209, 208 going on
+	// with its second.
+	later := now.Add(30 * time.Second)
 	e.f.mu.Lock()
+	e.f.tickets = []source.Ticket{
+		ticket("201", msg("201-1"), msg("202-1")),
+		ticket("205"),
+		ticket("204", msg("204-1"), msg("205-1")),
+		ticket("207", msg("207-1"), msg("206-1")),
+		ticket("208", msg("208-1"), msg("208-2")),
+		ticket("209", msg("209-1"), msg("208-1")),
+		ticket("210", msg("203-1"), msg("210-1")),
+	}
 	for i := range e.f.tickets {
-		tk := &e.f.tickets[i]
-		switch tk.ID {
-		case "106", "107", "108":
-			tk.Requester, tk.UpdatedAt = &erin, now
-			tk.Messages = append(tk.Messages, source.Message{ID: tk.ID + "-2", Author: erin, Text: "Where is it?", CreatedAt: now.Add(-time.Minute)})
-		case "104":
-			tk.Requester, tk.UpdatedAt = &erin, now
-		case "101":
-			tk.Requester, tk.UpdatedAt = nil, now
+		if e.f.tickets[i].ID != "208" {
+			e.f.tickets[i].UpdatedAt = later
 		}
 	}
+	e.f.tickets[1].Loaded = false
+	e.f.tickets[4].Messages = []source.Message{msg("208-2")}
+	e.f.skipOnLoad = map[string]bool{"205": true}
 	e.f.mu.Unlock()
 	e.Do("POST", "/v1/imports/"+x.ID.String()+"/sync", e.admin, nil).Want(t, 200)
 	if synced := e.drive(t, x.ID); synced.Status != StatusCompleted {
-		t.Fatalf("sync %s %s", synced.Status, synced.LastError)
+		t.Fatalf("sync %s %s (problems %+v)", synced.Status, synced.LastError, synced.Problems)
 	}
+	local["209"], local["210"] = e.ticketByRef(t, "209"), e.ticketByRef(t, "210")
 
-	if got := contactOf("106"); got != erin.Email {
-		t.Errorf("106's contact %q, want the source's new requester", got)
+	type state struct {
+		status string
+		merged *uuid.UUID
+		n      int
 	}
-	var author string
-	e.Scalar(`SELECT COALESCE(c.email::text, '') FROM import_records r JOIN messages m ON m.id = r.local_id
-		LEFT JOIN contacts c ON c.id = m.author_contact_id WHERE r.workspace_id = $1 AND r.kind = 'message' AND r.external_id = '106-2'`, &author, e.ws.ID)
-	if author != erin.Email {
-		t.Errorf("106's new message is by %q, want the new requester", author)
+	of := func(id uuid.UUID) state {
+		var s state
+		e.Scalar(`SELECT status FROM tickets WHERE id = $1`, &s.status, id)
+		e.Scalar(`SELECT merged_into_id FROM tickets WHERE id = $1`, &s.merged, id)
+		s.n = e.count(t, `SELECT count(*) FROM messages WHERE ticket_id = $1`, id)
+		return s
 	}
-	for ref, want := range map[string]string{"107": shop.Email, "108": "dora@customer.test", "104": "carol@customer.test", "101": "bob@customer.test"} {
-		if got := contactOf(ref); got != want {
-			t.Errorf("%s's contact %q, want %q kept", ref, got, want)
+	for _, c := range []struct{ src, dst string }{{"202", "201"}, {"203", "210"}, {"205", "204"}} {
+		s, d := of(local[c.src]), of(local[c.dst])
+		if s.status != "closed" || s.merged == nil || *s.merged != local[c.dst] || s.n != 0 {
+			t.Errorf("%s, merged into %s in the source: %+v, want closed, merged into it, no messages left", c.src, c.dst, s)
 		}
+		if d.n != 2 || d.merged != nil || d.status != "open" {
+			t.Errorf("%s, which %s was merged into: %+v, want open with both messages", c.dst, c.src, d)
+		}
+		var count int
+		e.Scalar(`SELECT message_count FROM tickets WHERE id = $1`, &count, local[c.dst])
+		if count != 2 {
+			t.Errorf("%s counts %d messages, want 2", c.dst, count)
+		}
+		for _, id := range []uuid.UUID{local[c.src], local[c.dst]} {
+			if n := e.count(t, `SELECT count(*) FROM activities WHERE ticket_id = $1 AND type = 'merged' AND actor_type = 'system'
+				AND data->>'via' = 'import'`, id); n != 1 {
+				t.Errorf("merge of %s into %s logged %d times on %s", c.src, c.dst, n, id)
+			}
+		}
+	}
+	if s := of(local["206"]); s.merged != nil || s.n != 2 || s.status != "open" {
+		t.Errorf("206, worked here, was merged away: %+v", s)
+	}
+	if s := of(local["207"]); s.n != 1 {
+		t.Errorf("207 holds %d messages, want its own only: 206-1 stays with 206", s.n)
+	}
+	if s := of(local["208"]); s.merged != nil || s.n != 2 || s.status != "open" {
+		t.Errorf("208, still in the source, was merged away: %+v", s)
+	}
+	if s := of(local["209"]); s.n != 1 {
+		t.Errorf("209 holds %d messages, want its own only", s.n)
+	}
+	// Every source message is here once: 9 from the first run, 209-1, 210-1 and the note.
+	if n := e.count(t, `SELECT count(*) FROM messages WHERE workspace_id = $1`, e.ws.ID); n != 12 {
+		t.Errorf("%d messages, want 12 (none written twice)", n)
+	}
+	// A merge the source made starts nothing here.
+	if n := e.count(t, `SELECT count(*) FROM river_job WHERE args->>'workspace_id' = $1 AND kind = ANY($2)`, e.ws.ID.String(),
+		[]string{jobs.SendMessageArgs{}.Kind(), jobs.SendTicketEmailArgs{}.Kind(), jobs.TicketTriggerArgs{}.Kind()}); n != 0 {
+		t.Errorf("%d send or automation jobs queued by the sync's merges", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM notifications WHERE workspace_id = $1 AND ticket_id IS NOT NULL`, e.ws.ID); n != 0 {
+		t.Errorf("%d notifications for the sync's merges", n)
+	}
+	types, _ := e.Events(e.ws.ID, seq)
+	if !slices.Contains(types, "ticket.updated") {
+		t.Errorf("events %v, want the merged tickets announced", types)
 	}
 }
 
@@ -1440,5 +1504,160 @@ func TestNULBytesDoNotFailATicket(t *testing.T) {
 	}
 	if bob.Name != "Bob\x00 Buyer" {
 		t.Error("the source's data was changed in place")
+	}
+}
+
+// TestSyncTakesOffTheLabelsTheSourceTookOff: a sync takes off a ticket the labels it gave
+// it from the source that the source has since taken off, whether the import made the label
+// or found it here, and keeps the import's own label and any label someone put on the
+// ticket here. A ticket recorded before the import kept its labels stays as it is.
+func TestSyncTakesOffTheLabelsTheSourceTookOff(t *testing.T) {
+	e := newEnv(t)
+	// "vip" is a label the workspace already had: the import finds it.
+	err := e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
+		_, err := domain.CreateLabel(e.Ctx, tx, e.ws.ID, "vip")
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.f.mu.Lock()
+	e.f.tickets = append(e.f.tickets, source.Ticket{ID: "106", Ref: "#106", Subject: "Old", Status: "open", Channel: "email",
+		Requester: &source.Person{ID: "u2", Email: "carol@customer.test"}, Tags: []string{"legacy"}, CreatedAt: base.Add(72 * time.Hour),
+		UpdatedAt: base.Add(72 * time.Hour), Loaded: true,
+		Messages: []source.Message{{ID: "106-1", Author: source.Person{Email: "carol@customer.test"}, Text: "Hi", CreatedAt: base.Add(72 * time.Hour)}}})
+	e.f.mu.Unlock()
+	x := e.start(t, e.zendeskBody())
+	if done := e.drive(t, x.ID); done.Status != StatusCompleted {
+		t.Fatalf("first run %s %s", done.Status, done.LastError)
+	}
+	t101, t104, t106 := e.ticketByRef(t, "101"), e.ticketByRef(t, "104"), e.ticketByRef(t, "106")
+	// Someone labels 101 urgent and 104 billing here; 106 was recorded before imports kept
+	// the labels they gave.
+	e.Do("PATCH", "/v1/tickets/"+t101.String(), e.admin, map[string]any{"add_tags": []string{"urgent"}}).Want(t, 200)
+	e.Do("PATCH", "/v1/tickets/"+t104.String(), e.admin, map[string]any{"add_tags": []string{"billing"}}).Want(t, 200)
+	e.Exec(`UPDATE import_records SET tag_ids = NULL WHERE workspace_id = $1 AND kind = 'ticket' AND external_id = '106'`, e.ws.ID)
+
+	// Each sync sees a later change, within the sync's window.
+	changed := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	sync := func(change func(byID map[string]*source.Ticket)) {
+		t.Helper()
+		changed = changed.Add(time.Second)
+		e.f.mu.Lock()
+		byID := map[string]*source.Ticket{}
+		for i := range e.f.tickets {
+			e.f.tickets[i].UpdatedAt = changed
+			byID[e.f.tickets[i].ID] = &e.f.tickets[i]
+		}
+		change(byID)
+		e.f.mu.Unlock()
+		e.Do("POST", "/v1/imports/"+x.ID.String()+"/sync", e.admin, nil).Want(t, 200)
+		if synced := e.drive(t, x.ID); synced.Status != StatusCompleted {
+			t.Fatalf("sync %s %s", synced.Status, synced.LastError)
+		}
+	}
+	// The source takes vip off 101 and adds refund; gives 104 billing too; takes legacy off 106.
+	sync(func(byID map[string]*source.Ticket) {
+		byID["101"].Tags = []string{"login", "refund"}
+		byID["104"].Tags = []string{"vip", "billing"}
+		byID["106"].Tags = nil
+	})
+	if got := e.labels(t, t101); !slices.Equal(got, []string{"login", "refund", "urgent", "zendesk-import"}) {
+		t.Errorf("101 labels %v, want vip gone, login and refund from the source, urgent (put here) and the import's kept", got)
+	}
+	if got := e.labels(t, t106); !slices.Equal(got, []string{"legacy", "zendesk-import"}) {
+		t.Errorf("106 labels %v, want them kept: its record does not say what the import gave", got)
+	}
+	// Then the source takes every label off 104 and 101.
+	sync(func(byID map[string]*source.Ticket) {
+		byID["101"].Tags = nil
+		byID["104"].Tags = nil
+	})
+	if got := e.labels(t, t101); !slices.Equal(got, []string{"urgent", "zendesk-import"}) {
+		t.Errorf("101 labels %v, want only urgent (put here) and the import's", got)
+	}
+	if got := e.labels(t, t104); !slices.Equal(got, []string{"billing", "zendesk-import"}) {
+		t.Errorf("104 labels %v, want vip gone, billing kept: someone put it on here too", got)
+	}
+	// The labels stay in the workspace.
+	if n := e.count(t, `SELECT count(*) FROM tags WHERE workspace_id = $1 AND name IN ('vip', 'refund', 'legacy')`, e.ws.ID); n != 3 {
+		t.Errorf("%d of the labels left in the workspace, want 3", n)
+	}
+}
+
+// TestSyncFollowsTheSourcesRequester: a source that gives a ticket another customer after
+// it came over (Gorgias moves the automatic mail a shop sends to the buyer once they answer;
+// Zendesk and Front let an agent change the requester) has the sync give the ticket that
+// contact here, as it brings the source's status and assignee. A ticket the team works here
+// keeps its contact, and so does a live chat.
+func TestSyncFollowsTheSourcesRequester(t *testing.T) {
+	e := newEnv(t)
+	shop := source.Person{ID: "u7", Email: "info@shop.test", Name: "Shop"}
+	erin := source.Person{ID: "u8", Email: "erin@customer.test", Name: "Erin"}
+	mail := func(id, subject string) source.Ticket {
+		return source.Ticket{ID: id, Ref: "#" + id, Subject: subject, Status: "open", Channel: "email", Requester: &shop,
+			CreatedAt: base.Add(72 * time.Hour), UpdatedAt: base.Add(72 * time.Hour), Loaded: true,
+			Messages: []source.Message{{ID: id + "-1", Agent: true, AuthorID: "a1", Text: "Your order has shipped",
+				To: []string{erin.Email}, CreatedAt: base.Add(72 * time.Hour)}}}
+	}
+	e.f.tickets = append(e.f.tickets, mail("106", "Order shipped"), mail("107", "Order shipped"), mail("108", "Order shipped"))
+	x := e.start(t, e.zendeskBody())
+	if done := e.drive(t, x.ID); done.Status != StatusCompleted {
+		t.Fatalf("first run %s %s", done.Status, done.LastError)
+	}
+	contactOf := func(ref string) string {
+		t.Helper()
+		var email string
+		e.Scalar(`SELECT COALESCE(c.email::text, '') FROM tickets t JOIN contacts c ON c.id = t.contact_id WHERE t.id = $1`, &email, e.ticketByRef(t, ref))
+		return email
+	}
+	// The team writes a note on 107 here, and someone picks 108's contact here.
+	err := e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
+		_, err := domain.AddMessage(e.Ctx, tx, e.D.Jobs, domain.NewMessage{WorkspaceID: e.ws.ID, TicketID: e.ticketByRef(t, "107"), Kind: "note",
+			Direction: "outbound", AuthorType: "user", AuthorUserID: &e.ws.Admin.ID, BodyText: "Asked the carrier"})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dora uuid.UUID
+	e.Scalar(`SELECT id FROM contacts WHERE workspace_id = $1 AND email = 'dora@customer.test'`, &dora, e.ws.ID)
+	e.Do("PATCH", "/v1/tickets/"+e.ticketByRef(t, "108").String(), e.admin, map[string]any{"contact_id": dora.String()}).Want(t, 200)
+
+	// The buyer answers each mail and the source makes them its requester; the chat 104
+	// gets another requester too, and 101 none.
+	now := time.Now().UTC().Truncate(time.Second)
+	e.f.mu.Lock()
+	for i := range e.f.tickets {
+		tk := &e.f.tickets[i]
+		switch tk.ID {
+		case "106", "107", "108":
+			tk.Requester, tk.UpdatedAt = &erin, now
+			tk.Messages = append(tk.Messages, source.Message{ID: tk.ID + "-2", Author: erin, Text: "Where is it?", CreatedAt: now.Add(-time.Minute)})
+		case "104":
+			tk.Requester, tk.UpdatedAt = &erin, now
+		case "101":
+			tk.Requester, tk.UpdatedAt = nil, now
+		}
+	}
+	e.f.mu.Unlock()
+	e.Do("POST", "/v1/imports/"+x.ID.String()+"/sync", e.admin, nil).Want(t, 200)
+	if synced := e.drive(t, x.ID); synced.Status != StatusCompleted {
+		t.Fatalf("sync %s %s", synced.Status, synced.LastError)
+	}
+
+	if got := contactOf("106"); got != erin.Email {
+		t.Errorf("106's contact %q, want the source's new requester", got)
+	}
+	var author string
+	e.Scalar(`SELECT COALESCE(c.email::text, '') FROM import_records r JOIN messages m ON m.id = r.local_id
+		LEFT JOIN contacts c ON c.id = m.author_contact_id WHERE r.workspace_id = $1 AND r.kind = 'message' AND r.external_id = '106-2'`, &author, e.ws.ID)
+	if author != erin.Email {
+		t.Errorf("106's new message is by %q, want the new requester", author)
+	}
+	for ref, want := range map[string]string{"107": shop.Email, "108": "dora@customer.test", "104": "carol@customer.test", "101": "bob@customer.test"} {
+		if got := contactOf(ref); got != want {
+			t.Errorf("%s's contact %q, want %q kept", ref, got, want)
+		}
 	}
 }

@@ -21,6 +21,7 @@ type Connection = { id: string; provider: string; name: string;
   health_detail: string; health_checked_at?: string; webhook_url: string; created_at: string };
 type AvailableDestination = { id: string; name: string; kind?: string; available: boolean };
 type Destination = { id: string; connection_id: string; team_id: string|null;
+	priority: "low"|"normal"|"high"|"urgent"|null;
   external_channel_id: string; external_channel_name: string; enabled: boolean;
   include_notes: boolean; message_limit: number; created_at: string };
 type Delivery = { event_seq: number; event_type: string; ticket_number?: number;
@@ -47,7 +48,7 @@ type Operations = { window_started_at: string; generated_at: string;
 | GET | `/v1/support-channels/deliveries` | admin, `settings:read` | `limit?`, `cursor?` → `Page<Delivery>` |
 | GET | `/v1/support-channels/operations` | admin, `settings:read` | → `Operations`, a rolling 24-hour view |
 | POST | `/v1/support-channels/deliveries/{event_seq}/retry` | admin user | → 202 `{event_seq,status:"queued"}` for a failed event |
-| POST | `/v1/support-channels/destinations` | admin user | `{connection_id,team_id?,external_channel_id,external_channel_name?,include_notes?,message_limit?}` → 201 `Destination` |
+| POST | `/v1/support-channels/destinations` | admin user | `{connection_id,team_id?,priority?,external_channel_id,external_channel_name?,include_notes?,message_limit?}` → 201 `Destination` |
 | DELETE | `/v1/support-channels/destinations/{id}` | admin user | → 204, including its thread mappings |
 | POST | `/v1/me/support-channel-link-code` | agent user | → 201 `{code,expires_at}` |
 | POST | `/v1/support-channels/hooks/{provider}/{connectionId}` | signed provider | provider payload → provider acknowledgement |
@@ -57,11 +58,17 @@ ticket access to another service, so API keys get `403` (as integrations' connec
 do). An AI client's OAuth grant may manage connections and destinations with
 `settings:write`, never create a link code.
 
-A destination maps one provider connection and one public team to an external channel.
-`team_id: null` is that connection's fallback. A specific team mapping wins over the
-fallback. Every matching connection receives the event, so one team can be mirrored to
-Slack, Discord and Telegram at the same time. A connection can have only one destination
-per team and an external channel can appear only once on that connection.
+A destination maps one provider connection and an optional public team and priority to an
+external channel. A null team matches any team; a null priority matches any priority.
+For one connection, the most specific match wins in this order: team and priority, team,
+priority, then the all-team/all-priority fallback. This keeps an existing team route ahead
+of a new priority-only route. Every matching connection receives the event, so a team can
+be mirrored to Slack, Discord and Telegram at the same time. A connection can have one
+destination per team/priority combination, and an external channel can appear only once on
+that connection. Once a thread exists, priority changes keep updating that thread while
+its destination is enabled and still matches the ticket's team. Priority routing selects
+the destination for the first post. A move to a team with its own destination posts to
+that team's destination.
 
 Private teams cannot have a destination. The dispatcher also rejects any event marked
 with private-team visibility, even if old or manually written data contains a mapping.

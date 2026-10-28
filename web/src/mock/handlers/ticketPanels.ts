@@ -226,7 +226,7 @@ function blocksFor(p: TicketPanel, t: { number: number; subject: string }): Pane
       ],
       links: [
         { label: "Open in the shop", url: `https://admin.shopify.com/store/lumen-store/orders/${5000 + so}`, icon: "shopify" },
-        { label: "Open in the ERP", url: `https://erp.example.com/odoo/sales/${so}`, icon: "receipt" },
+        { label: "Open in Odoo", url: `https://erp.example.com/odoo/sales/${so}`, icon: "odoo" },
       ],
       fields: [
         { label: "Promised", value: { type: "date", value: iso(2), relative: true } },
@@ -247,7 +247,7 @@ function blocksFor(p: TicketPanel, t: { number: number; subject: string }): Pane
       subtitle: "Web shop · delivered",
       collapsed: true,
       badges: [{ text: "Delivered", tone: "success" }],
-      links: [{ label: "Open in the ERP", url: `https://erp.example.com/odoo/sales/${so - 7}`, icon: "receipt" }],
+      links: [{ label: "Open in Odoo", url: `https://erp.example.com/odoo/sales/${so - 7}`, icon: "odoo" }],
       fields: [{ label: "Delivered", value: { type: "date", value: iso(-34) } }],
       lines: [{ quantity: 1, title: "Snoopy table lamp", subtitle: "Black", value: { type: "money", amount: "1150.00", currency: "EUR" } }],
       footer: [{ label: "Total", value: { type: "money", amount: "1150.00", currency: "EUR" } }],

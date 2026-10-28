@@ -25,6 +25,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/email"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/helpdesk/imports/source"
+	"github.com/useopendesk/opendesk/internal/helpdesk/tickets"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
 	"github.com/useopendesk/opendesk/internal/plan"
@@ -510,20 +511,13 @@ func (w *writer) writeTicket(ctx context.Context, t *source.Ticket) (outcome, er
 		w.problem("Ticket "+t.Ref, fmt.Sprintf("Only the first %d messages were imported.", maxMessages))
 		msgs = msgs[:maxMessages]
 	}
-	if prev != nil {
-		// Only messages no run wrote yet need their files.
-		var fresh []source.Message
-		for _, m := range msgs {
-			r, err := w.lookup(ctx, w.s.d.DB.Pool, "message", m.ID)
-			if err != nil {
-				return 0, err
-			}
-			if r == nil {
-				fresh = append(fresh, m)
-			}
-		}
-		msgs = fresh
+	// Only messages no run wrote yet need their files. A new ticket may have some too: the
+	// source moved them from a ticket an earlier run wrote (absorb).
+	written, err := w.written(ctx, w.s.d.DB.Pool, msgs)
+	if err != nil {
+		return 0, err
 	}
+	msgs = slices.DeleteFunc(slices.Clone(msgs), func(m source.Message) bool { return written[m.ID] })
 	counts := w.x.Counts
 	files, err := w.copyFiles(ctx, t, msgs)
 	if err != nil {
@@ -614,20 +608,23 @@ func (w *writer) writeTicketTx(ctx context.Context, tx pgx.Tx, t *source.Ticket,
 		ticketID = nt.ID
 	}
 
+	// Messages the source moved here from a ticket an earlier run wrote bring that ticket along.
+	if err := w.absorb(ctx, tx, ticketID, t); err != nil {
+		return 0, err
+	}
+	written, err := w.written(ctx, tx, msgs)
+	if err != nil {
+		return 0, err
+	}
+
 	var requesterEmail string
 	if t.Requester != nil {
 		requesterEmail = strings.ToLower(strings.TrimSpace(t.Requester.Email))
 	}
 	added := 0
 	for _, m := range msgs {
-		if prev != nil {
-			r, err := w.lookup(ctx, tx, "message", m.ID)
-			if err != nil {
-				return 0, err
-			}
-			if r != nil {
-				continue
-			}
+		if written[m.ID] {
+			continue
 		}
 		nm, ok, err := w.message(ctx, tx, ticketID, contactID, requesterEmail, m, files[m.ID], t.Subject, t.Channel == "email")
 		if err != nil {
@@ -666,10 +663,21 @@ func (w *writer) writeTicketTx(ctx context.Context, tx pgx.Tx, t *source.Ticket,
 	if err := w.settle(ctx, tx, ticketID, t); err != nil {
 		return 0, err
 	}
-	if err := w.label(ctx, tx, ticketID, t); err != nil {
+	given, err := w.label(ctx, tx, ticketID, t)
+	if err != nil {
 		return 0, err
 	}
+	if prev != nil {
+		if err := w.unlabel(ctx, tx, t.ID, ticketID, given); err != nil {
+			return 0, err
+		}
+	}
 	if err := w.remember(ctx, tx, "ticket", t.ID, ticketID, result == outcomeCreated, updatedAt); err != nil {
+		return 0, err
+	}
+	// What the source gave it, for the next sync's unlabel.
+	if _, err := tx.Exec(ctx, `UPDATE import_records SET tag_ids = $5 WHERE workspace_id = $1 AND source = $2 AND account_key = $3
+		AND kind = 'ticket' AND external_id = $4`, wid, w.x.Source, w.x.AccountKey, t.ID, given); err != nil {
 		return 0, err
 	}
 	switch result {
@@ -844,6 +852,87 @@ func (w *writer) follow(ctx context.Context, tx pgx.Tx, ticketID uuid.UUID, curr
 		return current, err
 	}
 	return id, nil
+// written is which of msgs an earlier run wrote (their message records).
+func (w *writer) written(ctx context.Context, q db.Querier, msgs []source.Message) (map[string]bool, error) {
+	out := map[string]bool{}
+	if len(msgs) == 0 {
+		return out, nil
+	}
+	ext := make([]string, 0, len(msgs))
+	for _, m := range msgs {
+		ext = append(ext, m.ID)
+	}
+	found, err := pgxCollect[string](q.Query(ctx, `SELECT external_id FROM import_records WHERE workspace_id = $1 AND source = $2
+		AND account_key = $3 AND kind = 'message' AND external_id = ANY($4)`, w.x.WorkspaceID, w.x.Source, w.x.AccountKey, ext))
+	for _, id := range found {
+		out[id] = true
+	}
+	return out, err
+}
+
+// absorb merges into the ticket written for t (into) the tickets here that hold messages
+// of t an earlier run wrote. The source moved those messages into t, keeping their ids:
+// Gorgias and Front merge a ticket into another that way, and the merged one then leaves
+// their listings. Left alone, its copy here keeps half the conversation, open, and the
+// copy of t never gets that half. The merge is a person's merge (tickets.MergeFromSource)
+// that starts nothing. A ticket that holds anything else stays as it is: a message no
+// import wrote (the team worked it here, as undo counts it) or one the source keeps
+// elsewhere (it is still another live source ticket's copy).
+func (w *writer) absorb(ctx context.Context, tx pgx.Tx, into uuid.UUID, t *source.Ticket) error {
+	if len(t.Messages) == 0 {
+		return nil
+	}
+	ext := make([]string, 0, len(t.Messages))
+	for _, m := range t.Messages {
+		ext = append(ext, m.ID)
+	}
+	wid := w.x.WorkspaceID
+	others, err := pgxCollect[uuid.UUID](tx.Query(ctx, `SELECT DISTINCT m.ticket_id FROM import_records r
+		JOIN messages m ON m.workspace_id = r.workspace_id AND m.id = r.local_id
+		JOIN tickets o ON o.workspace_id = m.workspace_id AND o.id = m.ticket_id
+		WHERE r.workspace_id = $1 AND r.source = $2 AND r.account_key = $3 AND r.kind = 'message' AND r.external_id = ANY($4)
+		  AND m.ticket_id <> $5 AND o.deleted_at IS NULL AND o.merged_into_id IS NULL
+		  AND EXISTS (SELECT 1 FROM tickets d WHERE d.workspace_id = $1 AND d.id = $5 AND d.deleted_at IS NULL AND d.merged_into_id IS NULL)
+		ORDER BY m.ticket_id`, wid, w.x.Source, w.x.AccountKey, ext, into))
+	if err != nil {
+		return err
+	}
+	// Take every participating ticket lock in the same id order as a manual merge.
+	// Eligibility is read in later statements, after any waiting writer has committed.
+	locks := append(slices.Clone(others), into)
+	if _, err := pgxCollect[uuid.UUID](tx.Query(ctx, `SELECT id FROM tickets
+		WHERE workspace_id = $1 AND id = ANY($2) ORDER BY id FOR UPDATE`, wid, locks)); err != nil {
+		return err
+	}
+	for _, o := range others {
+		var eligible bool
+		if err := tx.QueryRow(ctx, `SELECT
+			(SELECT count(*) = 2 FROM tickets WHERE workspace_id = $1 AND id = ANY($2)
+				AND deleted_at IS NULL AND merged_into_id IS NULL)
+			AND EXISTS (SELECT 1 FROM messages m JOIN import_records r ON r.workspace_id = m.workspace_id AND r.local_id = m.id
+				WHERE m.workspace_id = $1 AND m.ticket_id = $3 AND r.kind = 'message'
+				AND r.source = $4 AND r.account_key = $5 AND r.external_id = ANY($6))`,
+			wid, []uuid.UUID{o, into}, o, w.x.Source, w.x.AccountKey, ext).Scan(&eligible); err != nil {
+			return err
+		}
+		if !eligible {
+			continue
+		}
+		var other bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM messages m WHERE m.workspace_id = $1 AND m.ticket_id = $2
+			AND NOT EXISTS (SELECT 1 FROM import_records r WHERE r.workspace_id = $1 AND r.source = $3 AND r.account_key = $4
+				AND r.kind = 'message' AND r.external_id = ANY($5) AND r.local_id = m.id))`,
+			wid, o, w.x.Source, w.x.AccountKey, ext).Scan(&other); err != nil {
+			return err
+		}
+		if other {
+			continue
+		}
+		if err := tickets.MergeFromSource(ctx, tx, wid, o, into); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // retire closes the copy of a ticket the source has since left out (trashed, spam, or
@@ -891,26 +980,55 @@ func (w *writer) settle(ctx context.Context, tx pgx.Tx, id uuid.UUID, t *source.
 var tagUnsafe = regexp.MustCompile(`[^\p{L}\p{N} _\-./:&+#]+`)
 
 // label adds the import's label and the ticket's own labels. A label the workspace cannot
-// take (too many labels, one that does not apply to tickets) is left out.
-func (w *writer) label(ctx context.Context, tx pgx.Tx, ticketID uuid.UUID, t *source.Ticket) error {
+// take (too many labels, one that does not apply to tickets) is left out. It answers the
+// labels it gave from the source's, never nil.
+func (w *writer) label(ctx context.Context, tx pgx.Tx, ticketID uuid.UUID, t *source.Ticket) ([]uuid.UUID, error) {
 	names := []string{}
 	if w.x.Options.Tag != "" {
 		names = append(names, w.x.Options.Tag)
 	}
 	names = append(names, t.Tags...)
-	for _, raw := range names {
+	given := []uuid.UUID{}
+	for i, raw := range names {
 		id, err := w.tag(ctx, tx, raw)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if id == nil {
 			continue
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO ticket_tags (ticket_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, ticketID, *id); err != nil {
-			return err
+		if _, err := tx.Exec(ctx, `INSERT INTO ticket_tags (ticket_id, tag_id, local_owned) VALUES ($1, $2, false) ON CONFLICT DO NOTHING`, ticketID, *id); err != nil {
+			return nil, err
+		}
+		// names[0] is the import's own label when it has one.
+		if fromSource := i > 0 || w.x.Options.Tag == ""; fromSource && !slices.Contains(given, *id) {
+			given = append(given, *id)
 		}
 	}
-	return nil
+	return given, nil
+}
+
+// unlabel takes off a ticket the labels an earlier run gave it from the source (its record's
+// tag_ids) that the source no longer gives it (given). The import's own label stays, and so
+// does a locally owned label, including one carried from a merged ticket.
+// A ticket recorded before its labels were stays as it is.
+func (w *writer) unlabel(ctx context.Context, tx pgx.Tx, externalID string, ticketID uuid.UUID, given []uuid.UUID) error {
+	keep := slices.Clone(given)
+	if w.x.Options.Tag != "" {
+		id, err := w.tag(ctx, tx, w.x.Options.Tag)
+		if err != nil {
+			return err
+		}
+		if id != nil {
+			keep = append(keep, *id)
+		}
+	}
+	_, err := tx.Exec(ctx, `DELETE FROM ticket_tags tt USING import_records r
+		WHERE r.workspace_id = $1 AND r.source = $2 AND r.account_key = $3 AND r.kind = 'ticket' AND r.external_id = $4
+		  AND tt.ticket_id = $5 AND tt.tag_id = ANY(r.tag_ids) AND NOT (tt.tag_id = ANY($6))
+		  AND NOT tt.local_owned`,
+		w.x.WorkspaceID, w.x.Source, w.x.AccountKey, externalID, ticketID, keep)
+	return err
 }
 
 func (w *writer) tag(ctx context.Context, tx pgx.Tx, raw string) (*uuid.UUID, error) {

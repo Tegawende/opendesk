@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -373,13 +374,13 @@ func (s *Service) register(api huma.API, r chi.Router) {
 			if e != nil {
 				return nil, httpx.Wrap(e)
 			}
-			rows, e := s.d.DB.Pool.Query(ctx, `SELECT id,connection_id,team_id,external_channel_id,external_channel_name,enabled,include_notes,message_limit,created_at FROM support_channel_destinations WHERE workspace_id=$1 ORDER BY created_at`, p.WorkspaceID)
+			rows, e := s.d.DB.Pool.Query(ctx, `SELECT id,connection_id,team_id,priority,external_channel_id,external_channel_name,enabled,include_notes,message_limit,created_at FROM support_channel_destinations WHERE workspace_id=$1 ORDER BY created_at`, p.WorkspaceID)
 			if e != nil {
 				return nil, httpx.Wrap(e)
 			}
 			list, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (destination, error) {
 				var d destination
-				e := r.Scan(&d.ID, &d.ConnectionID, &d.TeamID, &d.ExternalChannelID, &d.ExternalChannelName, &d.Enabled, &d.IncludeNotes, &d.MessageLimit, &d.CreatedAt)
+				e := r.Scan(&d.ID, &d.ConnectionID, &d.TeamID, &d.Priority, &d.ExternalChannelID, &d.ExternalChannelName, &d.Enabled, &d.IncludeNotes, &d.MessageLimit, &d.CreatedAt)
 				return d, e
 			})
 			if e != nil {
@@ -533,6 +534,7 @@ ORDER BY d.created_at DESC,d.event_seq DESC LIMIT $4`, p.WorkspaceID, cur.T, cur
 			Body struct {
 				ConnectionID        string `json:"connection_id"`
 				TeamID              string `json:"team_id,omitempty"`
+				Priority            string `json:"priority,omitempty" enum:"low,normal,high,urgent" doc:"Route tickets with this priority. Omit for any priority."`
 				ExternalChannelID   string `json:"external_channel_id" maxLength:"200"`
 				ExternalChannelName string `json:"external_channel_name,omitempty" maxLength:"100"`
 				IncludeNotes        bool   `json:"include_notes,omitempty" doc:"Mirror internal notes too. Off by default: only customer and agent replies are posted."`
@@ -566,6 +568,13 @@ ORDER BY d.created_at DESC,d.event_seq DESC LIMIT $4`, p.WorkspaceID, cur.T, cur
 				}
 				team = &id
 			}
+			var priority *string
+			if in.Body.Priority != "" {
+				if !slices.Contains(domain.Priorities, in.Body.Priority) {
+					return nil, httpx.Validation("Priority must be one of " + strings.Join(domain.Priorities, ", ") + ".")
+				}
+				priority = &in.Body.Priority
+			}
 			if strings.TrimSpace(in.Body.ExternalChannelID) == "" {
 				return nil, httpx.Validation("Enter the provider channel ID.")
 			}
@@ -573,10 +582,10 @@ ORDER BY d.created_at DESC,d.event_seq DESC LIMIT $4`, p.WorkspaceID, cur.T, cur
 			if in.Body.MessageLimit != nil {
 				limit = *in.Body.MessageLimit
 			}
-			d := destination{ID: ids.New(), ConnectionID: cid, TeamID: team, ExternalChannelID: strings.TrimSpace(in.Body.ExternalChannelID), ExternalChannelName: cleanExternalName(in.Body.ExternalChannelName), Enabled: true, IncludeNotes: in.Body.IncludeNotes, MessageLimit: limit, CreatedAt: time.Now().UTC()}
+			d := destination{ID: ids.New(), ConnectionID: cid, TeamID: team, Priority: priority, ExternalChannelID: strings.TrimSpace(in.Body.ExternalChannelID), ExternalChannelName: cleanExternalName(in.Body.ExternalChannelName), Enabled: true, IncludeNotes: in.Body.IncludeNotes, MessageLimit: limit, CreatedAt: time.Now().UTC()}
 			inserted := false
 			e = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				tag, err := tx.Exec(ctx, `INSERT INTO support_channel_destinations(id,workspace_id,connection_id,team_id,external_channel_id,external_channel_name,include_notes,message_limit,created_at) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9 WHERE EXISTS(SELECT 1 FROM support_channel_connections WHERE workspace_id=$2 AND id=$3)`, d.ID, p.WorkspaceID, d.ConnectionID, d.TeamID, d.ExternalChannelID, d.ExternalChannelName, d.IncludeNotes, d.MessageLimit, d.CreatedAt)
+				tag, err := tx.Exec(ctx, `INSERT INTO support_channel_destinations(id,workspace_id,connection_id,team_id,priority,external_channel_id,external_channel_name,include_notes,message_limit,created_at) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10 WHERE EXISTS(SELECT 1 FROM support_channel_connections WHERE workspace_id=$2 AND id=$3)`, d.ID, p.WorkspaceID, d.ConnectionID, d.TeamID, d.Priority, d.ExternalChannelID, d.ExternalChannelName, d.IncludeNotes, d.MessageLimit, d.CreatedAt)
 				if err != nil {
 					return err
 				}
@@ -587,10 +596,10 @@ ORDER BY d.created_at DESC,d.event_seq DESC LIMIT $4`, p.WorkspaceID, cur.T, cur
 				if _, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "support_channel_destination.created", Data: map[string]any{"support_channel_destination": d}}); err != nil {
 					return err
 				}
-				return audit.Log(ctx, tx, p, p.WorkspaceID, "support_channel.destination_created", "support_channel_destination", &d.ID, map[string]any{"connection_id": d.ConnectionID, "team_id": d.TeamID, "include_notes": d.IncludeNotes, "message_limit": d.MessageLimit})
+				return audit.Log(ctx, tx, p, p.WorkspaceID, "support_channel.destination_created", "support_channel_destination", &d.ID, map[string]any{"connection_id": d.ConnectionID, "team_id": d.TeamID, "priority": d.Priority, "include_notes": d.IncludeNotes, "message_limit": d.MessageLimit})
 			})
 			if db.IsUniqueViolation(e, "") {
-				return nil, httpx.Conflict("That team or provider channel already has a destination.")
+				return nil, httpx.Conflict("That team, priority or provider channel already has a destination.")
 			}
 			if e != nil {
 				return nil, httpx.Wrap(e)
