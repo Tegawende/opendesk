@@ -1,13 +1,13 @@
-package wiki
+package hd
 
 import "unicode"
 
-// isEmoji reports whether s is one emoji as Unicode spells them (UTS #51): a pictograph
+// IsEmoji reports whether s is one emoji as Unicode spells them (UTS #51): a pictograph
 // with an optional variation selector and skin tone, pictographs joined by ZWJ (families,
 // professions), a flag (two regional indicators, or a black flag with tag characters), or
 // a keycap. Anything else, such as letters, bidi controls, zero-width characters other
 // than the joiner, or combining marks, is not.
-func isEmoji(s string) bool {
+func IsEmoji(s string) bool {
 	rs := []rune(s)
 	if len(rs) == 0 || len(rs) > 16 {
 		return false

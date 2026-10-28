@@ -11,7 +11,7 @@ import { useConfirm } from "@/components/ui/confirm";
 import { CopyField } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, TextInput } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Select, type SelectOption } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { errorMessage } from "@/lib/api/client";
@@ -25,6 +25,8 @@ import { atLeast, useRole } from "@/lib/session";
 // the name, description and labels its adapter describes.
 const PROVIDERS = ["slack", "discord", "telegram", "google_chat"] as const;
 type ProviderKey = (typeof PROVIDERS)[number];
+const PRIORITIES = ["low", "normal", "high", "urgent"] as const;
+type DestinationPriority = "all" | (typeof PRIORITIES)[number];
 const FIELDS = ["bot_token", "signing_secret", "public_key", "guild_id", "webhook_secret", "service_account_json"] as const;
 type FieldKey = (typeof FIELDS)[number];
 const knownProvider = (k: string): k is ProviderKey => (PROVIDERS as readonly string[]).includes(k);
@@ -206,6 +208,7 @@ export default function SupportChannels() {
                                 <Hash className="size-3 text-fg-4" aria-hidden />
                                 {name}
                                 <span className="text-fg-4">· {team?.name ?? t("supportChannels.allTeams")}</span>
+                                {route.priority && <span className="text-fg-4">· {t(`supportChannels.destination.priorityValues.${route.priority}`)}</span>}
                                 {route.include_notes && (
                                   <span className="inline-flex items-center gap-0.5 text-fg-4">
                                     · <StickyNote className="size-3" aria-hidden />
@@ -708,20 +711,28 @@ function DestinationDialog({ connectionId, provider, onClose }: { connectionId: 
   const { data: destinations } = useQuery(q.supportChannelDestinations());
   const available = useQuery(q.supportChannelAvailableDestinations(connectionId));
   const [team, setTeam] = useState("all");
+  const [priority, setPriority] = useState<DestinationPriority>("all");
   const [channelId, setChannelId] = useState("");
   const [includeNotes, setIncludeNotes] = useState(false);
   const [messageLimit, setMessageLimit] = useState("3500");
   // When the bot can't list channels (missing scopes, an older bot), its id still works.
   const [manual, setManual] = useState(false);
   const [error, setError] = useState("");
-  const options = useMemo(() => {
-    const used = new Set((destinations ?? []).filter((d) => d.connection_id === connectionId).map((d) => d.team_id ?? "all"));
-    return [
-      ...(!used.has("all") ? [{ value: "all", label: t("supportChannels.destination.allTeams") }] : []),
-      ...(teams ?? []).filter((x) => !x.private && !used.has(x.id)).map((x) => ({ value: x.id, label: x.name })),
-    ];
-  }, [connectionId, destinations, teams, t]);
+  const options = useMemo(
+    () => [
+      { value: "all", label: t("supportChannels.destination.allTeams") },
+      ...(teams ?? []).filter((x) => !x.private).map((x) => ({ value: x.id, label: x.name })),
+    ],
+    [teams, t],
+  );
   const selected = options.some((x) => x.value === team) ? team : options[0]?.value;
+  const routeExists = (destinations ?? []).some(
+    (destination) => destination.connection_id === connectionId && (destination.team_id ?? "all") === selected && (destination.priority ?? "all") === priority,
+  );
+  const priorityOptions: SelectOption<DestinationPriority>[] = [
+    { value: "all", label: t("supportChannels.destination.allPriorities") },
+    ...PRIORITIES.map((value) => ({ value, label: t(`supportChannels.destination.priorityValues.${value}`) })),
+  ];
   const usedChannels = new Set((destinations ?? []).filter((item) => item.connection_id === connectionId).map((item) => item.external_channel_id));
   const channelOptions = (available.data ?? [])
     .filter((item) => !usedChannels.has(item.id))
@@ -734,6 +745,7 @@ function DestinationDialog({ connectionId, provider, onClose }: { connectionId: 
       api.supportChannels.addDestination({
         connection_id: connectionId,
         team_id: selected === "all" ? undefined : selected,
+        priority: priority === "all" ? undefined : priority,
         external_channel_id: manual ? manualId : channelId.trim(),
         external_channel_name: selectedChannel?.name,
         include_notes: includeNotes,
@@ -755,7 +767,7 @@ function DestinationDialog({ connectionId, provider, onClose }: { connectionId: 
       footer={
         <>
           <Button onClick={onClose}>{t("supportChannels.destination.cancel")}</Button>
-          <Button variant="primary" disabled={!selected || !channelReady} loading={create.isPending} onClick={() => create.mutate()}>
+          <Button variant="primary" disabled={!selected || !channelReady || routeExists} loading={create.isPending} onClick={() => create.mutate()}>
             {t("supportChannels.destination.submit")}
           </Button>
         </>
@@ -765,6 +777,10 @@ function DestinationDialog({ connectionId, provider, onClose }: { connectionId: 
         <Field label={t("supportChannels.destination.team")}>
           {({ id }) => <Select id={id} value={selected} onChange={setTeam} options={options} placeholder={t("supportChannels.destination.teamPlaceholder")} />}
         </Field>
+        <Field label={t("supportChannels.destination.priority")}>
+          {({ id }) => <Select<DestinationPriority> id={id} value={priority} onChange={setPriority} options={priorityOptions} />}
+        </Field>
+        {routeExists && <p className="-mt-2 text-[12px] text-fg-3">{t("supportChannels.destination.routeExists")}</p>}
         {manual ? (
           <Field label={t("supportChannels.destination.channelId")} hint={t("supportChannels.destination.channelIdHint")}>
             {(props) => <TextInput {...props} value={channelId} autoComplete="off" spellCheck={false} onChange={(e) => setChannelId(e.target.value)} />}

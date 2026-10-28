@@ -19,6 +19,7 @@ import { Picker } from "@/components/ui/picker";
 import { Switch } from "@/components/ui/switch";
 import { Segmented } from "@/components/ui/tabs";
 import { UNDO_SEND_CHAT_DEFAULT, UNDO_SEND_CHOICES, UNDO_SEND_DEFAULT } from "@/components/tickets/detail/outbox";
+import { finishWords } from "@/components/tickets/fields";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { ReauthNotice } from "@/components/settings/ReauthNotice";
@@ -32,7 +33,7 @@ import { q, qk } from "@/lib/queries";
 import { atLeast, reloadSession, updateWorkspace, useRole, useSession } from "@/lib/session";
 import { LOCALE_NAMES, matchLocale, SUPPORTED } from "@/i18n";
 
-type DisplaySettings = { status_labels?: Overrides<TicketStatus>; priority_labels?: Overrides<Priority> };
+type DisplaySettings = { status_labels?: Overrides<TicketStatus>; priority_labels?: Overrides<Priority>; send_and_finish_button?: boolean };
 type Draft = {
   name: string;
   settings: Required<Pick<WS, "timezone" | "help_center_enabled" | "help_center_title" | "csat_enabled" | "gravatar" | "domain_logos" | "undo_send_seconds" | "undo_send_chat_seconds" | "message_delete" | "collab_ticket_replies" | "collab_ticket_reply_to">> & {
@@ -46,7 +47,7 @@ type Draft = {
 function toDraft(w: Workspace): Draft {
   const extra: DisplaySettings = w.settings;
   return {
-    display: { status_labels: extra.status_labels ?? {}, priority_labels: extra.priority_labels ?? {} },
+    display: { status_labels: extra.status_labels ?? {}, priority_labels: extra.priority_labels ?? {}, send_and_finish_button: extra.send_and_finish_button ?? false },
     name: w.name,
     settings: {
       timezone: w.settings.timezone ?? "UTC",
@@ -156,6 +157,8 @@ export default function WorkspaceSettings() {
   const colorOk = !draft.settings.brand_color || hexRe.test(draft.settings.brand_color);
   // The workspace's help center is the default brand's.
   const helpUrl = defaultBrand ? helpCenterHref(defaultBrand) : defaultHelpUrl(ws.slug);
+  // Named the way the composer will say it with the statuses being edited: "Send and close" when solved is labelled Closed.
+  const finishButton = t("display.finishButton", { action: finishWords(draft.display.status_labels).sendTip() });
 
   return (
     <SettingsPage title={t("workspace.title")} description={t("workspace.description")}>
@@ -357,6 +360,14 @@ export default function WorkspaceSettings() {
             onPriorities={(v) => setDraft({ ...draft, display: { ...draft.display, priority_labels: v } })}
             disabled={!canEdit}
           />
+          <Row label={finishButton} description={t("display.finishButtonHint")}>
+            <Switch
+              aria-label={finishButton}
+              checked={draft.display.send_and_finish_button}
+              onCheckedChange={(v) => setDraft({ ...draft, display: { ...draft.display, send_and_finish_button: v } })}
+              disabled={!canEdit}
+            />
+          </Row>
         </Section>
       </fieldset>
 

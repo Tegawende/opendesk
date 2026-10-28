@@ -88,6 +88,27 @@
     "reorderSectionAria": "Abschnitt {{name}} neu anordnen. Halte Alt gedrückt und bewege ihn mit seinen Ansichten über die Pfeiltasten.",
     "sectionChars": "Ein Abschnittsname darf weder < noch > enthalten.",
     "needName": "Gib der Ansicht einen Namen.",
+    "icon": {
+      "label": "Symbol",
+      "change": "Ändern",
+      "preview": "In der Seitenleiste",
+      "none": "Keins",
+      "tabs": {
+        "emoji": "Emoji",
+        "icon": "Symbol",
+        "text": "Text"
+      },
+      "searchEmoji": "Emoji suchen oder einfügen",
+      "searchIcon": "Symbole suchen",
+      "noMatch": "Nichts gefunden.",
+      "textLabel": "Buchstaben oder Ziffern",
+      "textPlaceholder": "PO",
+      "textHint": "Ein oder zwei Buchstaben oder Ziffern auf einer kleinen Kachel.",
+      "colour": "Farbe",
+      "colourEmoji": "Ein Emoji behält seine eigenen Farben.",
+      "done": "Fertig",
+      "hint": "Steht in der Seitenleiste neben dem Namen, damit du die Ansicht sofort findest."
+    },
     "visibleTitle": "Für alle sichtbar",
     "audience": {
       "me": "Nur du siehst sie in deiner Seitenleiste.",
@@ -101,6 +122,14 @@
     "create": "Ansicht erstellen",
     "saved": "Ansicht gespeichert",
     "created": "Ansicht erstellt",
+    "duplicate": "Duplizieren",
+    "duplicateTitle": "Ansicht duplizieren",
+    "copyName": "{{name}} (Kopie)",
+    "copyPersonal": {
+      "everyone": "Diese Kopie siehst nur du, denn Ansichten für alle erstellen nur Admins.",
+      "team": "Diese Kopie siehst nur du, denn die Ansichten von {{team}} erstellen nur Admins und die Leitung des Teams.",
+      "anyTeam": "Diese Kopie siehst nur du, denn die Ansichten eines Teams erstellen nur Admins und seine Leitung."
+    },
     "clear": "{{field}} leeren",
     "allTickets": "Alle Tickets",
     "filters": {

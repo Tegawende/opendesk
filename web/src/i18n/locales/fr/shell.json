@@ -11,6 +11,7 @@
     "settings": "Paramètres",
     "manageViews": "Gérer les vues",
     "createView": "Créer une vue",
+    "duplicateView": "Dupliquer",
     "viewSection": "Vues de la section {{name}}",
     "viewSectionCurrent": "contient la vue ouverte",
     "collapse": "Réduire",

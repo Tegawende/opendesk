@@ -771,7 +771,15 @@ const sBusinessHours = settingsPage("/business-hours", "businessHours", () => im
 const sSavedReplies = settingsPage("/saved-replies", "savedReplies", () => import("./pages/settings/SavedReplies"), (qc) =>
   qc.ensureQueryData(q.savedReplies()),
 );
-const sViews = settingsPage("/views", "views", () => import("./pages/settings/Views"), (qc) => qc.ensureQueryData(q.views()));
+// ?duplicate=<id> opens the editor on a copy of that view (the sidebar's Duplicate).
+const sViews = createRoute({
+  getParentRoute: () => settingsLayout,
+  path: "/views",
+  validateSearch: (s: Record<string, unknown>): { duplicate?: string } => ({ duplicate: str(s.duplicate) }),
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.views()),
+  component: page(() => import("./pages/settings/Views")),
+  staticData: { title: "views" },
+});
 const sSla = settingsPage("/sla", "slaPolicies", () => import("./pages/settings/Sla"), (qc) => qc.ensureQueryData(q.slaPolicies()));
 const sAutomations = settingsPage("/automations", "automations", () => import("./pages/settings/Automations"), (qc) =>
   qc.ensureQueryData(q.automations()),

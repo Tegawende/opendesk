@@ -1,6 +1,8 @@
 package resources_test
 
 import (
+	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -351,6 +353,136 @@ type view struct {
 	Filters  map[string]any `json:"filters"`
 	Position int            `json:"position"`
 	Section  *string        `json:"section"`
+	Icon     *viewIcon      `json:"icon"`
+}
+
+type viewIcon struct {
+	Kind  string  `json:"kind"`
+	Value string  `json:"value"`
+	Color *string `json:"color"`
+}
+
+func TestViewIcons(t *testing.T) {
+	e := hdtest.New(t, resources.Register)
+	ws := e.NewWorkspace()
+	a := ws.Agent.As(ws)
+	type icon = map[string]any
+	same := func(got *viewIcon, kind, value string, color any) bool {
+		if got == nil || got.Kind != kind || got.Value != value {
+			return false
+		}
+		if color == nil {
+			return got.Color == nil
+		}
+		return got.Color != nil && *got.Color == color
+	}
+
+	// None by default, so a view shows the default icon.
+	var v view
+	e.Do("POST", "/v1/views", a, map[string]any{"name": "Plain"}).Want(t, 201).JSON(t, &v)
+	if v.Icon != nil {
+		t.Fatalf("default icon %+v", v.Icon)
+	}
+
+	// An emoji round trips on create, get and list; a colour on an emoji is dropped.
+	e.Do("POST", "/v1/views", a, map[string]any{"name": "Refunds", "icon": icon{"kind": "emoji", "value": " \U0001F4B8 ", "color": "red"}}).Want(t, 201).JSON(t, &v)
+	if !same(v.Icon, "emoji", "\U0001F4B8", nil) {
+		t.Fatalf("created %+v", v.Icon)
+	}
+	var got view
+	e.Do("GET", "/v1/views/"+v.ID, a, nil).Want(t, 200).JSON(t, &got)
+	if !same(got.Icon, "emoji", "\U0001F4B8", nil) {
+		t.Fatalf("get %+v", got.Icon)
+	}
+	var p page[view]
+	e.Do("GET", "/v1/views", a, nil).Want(t, 200).JSON(t, &p)
+	if i := slices.IndexFunc(p.Data, func(x view) bool { return x.ID == v.ID }); i < 0 || !same(p.Data[i].Icon, "emoji", "\U0001F4B8", nil) {
+		t.Fatalf("list %+v", p.Data)
+	}
+	for _, s := range []string{"\U0001F468\u200D\U0001F469\u200D\U0001F467", "\U0001F1E7\U0001F1EA", "\u2611\uFE0F", "\U0001F44B\U0001F3FD"} {
+		e.Do("PATCH", "/v1/views/"+v.ID, a, map[string]any{"icon": icon{"kind": "emoji", "value": s}}).Want(t, 200).JSON(t, &got)
+		if !same(got.Icon, "emoji", s, nil) {
+			t.Fatalf("patched %+q, got %+v", s, got.Icon)
+		}
+	}
+
+	// An icon of the list, with and without a colour; a patch that leaves the icon out keeps it.
+	e.Do("PATCH", "/v1/views/"+v.ID, a, map[string]any{"icon": icon{"kind": "icon", "value": "truck", "color": "teal"}}).Want(t, 200).JSON(t, &got)
+	if !same(got.Icon, "icon", "truck", "teal") {
+		t.Fatalf("icon %+v", got.Icon)
+	}
+	e.Do("PATCH", "/v1/views/"+v.ID, a, map[string]any{"name": "Refunds due"}).Want(t, 200).JSON(t, &got)
+	if !same(got.Icon, "icon", "truck", "teal") || got.Name != "Refunds due" {
+		t.Fatalf("kept %+v", got)
+	}
+	e.Do("PATCH", "/v1/views/"+v.ID, a, map[string]any{"icon": icon{"kind": "icon", "value": "layers", "color": nil}}).Want(t, 200).JSON(t, &got)
+	if !same(got.Icon, "icon", "layers", nil) {
+		t.Fatalf("no colour %+v", got.Icon)
+	}
+
+	// One or two letters or digits.
+	for _, s := range []string{"PO", "B2", "7", "\u00C9t"} {
+		e.Do("PATCH", "/v1/views/"+v.ID, a, map[string]any{"icon": icon{"kind": "text", "value": s, "color": "violet"}}).Want(t, 200).JSON(t, &got)
+		if !same(got.Icon, "text", s, "violet") {
+			t.Fatalf("text %+q, got %+v", s, got.Icon)
+		}
+	}
+
+	// Anything else is refused and changes nothing.
+	for _, bad := range []icon{
+		{"kind": "emoji", "value": "a"}, {"kind": "emoji", "value": "\U0001F4B8\U0001F4B8"}, {"kind": "emoji", "value": "\U0001F4B8 x"},
+		{"kind": "emoji", "value": "\u202E\U0001F4B8"}, {"kind": "emoji", "value": "\U0001F4B8\u200B"}, {"kind": "emoji", "value": "\U0001F4B8\u0301"},
+		{"kind": "emoji", "value": "\U0001F1E7"}, {"kind": "emoji", "value": ""}, {"kind": "emoji", "value": "<b>"},
+		{"kind": "icon", "value": "rocket"}, {"kind": "icon", "value": "Truck"}, {"kind": "icon", "value": "../truck"}, {"kind": "icon", "value": ""},
+		{"kind": "text", "value": "POS"}, {"kind": "text", "value": ""}, {"kind": "text", "value": "<"}, {"kind": "text", "value": "a b"}, {"kind": "text", "value": "\x07"},
+		{"kind": "text", "value": "\U0001F4B8"}, {"kind": "text", "value": "e\u0301"},
+		{"kind": "icon", "value": "truck", "color": "Teal"}, {"kind": "text", "value": "PO", "color": "chartreuse"},
+		{"kind": "picture", "value": "x"}, {"value": "truck"},
+	} {
+		e.Do("PATCH", "/v1/views/"+v.ID, a, map[string]any{"icon": bad}).Want(t, 422)
+		e.Do("POST", "/v1/views", a, map[string]any{"name": "Bad", "icon": bad}).Want(t, 422)
+	}
+	e.Do("PATCH", "/v1/views/"+v.ID, a, map[string]any{"icon": "\U0001F4B8"}).Want(t, 422)
+	e.Do("GET", "/v1/views/"+v.ID, a, nil).Want(t, 200).JSON(t, &got)
+	if !same(got.Icon, "text", "\u00C9t", "violet") {
+		t.Fatalf("after refusals %+v", got.Icon)
+	}
+
+	// The icon rides on the view's events.
+	var evKind string
+	e.Scalar(`SELECT data->'view'->'icon'->>'kind' FROM events WHERE workspace_id = $1 AND type = 'view.updated' ORDER BY seq DESC LIMIT 1`, &evKind, ws.ID)
+	if evKind != "text" {
+		t.Fatalf("event icon %q", evKind)
+	}
+
+	// null clears it.
+	e.Do("PATCH", "/v1/views/"+v.ID, a, map[string]any{"icon": nil}).Want(t, 200).JSON(t, &got)
+	if got.Icon != nil {
+		t.Fatalf("null left %+v", got.Icon)
+	}
+	var stored *string
+	e.Scalar(`SELECT icon::text FROM views WHERE id = $1`, &stored, v.ID)
+	if stored != nil {
+		t.Fatalf("stored %q", *stored)
+	}
+}
+
+// The API takes the icons the web app renders, and no other.
+func TestViewIconNames(t *testing.T) {
+	src, err := os.ReadFile("../../../web/src/components/tickets/viewIcons.ts")
+	if err != nil {
+		t.Skip("web sources not here")
+	}
+	var web []string
+	for _, m := range regexp.MustCompile(`\{ name: "([^"]+)", icon: `).FindAllStringSubmatch(string(src), -1) {
+		web = append(web, m[1])
+	}
+	if !slices.Equal(web, resources.ViewIcons) {
+		t.Fatalf("web %v\napi %v", web, resources.ViewIcons)
+	}
+	if len(slices.Compact(slices.Sorted(slices.Values(web)))) != len(web) {
+		t.Fatalf("a name is listed twice: %v", web)
+	}
 }
 
 func TestViewSections(t *testing.T) {
@@ -359,7 +491,7 @@ func TestViewSections(t *testing.T) {
 
 	// A shared view and a personal one carry a section; spaces collapse.
 	var claims, mine view
-	e.Do("POST", "/v1/views", ws.Admin.As(ws), map[string]any{"name": "Damaged & claims", "shared": true, "section": "  After   sales "}).
+	e.Do("POST", "/v1/views", ws.Admin.As(ws), map[string]any{"name": "Damaged & claims", "shared": true, "section": "  After   sales ", "icon": map[string]any{"kind": "text", "value": "AS", "color": "teal"}}).
 		Want(t, 201).JSON(t, &claims)
 	if claims.Section == nil || *claims.Section != "After sales" {
 		t.Fatalf("created %+v", claims)
@@ -420,6 +552,10 @@ func TestViewSections(t *testing.T) {
 		t.Fatalf("list %+v", sections)
 	}
 	var stored *string
+	e.Do("GET", "/v1/views/"+claims.ID, ws.Admin.As(ws), nil).Want(t, 200).JSON(t, &claims)
+	if claims.Icon == nil || claims.Icon.Value != "AS" {
+		t.Fatalf("section changes lost the icon: %+v", claims)
+	}
 	e.Scalar(`SELECT section FROM views WHERE id = $1`, &stored, claims.ID)
 	if stored != nil {
 		t.Fatalf("stored %v", *stored)

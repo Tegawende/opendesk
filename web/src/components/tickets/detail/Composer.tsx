@@ -1,18 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft, Check, ChevronDown, Eye, Loader2, Lock, MessagesSquare, Paperclip, TriangleAlert, X } from "lucide-react";
-import { Morph } from "@/components/motion";
+import { ArrowRightLeft, ChevronDown, Eye, Lock, MessagesSquare, Paperclip, TriangleAlert, X } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { tone } from "@/lib/tones";
 import { create } from "zustand";
-import { DropdownMenu as M } from "radix-ui";
 import type { Activity, Mailbox, Member, Message, SavedReply, Thread, Ticket, TicketStatus } from "@/lib/api/types";
 import { api, type SendMessageBody } from "@/lib/api/endpoints";
 import { q, qk, upsertInList } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { realtime } from "@/lib/realtime/manager";
-import { SideIncludeItems, SideIncludedChips, useIncludeSummary, useSideInclude, type SideInclude } from "./SideIncludes";
+import { SideIncludedChips, useSideInclude } from "./SideIncludes";
 import { cn } from "@/lib/cn";
 import { keyName } from "@/lib/hotkeys";
 import { Button } from "@/components/ui/button";
@@ -20,8 +18,6 @@ import { Segmented } from "@/components/ui/tabs";
 import { Picker } from "@/components/ui/picker";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Avatar } from "@/components/ui/avatar";
-import { Kbd } from "@/components/ui/kbd";
-import { floatingPanel } from "@/components/ui/popover";
 import { toast } from "@/components/ui/toast";
 import { RichEditor, type RichEditorHandle } from "@/components/editor/RichEditor";
 import { mentionExtension, savedReplyExtension, SuggestionPopup } from "./suggestions";
@@ -30,7 +26,8 @@ import { matchVars, refreshTags, templateExtension, VarSuggestPopup, type VarIte
 import { variableText } from "./composerTemplates";
 import { ReplySignature } from "./ReplySignature";
 import { ReplyPreview } from "./ReplyPreview";
-import { StatusIcon, statusLabel } from "../bits";
+import { SendButton } from "./SendButton";
+import { statusLabel } from "../bits";
 import { useDisplay } from "../fields";
 import { useTicketViewers } from "../presence";
 import { useUpdateTicket } from "../useTicketActions";
@@ -390,6 +387,9 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
     return () => clearTimeout(id);
   }, [sent]);
   const phase = sendThread.isPending ? "sending" : sent ? "sent" : "idle";
+  const [sentWith, setSentWith] = useState<TicketStatus>();
+  // The send control folds the formatting buttons into one when its finish segment needs the room.
+  const [foldTools, setFoldTools] = useState(false);
 
   // A reply taken back during its undo window comes back here, after anything typed since.
   const unsent = useUnsent((s) => s[ticket.id]);
@@ -496,6 +496,7 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
       uploads.forEach((u) => u.preview && URL.revokeObjectURL(u.preview));
       void deliver(temp, body, me);
     }
+    setSentWith(status);
     setSent(true);
     setUploads([]);
     setDraft({ html: "", cc: [], bcc: [], showCc: false, mailboxId: undefined, fromAccount: undefined, fromNote: undefined, ...(opts.as ? { mode: "reply" } : {}) });
@@ -768,6 +769,7 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
               contentClassName={cn("max-h-[40vh] transition-[min-height] duration-200 ease-out motion-reduce:transition-none", open ? "min-h-[96px]" : "min-h-[44px]")}
               afterContent={open && signature?.trim() ? <ReplySignature html={signature} /> : null}
               ariaLabel={note ? t("composer.note") : threadMode ? t("composer.thread") : t("composer.reply")}
+              toolbarFolded={foldTools}
               toolbarEnd={
                 <>
                   {/* Ollie writes from the ticket, so it stays out of what goes to a third party. */}
@@ -807,6 +809,9 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
                     onSend={submit}
                     current={ticket.status}
                     phase={phase}
+                    sentWith={sentWith}
+                    folded={foldTools}
+                    onFold={setFoldTools}
                   />
                 </>
               }
@@ -1025,99 +1030,4 @@ function movedTo(activities: Activity[] | undefined, messages: Message[] | undef
   if ((messages ?? []).some((m) => m.direction === "outbound" && m.kind === "reply" && Date.parse(m.created_at) > since)) return null;
   const to = a.data.to;
   return (typeof to === "string" ? (ctx.team(to)?.name ?? to) : null) ?? ctx.team(mailbox.team_id)?.name ?? null;
-}
-
-function SendButton({
-  note,
-  sideTo,
-  include,
-  disabled,
-  busy,
-  onSend,
-  current,
-  phase,
-}: {
-  note: boolean;
-  /** A side conversation's recipients: it goes to them only, and only "on hold" (waiting on a third party) rides along. */
-  sideTo?: string[];
-  /** Starting a side conversation: what of the customer's conversation can go along. */
-  include?: SideInclude;
-  disabled: boolean;
-  busy: boolean;
-  onSend: (s?: TicketStatus) => void;
-  current: TicketStatus;
-  phase: "idle" | "sending" | "sent";
-}) {
-  const { t } = useTranslation("inbox");
-  useTranslation("indicators");
-  const side = !!sideTo;
-  const label = note ? t("composer.addNote") : t("composer.send");
-  const display = useDisplay();
-  const options: TicketStatus[] = (side ? (["on_hold"] as TicketStatus[]) : (["pending", "on_hold", display.finish] as TicketStatus[])).filter(
-    (s) => s !== current && !display.hidden(s),
-  );
-  const includes = !!include && (include.quoted > 0 || include.files.length > 0);
-  const menu = options.length > 0 || includes;
-  const along = useIncludeSummary(include);
-  const hint = busy
-    ? t("composer.waitUploads")
-    : note
-      ? t("composer.addNote")
-      : side
-        ? sideTo.length
-          ? t("composer.sendTo", { to: sideTo.join(", ") }) + (along ? ` ${along}` : "")
-          : t("composer.addRecipient")
-        : t("composer.sendReply");
-  return (
-    <div className="flex items-center">
-      <Tooltip content={hint} shortcut="mod enter">
-        <Button variant="primary" size="sm" disabled={disabled && phase === "idle"} onClick={() => onSend()} className={cn(menu && "rounded-r-none", "active:scale-[0.97]")}>
-          {/* The label keeps the width while the spinner and check swap in. */}
-          <span className="relative inline-grid place-items-center">
-            <span className={cn("col-start-1 row-start-1 transition-opacity", phase !== "idle" && "opacity-0")}>{label}</span>
-            <span className="col-start-1 row-start-1 flex">
-              <Morph k={phase}>
-                {phase === "sending" ? (
-                  <Loader2 className="size-3.5 animate-spin" aria-label={t("composer.sending")} />
-                ) : phase === "sent" ? (
-                  <Check className="size-3.5" strokeWidth={2.5} aria-label={t("composer.sent")} />
-                ) : null}
-              </Morph>
-            </span>
-          </span>
-        </Button>
-      </Tooltip>
-      {menu && (
-        <M.Root>
-          {/* Choosing what goes along works before the draft can be sent. */}
-          <Tooltip content={includes ? t("side.optionsHint") : undefined}>
-            <M.Trigger asChild disabled={disabled && !includes}>
-              <Button
-                variant="primary"
-                size="sm"
-                square
-                aria-label={includes ? t("side.options") : t("composer.andStatus", { label })}
-                className="rounded-l-none border-l border-white/15 dark:border-black/15"
-                icon={<ChevronDown className="size-3.5" />}
-              />
-            </M.Trigger>
-          </Tooltip>
-          <M.Portal>
-            <M.Content side="top" align="end" sideOffset={6} className={cn(floatingPanel, includes ? "w-[300px]" : "min-w-[230px]", "p-1")}>
-              {includes && <SideIncludeItems inc={include} />}
-              {includes && options.length > 0 && <M.Separator className="-mx-1 my-1 h-px bg-line" />}
-              {options.length > 0 && <div className="label-caps px-2 pb-1 pt-1.5">{t("composer.andStatus", { label })}</div>}
-              {options.map((s) => (
-                <M.Item key={s} disabled={disabled} onSelect={() => onSend(s)} className="flex h-8 cursor-default items-center gap-2 rounded-md px-2 text-[12.5px] outline-none data-[disabled]:opacity-50 data-[highlighted]:bg-hover">
-                  <StatusIcon status={s} />
-                  <span className="flex-1 whitespace-nowrap">{t("composer.andMark", { label, status: statusLabel(s).toLowerCase() })}</span>
-                  {s === display.finish && <Kbd className="ml-3 shrink-0">mod shift enter</Kbd>}
-                </M.Item>
-              ))}
-            </M.Content>
-          </M.Portal>
-        </M.Root>
-      )}
-    </div>
-  );
 }

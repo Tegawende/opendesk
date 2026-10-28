@@ -94,6 +94,7 @@ type destination struct {
 	ID                  uuid.UUID  `json:"id"`
 	ConnectionID        uuid.UUID  `json:"connection_id"`
 	TeamID              *uuid.UUID `json:"team_id"`
+	Priority            *string    `json:"priority"`
 	ExternalChannelID   string     `json:"external_channel_id"`
 	ExternalChannelName string     `json:"external_channel_name"`
 	Enabled             bool       `json:"enabled"`

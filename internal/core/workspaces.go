@@ -51,6 +51,7 @@ type CoreWorkspaceSettings struct {
 	CollabReplyTo     *string `json:"collab_ticket_reply_to,omitempty" enum:"address,mailbox" doc:"Where answers to a reply sent from a member's own address go when it names no Reply-To: the address's own reply-to (else the address), or the ticket's reply address. Default address"`
 	UndoSendSeconds   *int    `json:"undo_send_seconds,omitempty" enum:"0,5,10,20,30" doc:"Seconds the app holds an agent's reply on an email (or any other non-chat) ticket, with a way to take it back or make it a note, before sending it. Default 5; 0 sends at once"`
 	UndoSendChatSecs  *int    `json:"undo_send_chat_seconds,omitempty" enum:"0,5,10,20,30" doc:"The same for replies on chat tickets. Default 0: a chat reply goes at once"`
+	SendAndFinish     *bool   `json:"send_and_finish_button,omitempty" doc:"Show a button that sends and solves, using the workspace's finish label next to Send in the reply composer, instead of only in its menu. Default false"`
 	// StatusLabels and PriorityLabels rename and recolour the fixed values for display only;
 	// a status can also be hidden from the menus agents pick from.
 	StatusLabels   map[string]DisplayOverride `json:"status_labels,omitempty"`
@@ -275,6 +276,9 @@ func validateSettings(s *CoreWorkspaceSettings) (map[string]any, error) {
 	}
 	if s.CollabReplies != nil {
 		out["collab_ticket_replies"] = *s.CollabReplies
+	}
+	if s.SendAndFinish != nil {
+		out["send_and_finish_button"] = *s.SendAndFinish
 	}
 	if s.CollabReplyTo != nil {
 		if !slices.Contains([]string{"address", "mailbox"}, *s.CollabReplyTo) {

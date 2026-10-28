@@ -379,7 +379,9 @@
     "reset": "Zurücksetzen",
     "resetFor": "{{name}} zurücksetzen",
     "hideFor": "{{name}} in den Menüs ausblenden",
-    "showFor": "{{name}} in den Menüs anzeigen"
+    "showFor": "{{name}} in den Menüs anzeigen",
+    "finishButton": "Schaltfläche „{{action}}“",
+    "finishButtonHint": "Zeige neben Senden im Antwortfeld eine Schaltfläche, die das Ticket mit einem Klick sendet und löst, nicht nur im Menü daneben. Sie verwendet die Abschlussbezeichnung des Arbeitsbereichs und setzt den Status immer auf gelöst."
   },
   "danger": {
     "title": "Gefahrenbereich",

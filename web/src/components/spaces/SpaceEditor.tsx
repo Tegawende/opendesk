@@ -12,6 +12,7 @@ import { useWorkspacePrefs, orderWorkspaces } from "@/lib/workspaces";
 import { AccountDot, boxIcon, FolderGlyph } from "@/components/collab/bits";
 import { SortableList } from "@/components/settings2/Sortable";
 import { TeamDot } from "@/components/tickets/teams";
+import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useConfirm } from "@/components/ui/confirm";
@@ -106,7 +107,7 @@ function offersOf(d: WorkspaceData, labels: RowLabels, wholeHint: string): { id:
     ...(d.myTeams.size > 1 ? [{ item: it("team", "mine"), label: labels.myTeams, icon: <Users /> }] : []),
     ...visible.map((x) => ({ item: it("team", x.id), label: x.name, icon: <TeamDot team={x} /> })),
   ];
-  const views = [...(d.views ?? [])].sort((a, b) => a.position - b.position).map((v) => ({ item: it("view", v.id), label: v.name, icon: <Layers /> }));
+  const views = [...(d.views ?? [])].sort((a, b) => a.position - b.position).map((v) => ({ item: it("view", v.id), label: viewName(v), icon: <ViewIcon icon={v.icon} size={14} /> }));
   const mail: Offer[] = [];
   if (d.collab) {
     mail.push({ item: it("box", "inbox"), label: labels.allInboxes, icon: <Layers /> });
