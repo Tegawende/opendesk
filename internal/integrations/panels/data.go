@@ -96,7 +96,7 @@ type SectionItem struct {
 
 // subject is what a lookup is about: the ticket and its contact. An http panel's request also
 // carries the references found in the ticket, the contact's addresses and phone (ticketContext),
-// and whether an agent asked again.
+// whether an agent asked again and the reader's language.
 type subject struct {
 	TicketID     uuid.UUID
 	TicketNumber int64
@@ -108,6 +108,7 @@ type subject struct {
 	Emails       []string
 	Phone        string
 	Refresh      bool
+	Locale       string
 }
 
 func subjectOf(t *domain.Ticket) subject {
@@ -126,8 +127,9 @@ func subjectOf(t *domain.Ticket) subject {
 // minute (a failure, the last 15 seconds; an http answer may choose its own time), else from
 // the product, within fetchTimeout. A panel makes lookupsPerMinute lookups at most, and an http
 // panel's reading of the ticket (kept per ticket version) counts as the lookup it leads to. A
-// workspace's http panels make readingsPerMinute readings at most, together.
-func (s *Service) read(ctx context.Context, x *row, t *domain.Ticket, refresh bool) Data {
+// workspace's http panels make readingsPerMinute readings at most, together. locale is the
+// reader's language (viewerLocale), told to http panels and kept apart in their cache.
+func (s *Service) read(ctx context.Context, x *row, t *domain.Ticket, refresh bool, locale string) Data {
 	sub := subjectOf(t)
 	sub.Refresh = refresh
 	base := Data{PanelID: x.ID, Kind: x.Kind, FetchedAt: time.Now().UTC()}
@@ -167,7 +169,9 @@ func (s *Service) read(ctx context.Context, x *row, t *domain.Ticket, refresh bo
 			s.contexts.set(ck, c, cacheTTL)
 		}
 		sub.References, sub.Emails, sub.Phone = c.References, c.Emails, c.Phone
-		key.ticket, key.refs = sub.TicketID, strings.Join(sub.References, "\n")
+		// The URL may answer in the reader's language: an answer is kept per language.
+		sub.Locale = locale
+		key.ticket, key.refs, key.locale = sub.TicketID, strings.Join(sub.References, "\n"), locale
 	}
 	if !refresh {
 		if d, ok := s.cache.get(key); ok {
@@ -219,13 +223,15 @@ func lookupMessage(err error) string {
 }
 
 // cacheKey is one lookup: a panel at a version (a changed panel never answers from
-// before the change), for an email (and a ticket, for http panels).
+// before the change), for an email (and a ticket, its references and the reader's language,
+// for http panels).
 type cacheKey struct {
 	panel   uuid.UUID
 	version int64
 	email   string
 	ticket  uuid.UUID
 	refs    string
+	locale  string
 }
 
 // contextKey is one reading of a ticket for an http panel: the panel at a version (its pattern)

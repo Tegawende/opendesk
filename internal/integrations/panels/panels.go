@@ -628,6 +628,7 @@ func (s *Service) registerRoutes(api huma.API) {
 			ID      string `path:"id"`
 			PanelID string `path:"panelId"`
 			Refresh bool   `query:"refresh" doc:"Ask the product again rather than answer from the last minute's copy"`
+			Locale  string `query:"locale" doc:"The reader's interface language, a lowercase base language tag such as fr, which an http panel's request carries. Anything else is ignored."`
 		}) (*struct{ Body Data }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeTicketsRead)
 			if err != nil {
@@ -655,7 +656,7 @@ func (s *Service) registerRoutes(api huma.API) {
 			if !x.Enabled {
 				return nil, httpx.NotFound("Ticket panel")
 			}
-			data := s.read(ctx, x, &t, in.Refresh)
+			data := s.read(ctx, x, &t, in.Refresh, viewerLocale(in.Locale))
 			return &struct{ Body Data }{data}, nil
 		})
 }
