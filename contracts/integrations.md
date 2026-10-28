@@ -212,7 +212,7 @@ into the same section.
 | PATCH | `/v1/ticket-panels/{id}` | admin user | `{name? /* trimmed, 1 to 64 characters, internal/displayname's rules: 422 invalid_name */, enabled?, position?, client_secret?, client_id? /* shopify: a new secret keeps the client ID */, token? /* shopify */, fields? /* shopify: the whole list; an unknown field, or line_prices without line_items: 422 */, orders_shown? /* shopify, 1 to 5 */, url?, reference_pattern? /* http: the default pattern stores the default, "" none; 422 when it does not compile, compiles to more than 64 instructions or matches an empty text */}` → `TicketPanel` |
 | POST | `/v1/ticket-panels/{id}/rotate-secret` | admin user | → `{panel, secret}` (http; the old secret stops at once) |
 | DELETE | `/v1/ticket-panels/{id}` | admin user | → 204 |
-| GET | `/v1/tickets/{id}/panels/{panelId}` | viewer, `tickets:read` | `?refresh=true` asks the product again → `TicketPanelData`. A hidden or missing ticket, or a panel that is off or gone: `404` |
+| GET | `/v1/tickets/{id}/panels/{panelId}` | viewer, `tickets:read` | `?refresh=true` asks the product again; `?locale=fr`, the reader's interface language as a lowercase base language tag (`[a-z]{2,3}`, anything else ignored), is told to an http panel → `TicketPanelData`. A hidden or missing ticket, or a panel that is off or gone: `404` |
 
 - Shopify credentials are a client ID and secret or a token, never both (`422`). They are checked
   when saved: a token is asked for with the app's (below), its `scope` must hold `read_customers`
@@ -221,8 +221,8 @@ into the same section.
   URL rules: `422 invalid_url`. At most 10 panels per workspace (`409`), 30 new panels an hour (`429`).
 - API keys never connect (`403`): pasting another product's credentials needs a person.
 - A lookup is one request within 3 s. Its answer is kept for a minute (a failure for 15 s; an http
-  answer may choose 0 to 600 s with `cache_seconds`) per panel and contact (and ticket and
-  references, for http), and a changed panel never answers from before the change; `refresh` skips
+  answer may choose 0 to 600 s with `cache_seconds`) per panel and contact (and ticket,
+  references and `locale`, for http), and a changed panel never answers from before the change; `refresh` skips
   the copy. A panel makes at most 120 lookups a minute that the copy did
   not answer. What an http request carries beyond the ticket (`references`, `emails`, `phone`) is
   read from the ticket once per version of the panel and the ticket, kept for a minute, and that
@@ -273,7 +273,7 @@ into the same section.
 panel's secret: the scheme of outgoing webhooks (`contracts/events.md`), verified the same way.
 
 ```json
-{ "panel_id": "…", "workspace_id": "…", "refresh": false,
+{ "panel_id": "…", "workspace_id": "…", "refresh": false, "locale": "fr",
   "ticket": { "id": "…", "number": 1042, "subject": "Where is my order S00042?",
               "references": ["S00042", "INV/2026/00012"] },
   "contact": { "id": "…", "email": "ada@example.com", "name": "Ada Buyer",
@@ -294,6 +294,11 @@ panel's secret: the scheme of outgoing webhooks (`contracts/events.md`), verifie
   that matches an empty text: `422`); `""` sends `[]`, and saving the default stores NULL so a later
   default applies.
 - `refresh` is true when an agent asked again (the panel's refresh button, `?refresh=true`).
+- `locale` is the reader's interface language, a lowercase base language tag (`"en"`, `"fr"`,
+  `"de"`), so the URL can write its labels and notes in it: the web app sends the language it
+  shows (`?locale=`). It is left out when the reader's app does not say (an API key, an older
+  app; a member has no saved language): answer in your default. Dates, money and badges need
+  nothing, since the app formats them.
 - Fields are only ever added: ignore the ones you don't know.
 
 ### The http answer
@@ -355,8 +360,8 @@ type Value = string | number | boolean
   object (`{type: "text", text}` for a string, number or boolean, written as given), dates as
   `YYYY-MM-DD` or an RFC 3339 time in UTC, amounts as decimal strings, currencies in capitals and
   every tone set. Clients only render it.
-- `cache_seconds` keeps the answer that long for the panel, ticket, contact and references (default
-  60; above 600 is 600). A failure is kept 15 s. A new reference in the ticket asks again.
+- `cache_seconds` keeps the answer that long for the panel, ticket, contact, references and `locale`
+  (default 60; above 600 is 600), so a reader never gets a copy written in another language. A failure is kept 15 s. A new reference in the ticket asks again.
 - Version 1: `{ sections: [{ title, items: [{ label, value, url? }] }] }`. 10 sections of 30 items;
   title and label 80 characters, value 500 (a number or boolean as written).
 - `204` or `404`: nothing about this contact (`empty`); an answer whose blocks all drop is `empty`

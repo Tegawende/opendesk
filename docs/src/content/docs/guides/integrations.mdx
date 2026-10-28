@@ -129,14 +129,14 @@ Open the panel's menu and click **Order references**. opendesk looks for them in
 A `POST`, signed like webhook deliveries (`OD-Signature: t=<unix>,v1=<hex>`, the HMAC-SHA256 of `"<t>.<body>"` with the secret):
 
 ```json
-{ "panel_id": "…", "workspace_id": "…", "refresh": false,
+{ "panel_id": "…", "workspace_id": "…", "refresh": false, "locale": "fr",
   "ticket": { "id": "…", "number": 1042, "subject": "Where is my order S00042?",
               "references": ["S00042"] },
   "contact": { "id": "…", "email": "ada@example.com", "name": "Ada Buyer",
                "emails": ["ada@example.com"], "phone": "+32 470 12 34 56" } }
 ```
 
-`references` holds at most ten numbers, `phone` is there when the contact has one, and `refresh` is true when an agent clicked the refresh button. A new or deleted message shows in them on the next open; a changed phone or an edited note within a minute, or at once on refresh. A workspace's panels read tickets at most 60 times a minute together; past that a panel says so until the minute ends, and a ticket it already read still shows. opendesk only ever adds fields, so ignore the ones you don't use.
+`references` holds at most ten numbers, `phone` is there when the contact has one, and `refresh` is true when an agent clicked the refresh button. `locale` is the language the agent's app is in (`en`, `fr`, `de`, a lowercase language code), so you can write your titles, labels and notes in it; it is missing when the app did not say, so keep a default. A new or deleted message shows in them on the next open; a changed phone or an edited note within a minute, or at once on refresh. A workspace's panels read tickets at most 60 times a minute together; past that a panel says so until the minute ends, and a ticket it already read still shows. opendesk only ever adds fields, so ignore the ones you don't use.
 
 ### What it answers
 
@@ -155,7 +155,7 @@ A value is plain text or a number, or one of three typed values that opendesk wr
 
 `links` open the same record in each tool that holds it, as small buttons after the title: up to 5 of `{ "label", "url", "icon"? }`. The label names the button and shows as its tooltip. The icon is one opendesk draws itself: `external-link`, `store`, `shopping-cart`, `receipt`, `file-text`, `truck`, `package`, `user`, `building`, `phone`, `mail`, `credit-card`, `map-pin`, or the logo of a product opendesk ships, such as `shopify`, `stripe` or `paypal`. Without one the button shows the label's first letter; opendesk never loads a picture from your link's site.
 
-Tones are `neutral`, `info`, `success`, `warning` and `danger`. Everything shows as plain text and https links, never HTML. Anything opendesk does not recognize, such as a block type from a later version, is skipped and the rest still shows. Up to 10 blocks show, with 30 fields, 20 lines and 20 rows each. An answer is kept for a minute unless it says otherwise with `"cache_seconds"` (0 to 600). Answer `204` or `404` when you know nothing about the contact.
+Tones are `neutral`, `info`, `success`, `warning` and `danger`. Everything shows as plain text and https links, never HTML. Anything opendesk does not recognize, such as a block type from a later version, is skipped and the rest still shows. Up to 10 blocks show, with 30 fields, 20 lines and 20 rows each. An answer is kept for a minute unless it says otherwise with `"cache_seconds"` (0 to 600), for each language apart. Answer `204` or `404` when you know nothing about the contact.
 
 <Fold>
 
@@ -271,8 +271,9 @@ class Panel(BaseHTTPRequestHandler):
         if not order:
             self.send_response(204)
             return self.end_headers()
+        delivery = {"fr": "Livraison", "de": "Lieferung"}.get(req.get("locale"), "Delivery")  # in the agent's language
         answer = {"version": 2, "blocks": [{"type": "card", "title": f"Order {order['number']}", "url": order["url"],
-            "fields": [{"label": "Delivery", "value": {"type": "date", "value": order["due"], "relative": True}}]}]}
+            "fields": [{"label": delivery, "value": {"type": "date", "value": order["due"], "relative": True}}]}]}
         out = json.dumps(answer).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
