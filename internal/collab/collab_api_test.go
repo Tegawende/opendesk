@@ -357,14 +357,16 @@ func TestAPISidebarWithoutCollab(t *testing.T) {
 		t.Fatalf("defaults without Collab: %d %+v", st, prefs)
 	}
 	view := SidebarPin{Kind: "view", ID: uuid.NewString()}
+	// A view section is pinned by its name in lower case, as the sidebar matches it.
+	section := SidebarPin{Kind: "view_section", ID: "after sales"}
 	in := SidebarPrefs{Order: []string{"views", "inbox", "teams", "workspace"}, Hidden: []string{"section:teams"},
-		Pinned: []SidebarPin{view}, MarkReadOnOpen: true, UnifiedInbox: true}
+		Pinned: []SidebarPin{view, section}, MarkReadOnOpen: true, UnifiedInbox: true}
 	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", in, &prefs); st != 200 {
 		t.Fatalf("put without Collab: %d", st)
 	}
 	prefs = SidebarPrefs{}
 	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || prefs.Order[0] != "views" ||
-		len(prefs.Hidden) != 1 || !slices.Equal(prefs.Pinned, []SidebarPin{view}) || len(prefs.AutoPins) != 0 {
+		len(prefs.Hidden) != 1 || !slices.Equal(prefs.Pinned, []SidebarPin{view, section}) || len(prefs.AutoPins) != 0 {
 		t.Fatalf("roundtrip without Collab: %d %+v", st, prefs)
 	}
 	// Still a member's own: an API key never reaches it.
@@ -377,7 +379,7 @@ func TestAPISidebarWithoutCollab(t *testing.T) {
 	w.s = newService(w.d)
 	prefs = SidebarPrefs{}
 	if st := doJSON(t, "GET", w.api(w.agent).URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || prefs.Order[0] != "views" ||
-		!slices.Equal(prefs.Pinned, []SidebarPin{{Kind: "box", ID: "inbox"}, view}) ||
+		!slices.Equal(prefs.Pinned, []SidebarPin{{Kind: "box", ID: "inbox"}, view, section}) ||
 		!slices.Equal(prefs.AutoPins, []string{autoPinAllInboxes}) {
 		t.Fatalf("with Collab: %d %+v", st, prefs)
 	}
@@ -827,6 +829,12 @@ func TestAPISidebar(t *testing.T) {
 	}
 	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", SidebarPrefs{Hidden: []string{strings.Repeat("x", 101)}}, nil); st != 422 {
 		t.Fatalf("long item: %d", st)
+	}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", SidebarPrefs{Pinned: []SidebarPin{{Kind: "view_section", ID: strings.Repeat("x", 101)}}}, nil); st != 422 {
+		t.Fatalf("long section pin: %d", st)
+	}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", SidebarPrefs{Pinned: []SidebarPin{{Kind: "section", ID: "views"}}}, nil); st != 422 {
+		t.Fatalf("unknown pin kind: %d", st)
 	}
 }
 

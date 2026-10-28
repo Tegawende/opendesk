@@ -6,10 +6,10 @@
 // (Favorites, Inbox, Teams, Views, Workspace) and leaves out Mail and the mail options.
 
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Eye, EyeOff, Hash, Layers, Pin, PinOff } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, Hash, Layers, ListTree, Pin, PinOff } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { SidebarBadge, SidebarPin, SidebarPrefs, SidebarSectionId } from "@/lib/api/types";
+import type { SidebarBadge, SidebarPin, SidebarPrefs, SidebarSectionId, View } from "@/lib/api/types";
 import { ACCOUNT_BOXES, accountName, buildFolderTree, flattenTree, folderWithRole, isMailBox } from "@/lib/collab/boxes";
 import { useAllFolders, useCollab, useMailAccounts, useSaveSidebarPrefs, useSidebarPrefs } from "@/lib/collab/hooks";
 import {
@@ -34,7 +34,7 @@ import {
 import { useCollabUi, collabUi } from "@/lib/collab/ui";
 import { folderById, folders as ticketFolders } from "@/lib/folders";
 import { cn } from "@/lib/cn";
-import { cleanSection, orderViews } from "@/lib/viewSections";
+import { findSection, groupViews } from "@/lib/viewSections";
 import { q } from "@/lib/queries";
 import { ReorderButtons } from "@/components/settings2/bits";
 import { TeamDot, useTeamsCtx } from "@/components/tickets/teams";
@@ -188,6 +188,8 @@ function ItemRow({ item, prefs, onChange }: { item: Item; prefs: SidebarPrefs; o
           onClick={() => onChange(togglePin(prefs, item.pin!))}
         />
       )}
+      {/* A view section is pinned, not hidden: its pin stays in line with its views' pins. */}
+      {item.pin && !item.hideId && <span aria-hidden className="size-6 shrink-0" />}
       {item.hideId && (
         <IconToggle
           on={!hidden}
@@ -265,16 +267,23 @@ export function CustomizeSidebar() {
         return teams.teams
           .filter(teams.canSeeTeam)
           .map((x) => ({ key: x.id, label: x.name, icon: <TeamDot team={x} />, hideId: hid.team(x.id), pin: { kind: "team", id: x.id }, badge: ticketBadge(hid.team(x.id), "teams") }));
-      case "views":
-        return orderViews(views ?? []).map((v) => ({
+      case "views": {
+        const view = (v: View, depth: number): Item => ({
           key: v.id,
           label: viewName(v),
           icon: <ViewIcon icon={v.icon} size={14} />,
           hideId: hid.view(v.id),
           pin: { kind: "view", id: v.id },
           badge: ticketBadge(hid.view(v.id), "views"),
-          note: cleanSection(v.section) || undefined,
-        }));
+          depth,
+        });
+        // A section heads its views, and pins to Favorites with them.
+        return groupViews(views ?? []).flatMap((e) =>
+          e.kind === "view"
+            ? [view(e.view, 0)]
+            : [{ key: `section:${e.key}`, label: e.name, icon: <ListTree />, pin: { kind: "view_section", id: e.key }, note: t("customize.viewSection") }, ...e.views.map((v) => view(v, 1))],
+        );
+      }
       case "workspace":
         return [];
     }
@@ -296,6 +305,8 @@ export function CustomizeSidebar() {
       }
       case "view":
         return views?.find((v) => v.id === p.id)?.name ?? null;
+      case "view_section":
+        return findSection(views ?? [], p.id)?.name ?? null;
       case "team":
         return teams.team(p.id)?.name ?? null;
       case "ticket_folder": {
@@ -391,7 +402,7 @@ export function CustomizeSidebar() {
                       >
                         <ChevronRight className={cn("size-3.5 shrink-0 text-fg-4 transition-transform duration-150 motion-reduce:transition-none", isOpen && "rotate-90")} />
                         <span className={cn("truncate text-[13px] font-medium", sectionHidden && "text-fg-4")}>{name(id)}</span>
-                        <span className="mono text-[10.5px] text-fg-4">{id === "favorites" ? livePinned.length : items.length}</span>
+                        <span className="mono text-[10.5px] text-fg-4">{id === "favorites" ? livePinned.length : items.filter((x) => x.pin?.kind !== "view_section").length}</span>
                       </button>
                     ) : (
                       <span className={cn("flex-1 truncate pl-5 text-[13px] font-medium", sectionHidden && "text-fg-4")}>{name(id)}</span>

@@ -701,7 +701,7 @@
   .nav-row-menu:is(:hover, :has(:focus-visible), :has([data-state="open"])) > [data-row-more] { opacity: 1; pointer-events: auto; }
   /* !important: the row's own padding utility (px-2) is in a later layer and would win, leaving
      the ⋯ button on top of what the row keeps visible (an account's warning, a waiting chip). */
-  .nav-row-menu:is(:hover, :has(:focus-visible), :has([data-state="open"])) > a:not(:has([data-count])) { padding-right: 2rem !important; }
+  .nav-row-menu:is(:hover, :has(:focus-visible), :has([data-state="open"])) > :is(a, button:not([data-row-more])):not(:has([data-count])) { padding-right: 2rem !important; }
   @media (prefers-reduced-motion: reduce) {
     .nav-row-menu [data-count],
     .nav-row-menu > [data-row-more] { transition: none; }

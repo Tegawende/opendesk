@@ -48,6 +48,7 @@
     "hide": "Hide {{name}}",
     "pin": "Pin {{name}} to favorites",
     "unpin": "Unpin {{name}}",
+    "viewSection": "Section",
     "moveUp": "Move {{name}} up",
     "moveDown": "Move {{name}} down",
     "items": "{{count}} items",

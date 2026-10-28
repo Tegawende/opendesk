@@ -2843,7 +2843,7 @@ export type CollabStatus = {
 };
 
 export type SidebarSectionId = "favorites" | "mail" | "inbox" | "teams" | "views" | "workspace";
-export type SidebarPinKind = "box" | "folder" | "account" | "view" | "team" | "ticket_folder";
+export type SidebarPinKind = "box" | "folder" | "account" | "view" | "team" | "ticket_folder" | "view_section";
 export type SidebarPin = { kind: SidebarPinKind; id: string };
 
 export type SidebarPrefs = {
