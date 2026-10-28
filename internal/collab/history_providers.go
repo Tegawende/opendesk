@@ -138,22 +138,17 @@ func (s *service) gmailHistory(ctx context.Context, r *historyRun, g *gmailProvi
 			}
 			todo = append(todo, id)
 		}
-		type got struct {
-			m   *gmailMessage
-			raw []byte
-		}
-		res, errs := fetchEach(ctx, todo, func() *gmailProvider { return &gmailProvider{s: s, a: copyAccount(g.a)} },
-			func(ctx context.Context, gp *gmailProvider, id string) (got, error) {
-				m, raw, err := gp.getRaw(ctx, id)
-				return got{m, raw}, err
-			})
+		res, errs := fetchEach(ctx, gmailFetchers, todo, g.fork, func(ctx context.Context, gp *gmailProvider, id string) (gmailFetched, error) {
+			m, raw, err := gp.getRaw(ctx, id)
+			return gmailFetched{m: m, raw: raw}, err
+		})
 		fetched := []*newMessage{}
 		for i, err := range errs {
 			switch {
 			case err == nil:
 				m := res[i].m
 				fetched = append(fetched, &newMessage{RemoteID: todo[i], ThreadRemoteID: m.ThreadID, Raw: res[i].raw, Date: m.date(),
-					State: r.p.gmailState(m.LabelIDs)})
+					State: r.p.gmailState(m.LabelIDs), Signals: gmailSignals(m.LabelIDs)})
 			case isNotFound(err):
 				// Deleted since it was listed.
 			case err == errTooLarge:
@@ -297,10 +292,7 @@ func (s *service) graphHistory(ctx context.Context, r *historyRun, g *graphProvi
 				todo = append(todo, m.ID)
 				byID[m.ID] = m
 			}
-			raws, errs := fetchEach(ctx, todo, func() *graphProvider { return &graphProvider{s: s, a: copyAccount(g.a)} },
-				func(ctx context.Context, gp *graphProvider, id string) ([]byte, error) {
-					return gp.FetchRaw(ctx, MessageRef{RemoteID: id})
-				})
+			raws, errs := fetchEach(ctx, graphFetchers, todo, g.fork, fetchGraphRaw)
 			fetched := []*newMessage{}
 			cats := map[string][]string{}
 			for i, err := range errs {

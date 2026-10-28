@@ -550,6 +550,10 @@ export type TicketFilters = {
   mailbox_id?: string;
   /** Mailbox ids, comma separated: tickets whose reply address is none of them. */
   mailbox_not?: string;
+  /** Contact ids, comma separated: tickets whose contact is none of them. */
+  contact_not?: string;
+  /** Company ids, comma separated: tickets whose contact belongs to none of them. */
+  company_not?: string;
   /** The address a ticket was first written to: a mailbox's address or an alias. */
   received_at?: string;
   brand_id?: string;
@@ -683,18 +687,27 @@ export type ActionType =
   /** value: a Severity, or "" to clear. */
   | "set_severity"
   | "assign_user"
+  /** The agent who wrote the run's reply; skipped when there is none. */
+  | "assign_replier"
   | "assign_team"
   | "add_tag"
   | "remove_tag"
   | "send_reply"
   | "add_note"
   | "mark_spam"
+  /** Soft-deletes the ticket; later steps and automations skip it. */
+  | "delete_ticket"
+  /** ticket_created only. value: the window in days, "1".."30"; same_subject (default true). */
+  | "merge_into_open_ticket"
   | "ai_triage"
   /** value: a mailbox id of the ticket's brand (contracts/api.md). */
   | "set_reply_address"
   | "set_field";
-/** set_field: `field` is the ticket field key, `value` its string form ("12.5", "true", "2026-10-11", "a,b"; "" clears). */
-export type Action = { type: ActionType; value: string; field?: string };
+/**
+ * set_field: `field` is the ticket field key, `value` its string form ("12.5", "true", "2026-10-11", "a,b"; "" clears).
+ * merge_into_open_ticket: `same_subject` merges only into a ticket with the same subject (contracts/api.md).
+ */
+export type Action = { type: ActionType; value: string; field?: string; same_subject?: boolean };
 export type Automation = {
   id: string;
   name: string;
@@ -903,6 +916,31 @@ export type KbArticle = {
   updated_at: string;
 };
 
+/** A product update the help center publishes at /changelog (contracts/api.md "Changelog"). */
+export type ChangelogEntry = {
+  id: string;
+  /** 1..200 characters. */
+  title: string;
+  /** Unique in the workspace; the entry's address is <help center>/changelog/<slug>. */
+  slug: string;
+  /** Plain text, up to 300; derived from the body unless written. */
+  excerpt: string;
+  body_html: string;
+  /** Up to 5 names, each up to 32 characters, compared without case. */
+  categories: string[];
+  status: "draft" | "published";
+  /** The date it carries: set when first published unless given. Published and in the future = scheduled. */
+  published_at: string | null;
+  author: UserRef | null;
+  /** The brand whose help center shows it; null = every brand. */
+  brand_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** A category the workspace's changelog entries use, with how many use it. */
+export type ChangelogCategory = { name: string; count: number };
+
 export type ApiKey = {
   id: string;
   name: string;
@@ -1000,6 +1038,8 @@ export type SupportChannelConnection = {
   health_status: "unknown" | "healthy" | "action_required" | "error";
   health_detail: string;
   health_checked_at?: string;
+  health_unhealthy_since?: string;
+  health_alerted_at?: string;
   webhook_url: string;
   created_at: string;
 };
@@ -1021,6 +1061,132 @@ export type SupportChannelDestination = {
   /** Maximum characters before the provider message links back to opendesk. */
   message_limit: number;
   created_at: string;
+};
+export type SupportChannelDelivery = {
+  event_seq: number;
+  event_type: string;
+  ticket_number?: number;
+  status: "queued" | "retrying" | "delivered" | "failed";
+  attempts: number;
+  last_error: string;
+  created_at: string;
+  updated_at: string;
+  delivered_at?: string;
+};
+/** A field of Shopify's answer a ticket panel can show (contracts/integrations.md "Ticket panels"). */
+export type ShopifyField =
+  | "tags"
+  | "email"
+  | "orders_count"
+  | "total_spent"
+  | "financial_status"
+  | "fulfillment_status"
+  | "line_items"
+  | "line_prices"
+  | "shipping"
+  | "discounts"
+  | "refunds"
+  | "tracking";
+/** A ticket panel (contracts/integrations.md "Ticket panels"): read-only data about a ticket's contact. */
+export type TicketPanel = {
+  id: string;
+  kind: "shopify" | "http";
+  name: string;
+  /** shopify: the shop's myshopify.com domain; http: the URL's host. */
+  host: string;
+  /** shopify: client_credentials when OpenDesk asks Shopify for its token with the app's client ID and secret; access_token when a token was pasted. */
+  auth?: "client_credentials" | "access_token";
+  /** shopify client_credentials: the app's client ID (not a secret). */
+  client_id?: string;
+  /** shopify: the fields tickets show, in catalogue order (the defaults until an admin chooses); http: empty. */
+  fields: ShopifyField[];
+  /** shopify: how many of the last orders show, 1 to 5. */
+  orders_shown?: number;
+  /** http: the regular expression (RE2) that finds order and invoice numbers in the ticket for the request's `ticket.references`; empty finds none. */
+  reference_pattern?: string;
+  enabled: boolean;
+  position: number;
+  /** error: the last lookup found the credentials refused. */
+  status: "connected" | "error";
+  last_error: string;
+  created_at: string;
+  updated_at: string;
+};
+/** A field the panel does not show is left out, and `tags` is empty. */
+export type PanelCustomer = { name: string; url: string; email?: string; orders_count?: number; total_spent?: string; currency?: string; tags: string[] };
+/** A field the panel does not show is left out, and a list is empty. */
+export type PanelOrder = {
+  id: string;
+  number: string;
+  url: string;
+  created_at: string;
+  /** Decimal, after refunds. */
+  total: string;
+  currency: string;
+  financial_status?: string;
+  fulfillment_status?: string;
+  cancelled: boolean;
+  cancelled_at?: string;
+  /** Decimal, what was refunded; absent when nothing was. */
+  refunded?: string;
+  discount_codes: string[];
+  /** Where it goes (city and ISO country, never the street) and the shipping method; absent when there is neither. */
+  shipping?: { city?: string; country?: string; method?: string };
+  /** `price`: the unit price before discounts, decimal, in the order's currency. */
+  items: { title: string; variant?: string; quantity: number; price?: string }[];
+  tracking: { company?: string; number?: string; url?: string }[];
+};
+export type PanelSection = { title: string; items: { label: string; value: string; url?: string }[] };
+/** A tone of an http panel's badges and notes. */
+export type PanelTone = "neutral" | "info" | "success" | "warning" | "danger";
+export type PanelBadge = { text: string; tone: PanelTone };
+/**
+ * A value of an http panel's blocks, as the server cleaned it: always an object. `date` is
+ * YYYY-MM-DD for a day, else an RFC 3339 time in UTC; `money` a decimal and an ISO 4217 code.
+ */
+export type PanelValue =
+  | { type: "text"; text: string }
+  | { type: "date"; value: string; relative?: boolean }
+  | { type: "money"; amount: string; currency: string }
+  | { type: "badge"; text: string; tone: PanelTone };
+export type PanelField = { label?: string; value: PanelValue; url?: string };
+export type PanelLine = { quantity?: number; title: string; subtitle?: string; value?: PanelValue; url?: string };
+export type PanelListItem = { title: string; subtitle?: string; value?: PanelValue; badge?: PanelBadge; url?: string; links?: PanelLink[] };
+/** The record in another tool: a small button by the title. `icon` is one the app draws (TicketPanels' LINK_ICONS or a shipped logo), else the label's first letter shows. */
+export type PanelLink = { label: string; url: string; icon?: string };
+/** A block of an http panel's version 2 answer (contracts/integrations.md "The http answer"). */
+export type PanelBlock =
+  | { type: "card"; title: string; url?: string; subtitle?: string; badges?: PanelBadge[]; links?: PanelLink[]; collapsed?: boolean; fields?: PanelField[]; lines?: PanelLine[]; footer?: PanelField[] }
+  | { type: "fields"; title?: string; items: PanelField[] }
+  | { type: "list"; title?: string; items: PanelListItem[] }
+  | { type: "note"; text: string; tone: PanelTone };
+export type TicketPanelData = {
+  panel_id: string;
+  kind: "shopify" | "http";
+  state: "ok" | "empty" | "no_contact" | "error";
+  message?: string;
+  customer?: PanelCustomer;
+  orders?: PanelOrder[];
+  /** http: a version 1 answer's sections. */
+  sections?: PanelSection[];
+  /** http: a version 2 answer's blocks. */
+  blocks?: PanelBlock[];
+  fetched_at: string;
+};
+export type SupportChannelOperations = {
+  window_started_at: string;
+  generated_at: string;
+  connections: { total: number; healthy: number; unhealthy: number; alerted: number };
+  deliveries: {
+    queued: number;
+    retrying: number;
+    delivered: number;
+    failed: number;
+    average_latency_ms: number;
+    maximum_latency_ms: number;
+    oldest_pending_at?: string;
+  };
+  webhooks: { rejected: number; duplicates_suppressed: number };
 };
 export type TicketLink = {
   id: string;
@@ -1054,12 +1220,13 @@ export type AuditLog = {
   ip: string;
   created_at: string;
 };
-export type NotificationType = "assigned" | "new_ticket" | "mentioned" | "customer_replied" | "thread_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached" | "ai_balance_low" | "ai_balance_out" | "auto_recharge_failed" | "ai_key_failed" | "team_joined" | "import_finished" | "collab_assigned" | "collab_mention";
+export type NotificationType = "assigned" | "new_ticket" | "mentioned" | "customer_replied" | "thread_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached" | "ai_balance_low" | "ai_balance_out" | "auto_recharge_failed" | "ai_key_failed" | "team_joined" | "import_finished" | "support_channel_unhealthy" | "collab_assigned" | "collab_mention";
 /** `ai_cap_reached`: data `{cap_usd}`, ticket null; the widget agent reached `widget_monthly_cap_usd` (once a month, owners and admins).
  * `ai_balance_low` / `ai_balance_out`: data `{remaining_usd}` (US dollars); `auto_recharge_failed`: data `{reason: AutoRechargeFailure}` (billing, owners and admins, ticket null).
  * `ai_key_failed`: data `{provider: AIKeyKind, reason: "rejected" | "no_funds"}`; the workspace's own AI key failed (at most hourly, owners and admins, ticket null).
  * `thread_replied`: data `{message_id, thread_id, subject, preview, from: {name, email}}`; someone outside the team answered a third-party thread on a ticket assigned to you.
  * `team_joined`: data `{team_id, team: {id, name, private}, user: {id, name}, by}`; an admin joined a team you lead (ticket null).
+ * `support_channel_unhealthy`: data `{connection_id, name, provider, status, detail}`; a provider connection stayed unhealthy for 15 minutes (owners and admins, ticket null).
  * `import_finished`: data `{import_id, source, source_name, account, status: "completed" | "failed" | "needs_credentials", tickets, updated, articles, failed, error}`;
  * a history import you started ended or paused for new credentials (contracts/imports.md, ticket null). */
 export type Notification = {
@@ -1206,7 +1373,69 @@ export type TicketCounts = {
 /** A sidebar row's tickets awaiting a reply (the customer wrote last), urgent, and overdue. */
 export type TicketStats = { awaiting: number; urgent: number; overdue: number };
 
-export type SearchResults = { tickets: Ticket[]; contacts: Contact[]; articles: KbArticle[] };
+/**
+ * A whole ticket list, every page of it (GET /v1/tickets/summary). `complete` is false, with
+ * every count 0, when the server did not count it: too many tickets match, or it is a search.
+ */
+export type TicketListSummary = TicketStats & { complete: boolean; total: number; due_soon: number };
+
+/** `wiki_pages` is left out by servers without the wiki and for callers without `wiki:read`. */
+export type SearchResults = { tickets: Ticket[]; contacts: Contact[]; articles: KbArticle[]; wiki_pages?: WikiSearchHit[] };
+
+// ─── Wiki (contracts/wiki.md) ───────────────────────────────────────────────
+
+/** A page in the tree, without its body. */
+export type WikiNode = {
+  id: string;
+  parent_id: string | null;
+  /** "" until named: shown as "Untitled". */
+  title: string;
+  /** One emoji, or "". */
+  icon: string;
+  /** Order among its siblings, from 0. */
+  position: number;
+  /** Moves on every change of title, icon or body; PATCH sends it back. */
+  version: number;
+  updated_at: string;
+  /** Who created it; null for an API key or a deleted account. */
+  created_by_id: string | null;
+};
+
+export type WikiRef = { id: string; title: string; icon: string };
+
+export type WikiPage = WikiNode & {
+  body_html: string;
+  created_by: UserRef | null;
+  updated_by: UserRef | null;
+  created_at: string;
+  /** Its ancestors, the top-level page first. */
+  breadcrumbs: WikiRef[];
+  children: WikiRef[];
+};
+
+export type WikiRevision = {
+  id: string;
+  title: string;
+  icon: string;
+  /** Only when one revision is read. */
+  body_html?: string;
+  author: UserRef | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WikiSearchHit = {
+  id: string;
+  parent_id: string | null;
+  title: string;
+  icon: string;
+  /** Plain text around the match. */
+  snippet: string;
+  path: WikiRef[];
+  updated_at: string;
+};
+
+export type WikiPagePatch = { title?: string; icon?: string; body_html?: string; version?: number };
 
 export type ReportsOverview = {
   created: number;
@@ -1229,6 +1458,29 @@ export type ReportsOverview = {
 };
 /** One team's or brand's row of the overview. */
 export type ReportsGroup = { created: number; solved: number; open_now: number; first_response_p50_minutes: number | null };
+
+/** One member's row of GET /v1/reports/agents (contracts/api.md "Agents report"). */
+export type ReportsAgentRow = {
+  user: UserRef;
+  /** Tickets assigned to them in the range, or created in it assigned to them. */
+  assigned: number;
+  /** Tickets solved in the range that are assigned to them. */
+  solved: number;
+  /** Public replies they sent in the range. */
+  replies: number;
+  /** Internal notes they wrote in the range. */
+  notes: number;
+  /** Their public replies on the tickets they solved, per ticket. */
+  replies_per_solved: number | null;
+  first_response_p50_minutes: number | null;
+  /** Median time from the last assignment to them until solved. */
+  handle_p50_minutes: number | null;
+  /** Time in the app with availability online; null when `online_time` is none. */
+  online_minutes: number | null;
+};
+/** Whose rows and online time the caller sees: everyone's (admins), their own row only, or every row without online time (API keys). */
+export type ReportsOnlineTime = "all" | "self" | "none";
+export type ReportsAgents = { data: ReportsAgentRow[]; online_time: ReportsOnlineTime };
 
 export type MailboxTestLeg = { ok: boolean; error: string; /** The server's reply, scrubbed. */ detail?: string };
 /** GET /v1/mailboxes/{id}/usage: the tickets that reply from a mailbox, before removing it. */
@@ -1592,6 +1844,8 @@ export type AIConfig = {
   decisions?: DecisionEngine;
   /** LLM calls run on the workspace's own provider key and cost $0 (GET /v1/ai/provider). */
   own_key?: boolean;
+  /** Decisions run on the workspace's own TypeSafe or provider key and cost $0. */
+  decisions_own_key?: boolean;
 };
 
 // The workspace's AI provider (contracts/ai.md "Provider per workspace").
@@ -1618,6 +1872,23 @@ export type AIProvider = {
   /** Calls on the instance's provider are charged to the AI balance, in US dollars. */
   billing: boolean;
   key: AIProviderKey | null;
+  /** Where decisions run; missing on older servers. */
+  decisions?: AIDecisionsRoute;
+};
+/** Where the workspace's decisions (Jev) run, and its own TypeSafe key. */
+export type AIDecisionsRoute = {
+  runs_on: "instance" | "provider_key" | "typesafe_key" | "none";
+  engine: "jev" | "llm" | "none";
+  key: AIDecisionsKey | null;
+};
+/** A saved TypeSafe key, never the key itself. */
+export type AIDecisionsKey = {
+  last4: string;
+  status: AIKeyStatus;
+  status_at: string | null;
+  created_by: UserRef | null;
+  created_at: string;
+  updated_at: string;
 };
 export type AIProviderKeyInput = { kind: AIKeyKind; api_key: string; base_url?: string; model?: string; fast_model?: string };
 export type AIProviderTestReason = "invalid_key" | "no_funds" | "unreachable" | "busy" | "model_unavailable";
@@ -2169,12 +2440,54 @@ export type MailAccount = {
   oldest_message_at: string | null;
   /** IMAP: folders past the 30 the sync reads; 0 otherwise. */
   folders_left_out: number;
+  /** How its inbox is split into tabs (contracts/collab.md "Categories"). */
+  categories: MailAccountCategories;
 };
+
+/** One tab of an inbox (contracts/collab.md "Categories"). "primary" is always the first. */
+export type MailCategory = { key: string; name: string; description: string; color: MailColor };
+
+export type MailCategorySet = { enabled: boolean; categories: MailCategory[]; updated_at: string; updated_by: UserRef | null };
+
+/** GET /v1/collab/categories. */
+export type MailCategorySettings = {
+  /** The workspace's default; null when there is none. locked: members who are not admins cannot choose their own. */
+  workspace: (MailCategorySet & { locked: boolean }) | null;
+  /** Admins: every team with its own; others: their own teams'. The first in position order the owner is in decides. */
+  teams: (MailCategorySet & { team_id: string; team_name: string; position: number })[];
+  presets: MailCategory[];
+  /** ai: Ollie sorts new mail; rules: sender rules and headers only. */
+  sorting: "ai" | "rules";
+  /** Ollie can suggest categories. */
+  suggest: boolean;
+};
+
+export type MailAccountCategories = {
+  enabled: boolean;
+  /** What its inbox shows; [] when not split. */
+  categories: MailCategory[];
+  source: "account" | "team" | "workspace" | "none";
+  team: { id: string; name: string } | null;
+  /** The account's own choice. */
+  mode: "follow" | "custom" | "off";
+  /** Its own categories, kept while it follows. */
+  own: MailCategory[];
+  /** Ollie may sort its new mail. */
+  ai: boolean;
+  /** The caller cannot change mode or categories: the workspace locks them. */
+  locked: boolean;
+};
+
+/** A sender rule: mail from an address, or from "@domain", goes to a category. */
+export type MailCategoryRule = { id: string; sender: string; category: string; created_at: string };
 
 /** limited: at the workspace's Collab storage allowance (contracts/collab.md "Storage"). */
 export type MailHistoryStatus = "running" | "paused" | "limited" | "done" | "canceled" | "error";
 
 /** A history import: older mail brought into opendesk (contracts/collab.md "History"). */
+/** The older mail a new account imports once connected: from since on, or all of it (null). */
+export type ConnectHistory = { since: string | null };
+
 export type MailHistory = {
   status: MailHistoryStatus;
   /** Mail received from then on; null = all mail. */
@@ -2315,6 +2628,8 @@ export type MailThread = {
   comment_count: number;
   /** The account's address other than its own the conversation was written to or sent from (an alias); null when none. */
   to_address?: string | null;
+  /** Its category key (contracts/collab.md "Categories"); null when its account's inbox is not split. */
+  category?: string | null;
 };
 
 export type MailAttachment = {
@@ -2356,6 +2671,8 @@ export type MailMessage = {
   sent_by: UserRef | null;
   /** Drafts: the id the /v1/collab/drafts routes take. */
   draft_id?: string | null;
+  /** Drafts an AI key saved and no person has saved since: the key's name, shown "AI draft by" (contracts/collab.md "AI drafts"). */
+  drafted_by_ai?: string | null;
   /** The message of the conversation it answers (its In-Reply-To), when stored. */
   in_reply_to_id?: string | null;
   /** The account's address (its own or an alias) it was sent from or written to; null when none. */
@@ -2476,6 +2793,8 @@ export type SidebarPrefs = {
   badges: Record<string, SidebarBadge>;
   /** The mail page's folder bar, in order: box names and "folder:<id>". */
   mail_tabs: string[];
+  /** Pins the sidebar added once by itself ("box:inbox": All inboxes, at a second account), so one unpinned stays so. */
+  auto_pins: string[];
 };
 
 /** unread / total / none for mail rows; count / awaiting / urgent / overdue / none for ticket rows, and open for team rows. */
@@ -2494,6 +2813,7 @@ export type MailThreadAction =
   | "spam"
   | "not_spam"
   | "move"
+  | "categorize"
   | "label"
   | "unlabel"
   | "done"
@@ -2508,6 +2828,8 @@ export type MailCounts = {
   addresses?: Record<string, Record<string, number>>;
   /** boxes.assigned by account; only accounts with some. */
   assigned: Record<string, number>;
+  /** By split account, then category key (primary included): unread conversations in its inbox; missing = 0. */
+  categories?: Record<string, Record<string, number>>;
 };
 
 /** `collab.changed` event data. */

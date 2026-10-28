@@ -8,11 +8,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // Provider HTTPS calls (Gmail and Microsoft Graph): the account's access token, one
-// refresh on 401, and provider errors reduced to safe, classified messages.
+// refresh on 401, each account's calls paced within the provider's limits, a short wait
+// and another try while the provider is busy, and provider errors reduced to safe,
+// classified messages.
 
 // restRequest is one provider call.
 type restRequest struct {
@@ -28,13 +34,16 @@ type restRequest struct {
 // errTooLarge is a response over the request's limit (a message over maxRawBytes).
 var errTooLarge = errors.New("the message is too large to import")
 
-// call runs a provider request and returns the response body of a 2xx answer.
+// call runs a provider request and returns the response body of a 2xx answer. A busy
+// provider (a rate limit, or a 5xx to a read) is asked again after each of s.busyWaits, or
+// after its Retry-After when that is no longer than maxBusyWait.
 func (s *service) call(ctx context.Context, a *accountRow, label string, r restRequest) ([]byte, error) {
 	limit := r.limit
 	if limit == 0 {
 		limit = 1 << 20
 	}
-	for attempt := 0; attempt < 2; attempt++ {
+	refreshed, waited := false, 0
+	for {
 		token, err := s.accessToken(ctx, a)
 		if err != nil {
 			return nil, err
@@ -55,8 +64,16 @@ func (s *service) call(ctx context.Context, a *accountRow, label string, r restR
 		for k, v := range r.headers {
 			req.Header.Add(k, v)
 		}
+		release, err := s.pace(a).wait(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, errProviderUnavailable // the job's time would run out waiting
+		}
 		resp, err := s.http.Do(req)
 		if err != nil {
+			release()
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
@@ -64,27 +81,121 @@ func (s *service) call(ctx context.Context, a *accountRow, label string, r restR
 		}
 		body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 		resp.Body.Close()
+		release()
 		if err != nil {
 			return nil, errProviderUnavailable
 		}
-		if resp.StatusCode == http.StatusUnauthorized && attempt == 0 {
+		if resp.StatusCode == http.StatusUnauthorized {
+			if refreshed {
+				return nil, errReconnect
+			}
 			if err := s.expireToken(ctx, a); err != nil {
 				return nil, err
 			}
+			refreshed = true
 			continue
 		}
-		if resp.StatusCode == http.StatusUnauthorized {
-			return nil, errReconnect
-		}
 		if resp.StatusCode/100 != 2 {
-			return nil, httpFailure(label, resp.StatusCode, body)
+			err := httpFailure(label, resp.StatusCode, body)
+			var pe *providerError
+			if waited < len(s.busyWaits) && errors.As(err, &pe) && pe.busy && (pe.limited || r.method == http.MethodGet) {
+				wait, ok := retryAfter(resp.Header, s.busyWaits[waited])
+				if ok {
+					waited++
+					t := time.NewTimer(wait)
+					select {
+					case <-ctx.Done():
+						t.Stop()
+						return nil, ctx.Err()
+					case <-t.C:
+					}
+					continue
+				}
+			}
+			return nil, err
 		}
 		if int64(len(body)) > limit {
 			return nil, errTooLarge
 		}
 		return body, nil
 	}
-	return nil, errReconnect
+}
+
+// paceLimit is how fast and how many at once one account's provider is asked.
+type paceLimit struct {
+	perSecond rate.Limit
+	burst     int
+	atOnce    int
+}
+
+// providerPaces keep each account inside its provider's limits: Gmail allows 250 quota
+// units a second per user (reading a message costs 5, so 40 calls a second leave room),
+// Microsoft 10,000 requests in 10 minutes and 4 at once per mailbox. The sync reads
+// gmailFetchers or graphFetchers messages at once and leaves the other places to people's
+// own actions.
+var providerPaces = map[string]paceLimit{
+	ProviderGoogle:    {perSecond: 40, burst: 20, atOnce: 8},
+	ProviderMicrosoft: {perSecond: 15, burst: 15, atOnce: 4},
+}
+
+// pace is one account's turns at its provider, shared by every call this process makes
+// for it: the sync's fetchers, actions and people's own reads.
+type pace struct {
+	rate  *rate.Limiter
+	slots chan struct{}
+}
+
+// pace returns the account's pace, nil for a provider without one.
+func (s *service) pace(a *accountRow) *pace {
+	s.paceMu.Lock()
+	defer s.paceMu.Unlock()
+	if p := s.paced[a.ID]; p != nil {
+		return p
+	}
+	l, ok := s.paceLimits[a.Provider]
+	if !ok {
+		return nil
+	}
+	p := &pace{rate: rate.NewLimiter(l.perSecond, l.burst), slots: make(chan struct{}, l.atOnce)}
+	s.paced[a.ID] = p
+	return p
+}
+
+// wait takes one of the account's places and its next turn; release gives the place back.
+func (p *pace) wait(ctx context.Context) (release func(), err error) {
+	if p == nil {
+		return func() {}, nil
+	}
+	select {
+	case p.slots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	release = func() { <-p.slots }
+	if err := p.rate.Wait(ctx); err != nil {
+		release()
+		return nil, err
+	}
+	return release, nil
+}
+
+// maxBusyWait is the longest Retry-After a call waits out; a longer one is left to the
+// next sync pass.
+const maxBusyWait = 15 * time.Second
+
+// retryAfter is the wait before asking again: the provider's Retry-After in seconds when
+// it gives one (false past maxBusyWait), else def.
+func retryAfter(h http.Header, def time.Duration) (time.Duration, bool) {
+	v := strings.TrimSpace(h.Get("Retry-After"))
+	if v == "" {
+		return def, true
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return def, true
+	}
+	d := time.Duration(n) * time.Second
+	return d, d <= maxBusyWait
 }
 
 // callJSON sends in as JSON (when not nil) and decodes the answer into out (when not nil).
@@ -162,8 +273,10 @@ func httpFailure(label string, status int, body []byte) error {
 	}
 	msg += ")."
 	switch {
-	case status == http.StatusTooManyRequests || status >= 500 || has("rateLimitExceeded", "userRateLimitExceeded", "ApplicationThrottled"):
-		return &providerError{msg: label + " is busy. We will try again.", status: status}
+	case status == http.StatusTooManyRequests || has("rateLimitExceeded", "userRateLimitExceeded", "ApplicationThrottled"):
+		return &providerError{msg: label + " is busy. We will try again.", status: status, busy: true, limited: true}
+	case status >= 500:
+		return &providerError{msg: label + " is busy. We will try again.", status: status, busy: true}
 	case status == http.StatusNotFound || has("ErrorItemNotFound"):
 		return &providerError{msg: msg, status: status, permanent: true, notFound: true}
 	case status == http.StatusForbidden && has("insufficientPermissions", "ACCESS_TOKEN_SCOPE_INSUFFICIENT", "ErrorAccessDenied", "authError"):

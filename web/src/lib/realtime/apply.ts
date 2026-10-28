@@ -29,6 +29,7 @@ import { updateWorkspace, useSession } from "../session";
 import { cachedTicket, forgetTicket, patchTicketEverywhere, removeTicketEverywhere, teamsOf } from "../ticketCache";
 import { markHidden, unmarkHidden } from "./store";
 import { applyCollabEvent } from "../collab/cache";
+import { applyWikiEvent } from "../wiki/events";
 
 // Events that can tick off a setup checklist step (contracts/api.md "Onboarding").
 const onboardingResources = new Set(["mailbox", "member", "tag", "kb_article", "workspace"]);
@@ -71,6 +72,7 @@ const simpleLists: Record<string, { key: () => readonly unknown[]; field: string
   routing_rule: { key: () => qk.routingRules, field: "routing_rule" },
   webhook: { key: () => qk.webhooks, field: "webhook" },
   integration: { key: () => qk.integrations, field: "integration" },
+  ticket_panel: { key: () => qk.ticketPanels, field: "panel" },
   support_channel_connection: { key: () => qk.supportChannelConnections, field: "support_channel_connection" },
   support_channel_destination: { key: () => qk.supportChannelDestinations, field: "support_channel_destination" },
 };
@@ -101,12 +103,16 @@ function refreshImported(qc: QueryClient) {
   });
 }
 
-/** Coalesce bursts (bulk edits) into one counts refetch, the sidebar's numbers of every workspace with it. */
+/**
+ * Coalesce bursts (bulk edits, imports, auto-close) into one counts refetch every two seconds at
+ * most, the sidebar's numbers of every workspace with it. A refetch still running is left to
+ * finish and the next one starts after it, so the numbers settle on a read after the last event.
+ */
 function refreshCounts(qc: QueryClient) {
-  later("counts", 250, () => {
-    void qc.invalidateQueries({ queryKey: qk.counts });
-    void qc.invalidateQueries({ queryKey: qk.of("tickets", "everywhere") });
-    void qc.invalidateQueries({ queryKey: qk.overview });
+  later("counts", 2000, function refetch() {
+    const keys = [qk.counts, qk.of("tickets", "everywhere"), qk.overview];
+    if (keys.some((queryKey) => qc.isFetching({ queryKey }) > 0)) return later("counts", 2000, refetch);
+    for (const queryKey of keys) void qc.invalidateQueries({ queryKey }, { cancelRefetch: false });
   });
 }
 
@@ -425,6 +431,11 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
     return;
   }
 
+  if (resource === "wiki_page") {
+    applyWikiEvent(qc, verb, d);
+    return;
+  }
+
   if (resource === "kb_article") {
     void qc.invalidateQueries({ queryKey: qk.kbArticleLists });
     if (verb === "deleted") qc.removeQueries({ queryKey: qk.kbArticle(d.kb_article_id as string) });
@@ -433,6 +444,17 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
       qc.setQueryData(qk.kbArticle(a.id), a);
     }
     void qc.invalidateQueries({ queryKey: qk.kbCollections });
+    return;
+  }
+
+  if (resource === "changelog_entry") {
+    if (verb === "deleted") qc.removeQueries({ queryKey: qk.changelogEntry(d.changelog_entry_id as string) });
+    else {
+      const e = d.changelog_entry as { id: string } | undefined;
+      if (e) qc.setQueryData(qk.changelogEntry(e.id), e);
+    }
+    void qc.invalidateQueries({ queryKey: qk.changelogEntryLists });
+    void qc.invalidateQueries({ queryKey: qk.changelogCategories });
     return;
   }
 
@@ -482,6 +504,8 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
       qc.setQueryData<{ connection_id: string }[]>(qk.supportChannelDestinations, (old) => old?.filter((x) => x.connection_id !== id));
     }
     if (resource === "view") refreshCounts(qc);
+    // A changed or removed panel's answers are from before the change.
+    if (resource === "ticket_panel" && verb !== "created") void qc.invalidateQueries({ queryKey: qk.of("tickets", "panels") });
     // Tickets name their brand and widget; a removed one leaves lists to refetch.
     if ((resource === "brand" || resource === "widget") && verb === "deleted") void qc.invalidateQueries({ queryKey: qk.ticketLists });
     // Records embed label names and colours, and field changes can clear stored values.

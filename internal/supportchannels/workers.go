@@ -36,7 +36,54 @@ func (w *dispatchWorker) Timeout(*river.Job[jobs.SupportChannelDispatchArgs]) ti
 	return 30 * time.Second
 }
 func (w *dispatchWorker) Work(ctx context.Context, j *river.Job[jobs.SupportChannelDispatchArgs]) error {
-	return snoozeRateLimit(w.s.dispatch(ctx, j.Args))
+	return snoozeRateLimit(w.s.runDispatch(ctx, j))
+}
+
+func (s *Service) runDispatch(ctx context.Context, j *river.Job[jobs.SupportChannelDispatchArgs]) error {
+	a := j.Args
+	status := "queued"
+	if j.Attempt > 1 {
+		status = "retrying"
+	}
+	tag, err := s.d.DB.Pool.Exec(ctx, `INSERT INTO support_channel_dispatches(workspace_id,event_seq,status,attempts)
+		SELECT workspace_id,seq,$3,1 FROM events WHERE workspace_id=$1 AND seq=$2
+		ON CONFLICT (workspace_id,event_seq) DO UPDATE
+		SET status=$3,attempts=support_channel_dispatches.attempts+1,updated_at=now()`, a.WorkspaceID, a.EventSeq, status)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil
+	}
+
+	err = s.dispatch(ctx, a)
+	if err != nil {
+		status = "retrying"
+		var limited *channel.RateLimited
+		if j.Attempt >= j.MaxAttempts && !errors.As(err, &limited) {
+			status = "failed"
+		}
+		_, updateErr := s.d.DB.Pool.Exec(ctx, `UPDATE support_channel_dispatches SET status=$3,last_error=$4,updated_at=now()
+			WHERE workspace_id=$1 AND event_seq=$2`, a.WorkspaceID, a.EventSeq, status, deliveryError)
+		if updateErr != nil {
+			return updateErr
+		}
+		return err
+	}
+
+	var deliveries int
+	if err := s.d.DB.Pool.QueryRow(ctx, `SELECT count(*) FROM support_channel_deliveries d
+		JOIN support_channel_destinations dest ON dest.id=d.destination_id
+		WHERE dest.workspace_id=$1 AND d.event_seq=$2`, a.WorkspaceID, a.EventSeq).Scan(&deliveries); err != nil {
+		return err
+	}
+	if deliveries == 0 {
+		_, err = s.d.DB.Pool.Exec(ctx, `DELETE FROM support_channel_dispatches WHERE workspace_id=$1 AND event_seq=$2`, a.WorkspaceID, a.EventSeq)
+		return err
+	}
+	_, err = s.d.DB.Pool.Exec(ctx, `UPDATE support_channel_dispatches SET status='delivered',last_error='',delivered_at=now(),updated_at=now()
+		WHERE workspace_id=$1 AND event_seq=$2`, a.WorkspaceID, a.EventSeq)
+	return err
 }
 
 func snoozeRateLimit(err error) error {

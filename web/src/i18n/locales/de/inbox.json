@@ -82,7 +82,8 @@
     "priority": "Priorität {{priority}}",
     "awaiting": "Wartet auf Antwort",
     "severity": "{{severity}}",
-    "receivedAt": "Gesendet an {{address}}"
+    "receivedAt": "Gesendet an {{address}}",
+    "assignedTo": "Zugewiesen an {{name}}"
   },
   "waiting": {
     "label": "Wartet seit {{time}}",
@@ -115,7 +116,11 @@
   },
   "presence": {
     "viewing": "{{name}} sieht es sich an",
-    "replying": "{{name}} antwortet"
+    "replying": "{{name}} antwortet",
+    "oneViewing": "{{name}} liest",
+    "oneReplying": "{{name}} antwortet…",
+    "manyViewing": "{{n}} lesen",
+    "manyReplying": "{{name}} antwortet… +{{others}}"
   },
   "empty": {
     "unassigned": {
@@ -248,6 +253,8 @@
     "label": "Übersicht",
     "total_one": "{{count}} Ticket",
     "total_other": "{{count}} Tickets",
+    "firstShown": "Die ersten {{count}} angezeigt",
+    "firstShownHint": "Diese Zahlen zählen nur die bisher geladenen Tickets. Scroll nach unten, um mehr zu laden.",
     "awaiting": "warten auf Antwort",
     "urgent": "dringend",
     "overdue": "überfällig",
@@ -652,6 +659,12 @@
     "discardTitle": "Dieses Ticket verwerfen?",
     "discardBody": "Dein Entwurf geht verloren.",
     "discard": "Verwerfen",
+    "keepWriting": "Weiterschreiben",
+    "openPage": "Als ganze Seite öffnen",
+    "moreOnPage_one": "{{count}} weiteres von der ganzen Seite",
+    "moreOnPage_other": "{{count}} weitere von der ganzen Seite",
+    "newContact": "Neuer Kontakt, wird mit dem Ticket angelegt",
+    "recipientHint": "Wähle, an wen es geht: Kontaktdaten und frühere Tickets erscheinen dann hier.",
     "needTo": "Füge einen Empfänger hinzu.",
     "needSubject": "Füge einen Betreff hinzu.",
     "needBody": "Schreib eine Nachricht.",
@@ -850,5 +863,47 @@
     "notSent": "Eine Antwort, die du senden wolltest, wurde nicht gesendet. Öffne ihr Ticket, um sie erneut zu senden.",
     "tooLongToHold": "Sofort gesendet: diese Antwort ist zu lang, um sie fürs Rückgängigmachen zurückzuhalten.",
     "noteNotSaved": "Die Notiz konnte nicht aktualisiert werden"
+  },
+  "panels": {
+    "refresh": "{{name}} aktualisieren",
+    "collapse": "{{name}} ausblenden",
+    "expand": "{{name}} einblenden",
+    "noContact": "Der Kontakt hat keine E-Mail-Adresse zum Nachschlagen.",
+    "empty": "Nichts zu diesem Kontakt.",
+    "emptyShopify": "Kein Kunde mit dieser E-Mail-Adresse im Shop.",
+    "error": "Konnte nicht geladen werden: {{message}}",
+    "retry": "Erneut versuchen",
+    "orders_one": "{{count}} Bestellung",
+    "orders_other": "{{count}} Bestellungen",
+    "spent": "{{amount}} ausgegeben",
+    "noOrders": "Keine aktuellen Bestellungen.",
+    "cancelled": "Storniert",
+    "openCustomer": "Kunden in Shopify öffnen",
+    "openOrder": "Bestellung {{number}} in Shopify öffnen",
+    "track": "Verfolgen",
+    "status": {
+      "paid": "Bezahlt",
+      "pending": "Zahlung ausstehend",
+      "authorized": "Autorisiert",
+      "partially_paid": "Teilweise bezahlt",
+      "refunded": "Erstattet",
+      "partially_refunded": "Teilweise erstattet",
+      "voided": "Storniert",
+      "expired": "Abgelaufen",
+      "fulfilled": "Versendet",
+      "unfulfilled": "Nicht versendet",
+      "partially_fulfilled": "Teilweise versendet",
+      "in_progress": "In Bearbeitung",
+      "on_hold": "Angehalten",
+      "scheduled": "Geplant",
+      "restocked": "Wieder eingelagert"
+    },
+    "cancelledOn": "Storniert am {{date}}",
+    "unitPrice": "Stückpreis",
+    "shipping": "Versand",
+    "discountCodes_one": "Rabattcode",
+    "discountCodes_other": "Rabattcodes",
+    "refunded": "{{amount}} erstattet",
+    "openLink": "{{name}} öffnen"
   }
 }

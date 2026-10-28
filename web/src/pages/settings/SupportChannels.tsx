@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, Hash, KeyRound, Link2, MessagesSquare, Plus, RefreshCw, Sparkles, StickyNote, Trash2 } from "lucide-react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Activity, AtSign, Clock3, Hash, KeyRound, Link2, MessagesSquare, Plus, RefreshCw, ShieldAlert, Sparkles, StickyNote, Trash2, Webhook } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AppMark } from "@/components/appmark";
@@ -16,15 +16,16 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { errorMessage } from "@/lib/api/client";
 import { api } from "@/lib/api/endpoints";
-import type { SupportChannelAccount, SupportChannelConnection, SupportChannelDestination, SupportChannelProvider } from "@/lib/api/types";
+import type { SupportChannelAccount, SupportChannelConnection, SupportChannelDelivery, SupportChannelDestination, SupportChannelOperations, SupportChannelProvider } from "@/lib/api/types";
+import { fullDate, relShort } from "@/lib/format";
 import { q, qk, upsertInList } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 
 // Providers and credential fields with their own copy; another provider shows
 // the name, description and labels its adapter describes.
-const PROVIDERS = ["slack", "discord", "telegram"] as const;
+const PROVIDERS = ["slack", "discord", "telegram", "google_chat"] as const;
 type ProviderKey = (typeof PROVIDERS)[number];
-const FIELDS = ["bot_token", "signing_secret", "public_key", "guild_id", "webhook_secret"] as const;
+const FIELDS = ["bot_token", "signing_secret", "public_key", "guild_id", "webhook_secret", "service_account_json"] as const;
 type FieldKey = (typeof FIELDS)[number];
 const knownProvider = (k: string): k is ProviderKey => (PROVIDERS as readonly string[]).includes(k);
 const knownField = (k: string): k is FieldKey => (FIELDS as readonly string[]).includes(k);
@@ -56,6 +57,13 @@ function connectionState(c: SupportChannelConnection): { state: ItemState; key: 
   }
 }
 
+function metricDuration(ms: number): string {
+  if (!ms) return "—";
+  if (ms < 1_000) return `${ms} ms`;
+  if (ms < 60_000) return `${(ms / 1_000).toFixed(ms < 10_000 ? 1 : 0)} s`;
+  return `${(ms / 60_000).toFixed(ms < 600_000 ? 1 : 0)} min`;
+}
+
 export default function SupportChannels() {
   const { t } = useTranslation("settingsChannels");
   const role = useRole();
@@ -67,6 +75,9 @@ export default function SupportChannels() {
   const { data: providers } = useQuery(q.supportChannelProviders());
   const { data: connections, isLoading } = useQuery(q.supportChannelConnections());
   const { data: destinations } = useQuery(q.supportChannelDestinations());
+  const deliveries = useInfiniteQuery({ ...q.supportChannelDeliveries(), enabled: admin });
+  const operations = useQuery({ ...q.supportChannelOperations(), enabled: admin });
+  const deliveryRows = deliveries.data?.pages.flatMap((page) => page.data) ?? [];
   const { data: teams } = useQuery(q.teams());
   const [connecting, setConnecting] = useState<SupportChannelProvider | null>(null);
   const [routing, setRouting] = useState<string | null>(null);
@@ -78,6 +89,7 @@ export default function SupportChannels() {
     onSuccess: (_, id) => {
       qc.setQueryData<SupportChannelConnection[]>(qk.supportChannelConnections, (old) => old?.filter((x) => x.id !== id));
       qc.setQueryData<SupportChannelDestination[]>(qk.supportChannelDestinations, (old) => old?.filter((x) => x.connection_id !== id));
+      void qc.invalidateQueries({ queryKey: qk.supportChannelOperations });
       toast.success(t("supportChannels.disconnected"));
     },
     onError: (e) => toast.error(e, t("supportChannels.disconnectError")),
@@ -99,10 +111,20 @@ export default function SupportChannels() {
     mutationFn: api.supportChannels.test,
     onSuccess: (row) => {
       upsertInList(qc, qk.supportChannelConnections, row);
+      void qc.invalidateQueries({ queryKey: qk.supportChannelOperations });
       if (row.status !== "error" && row.health_status === "healthy") toast.success(t("supportChannels.health.tested"));
       else toast.info(t("supportChannels.health.testedAttention"));
     },
     onError: (e) => toast.error(e, t("supportChannels.health.testError")),
+  });
+  const retryDelivery = useMutation({
+    mutationFn: api.supportChannels.retryDelivery,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.supportChannelDeliveries });
+      void qc.invalidateQueries({ queryKey: qk.supportChannelOperations });
+      toast.success(t("supportChannels.delivery.retryQueued"));
+    },
+    onError: (e) => toast.error(e, t("supportChannels.delivery.retryError")),
   });
 
   return (
@@ -246,6 +268,71 @@ export default function SupportChannels() {
         )}
       </Section>
 
+      {admin && (
+        <Section
+          title={t("supportChannels.operations.title")}
+          description={t("supportChannels.operations.description")}
+          actions={
+            <Button
+              variant="ghost"
+              icon={<RefreshCw />}
+              loading={operations.isFetching || deliveries.isFetching}
+              onClick={() => {
+                void operations.refetch();
+                void deliveries.refetch();
+              }}
+            >
+              {t("supportChannels.operations.refresh")}
+            </Button>
+          }
+        >
+          {operations.isLoading ? (
+            <ListSkeleton rows={2} />
+          ) : operations.data ? (
+            <OperationsSummary value={operations.data} />
+          ) : (
+            <p className="py-4 text-[12px] text-fg-3">{t("supportChannels.operations.unavailable")}</p>
+          )}
+        </Section>
+      )}
+
+      {admin && (
+        <Section
+          flush
+          title={t("supportChannels.delivery.title")}
+          description={t("supportChannels.delivery.description")}
+          actions={
+            <Button variant="ghost" icon={<RefreshCw />} loading={deliveries.isFetching} onClick={() => void deliveries.refetch()}>
+              {t("supportChannels.delivery.refresh")}
+            </Button>
+          }
+        >
+          {deliveries.isLoading ? (
+            <ListSkeleton rows={3} />
+          ) : !deliveryRows.length ? (
+            <SettingsEmpty art="settings" title={t("supportChannels.delivery.emptyTitle")} description={t("supportChannels.delivery.emptyBody")} />
+          ) : (
+            <div className="divide-y divide-line-soft">
+              {deliveryRows.map((delivery) => (
+                <DeliveryRow
+                  key={delivery.event_seq}
+                  delivery={delivery}
+                  retrying={retryDelivery.isPending && retryDelivery.variables === delivery.event_seq}
+                  onRetry={() => retryDelivery.mutate(delivery.event_seq)}
+                />
+              ))}
+              {deliveries.hasNextPage && (
+                <div className="flex justify-center py-3">
+                  <Button variant="secondary" loading={deliveries.isFetchingNextPage} onClick={() => void deliveries.fetchNextPage()}>
+                    {t("supportChannels.delivery.loadMore")}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </Section>
+      )}
+
       <Section title={t("supportChannels.providers.title")} description={admin ? t("supportChannels.providers.descriptionAdmin") : t("supportChannels.providers.description")}>
         <div className="grid gap-3 py-3 sm:grid-cols-3">
           {(providers ?? []).map((provider) => (
@@ -299,13 +386,123 @@ export default function SupportChannels() {
   );
 }
 
-// Where a provider can't be set up by opendesk (Slack), the steps an admin takes
-// there, with the address to paste. Folded away once the provider has called in.
+function OperationsSummary({ value }: { value: SupportChannelOperations }) {
+  const { t } = useTranslation("settingsChannels");
+  const statuses = ["queued", "retrying", "delivered", "failed"] as const;
+  return (
+    <div className="py-3">
+      {value.connections.alerted > 0 && (
+        <div role="alert" className="mb-3 flex items-start gap-2 rounded-lg border border-danger-fg/30 bg-danger-fg/5 px-3 py-2.5 text-[12px] text-danger-fg">
+          <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <span>{t("supportChannels.operations.alerted", { count: value.connections.alerted })}</span>
+        </div>
+      )}
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <OperationMetric
+          icon={<Activity />}
+          label={t("supportChannels.operations.connectionHealth")}
+          value={t("supportChannels.operations.healthyCount", { healthy: value.connections.healthy, total: value.connections.total })}
+          detail={value.connections.unhealthy ? t("supportChannels.operations.unhealthy", { count: value.connections.unhealthy }) : t("supportChannels.operations.allHealthy")}
+        />
+        <OperationMetric
+          icon={<Clock3 />}
+          label={t("supportChannels.operations.deliveryLatency")}
+          value={metricDuration(value.deliveries.average_latency_ms)}
+          detail={
+            value.deliveries.oldest_pending_at
+              ? t("supportChannels.operations.oldestPending", { age: relShort(value.deliveries.oldest_pending_at) })
+              : t("supportChannels.operations.maximumLatency", { duration: metricDuration(value.deliveries.maximum_latency_ms) })
+          }
+        />
+        <OperationMetric
+          icon={<Webhook />}
+          label={t("supportChannels.operations.webhookRejections")}
+          value={String(value.webhooks.rejected)}
+          detail={t("supportChannels.operations.lastHours", { count: 24 })}
+        />
+        <OperationMetric
+          icon={<ShieldAlert />}
+          label={t("supportChannels.operations.duplicatesSuppressed")}
+          value={String(value.webhooks.duplicates_suppressed)}
+          detail={t("supportChannels.operations.lastHours", { count: 24 })}
+        />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 border-t border-line-soft pt-3">
+        {statuses.map((status) => {
+          const state: ItemState = status === "delivered" ? "active" : status === "failed" ? "failing" : "pending";
+          return (
+            <StatePill key={status} state={state} pulse={status === "retrying"}>
+              {t(`supportChannels.delivery.status.${status}`)} · {value.deliveries[status]}
+            </StatePill>
+          );
+        })}
+        <span className="ml-auto self-center text-[11px] text-fg-4">{t("supportChannels.operations.window")}</span>
+      </div>
+    </div>
+  );
+}
+
+function OperationMetric({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-lg border border-line-soft bg-surface px-3 py-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium text-fg-3">
+        <span className="[&>svg]:size-3.5" aria-hidden>{icon}</span>
+        {label}
+      </div>
+      <p className="mt-1 text-[20px] font-semibold tracking-tight text-fg">{value}</p>
+      <p className="mt-0.5 text-[11px] text-fg-4">{detail}</p>
+    </div>
+  );
+}
+
+function DeliveryRow({ delivery, retrying, onRetry }: { delivery: SupportChannelDelivery; retrying: boolean; onRetry: () => void }) {
+  const { t } = useTranslation("settingsChannels");
+  const state: ItemState = delivery.status === "delivered" ? "active" : delivery.status === "failed" ? "failing" : "pending";
+  const event =
+    delivery.event_type === "ticket.created"
+      ? t("supportChannels.delivery.eventCreated")
+      : delivery.event_type === "ticket.updated"
+        ? t("supportChannels.delivery.eventUpdated")
+        : t("supportChannels.delivery.eventMessage");
+  const subject = delivery.ticket_number
+    ? t("supportChannels.delivery.ticket", { number: delivery.ticket_number })
+    : t("supportChannels.delivery.event", { seq: delivery.event_seq });
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 px-4 py-3.5">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatePill state={state} pulse={delivery.status === "retrying"}>
+            {t(`supportChannels.delivery.status.${delivery.status}`)}
+          </StatePill>
+          <span className="text-[13px] font-medium">{subject}</span>
+          <span className="text-[12px] text-fg-3">{event}</span>
+        </div>
+        <p className="mt-1 text-[12px] text-fg-3">
+          {delivery.attempts === 0
+            ? t("supportChannels.delivery.waiting")
+            : t("supportChannels.delivery.attempts", { count: delivery.attempts })}
+          {delivery.status === "failed" && delivery.last_error && <span className="ml-2 text-danger-fg">{delivery.last_error}</span>}
+        </p>
+      </div>
+      <time className="text-[12px] text-fg-3" dateTime={delivery.updated_at} title={fullDate(delivery.updated_at)}>
+        {relShort(delivery.updated_at)}
+      </time>
+      {delivery.status === "failed" && (
+        <Button icon={<RefreshCw />} loading={retrying} onClick={onRetry}>
+          {t("supportChannels.delivery.retry")}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// Provider-specific setup steps, folded away once the provider has called in.
 function SetupSteps({ provider, webhookUrl, done }: { provider: string; webhookUrl: string; done: boolean }) {
   const { t } = useTranslation("settingsChannels");
   const [open, setOpen] = useState(!done);
-  // Only Slack needs steps of its own; any other provider without a Configurer gets the generic one.
-  const steps: unknown = provider === "slack" ? t("supportChannels.provider.slack.steps", { returnObjects: true }) : null;
+  const providerSteps = provider === "slack" || provider === "google_chat" ? provider : "";
+  const steps: unknown = providerSteps ? t(`supportChannels.provider.${providerSteps}.steps`, { returnObjects: true }) : null;
   const list = Array.isArray(steps) ? (steps as string[]) : [t("supportChannels.setup.generic")];
   if (!open)
     return (

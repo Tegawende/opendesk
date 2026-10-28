@@ -98,7 +98,8 @@ view to its owner.
 | `ai_agent_test_result.updated` | agents | admins (`private`, `user:<uid>`) | `{ "result": AgentTestResult }`: a test of a run finished (`passed`, `failed` or `error`); it becomes that test's `last_result` |
 | `ai_agent_review.updated` | agents | — | `{ "message_id", "ticket_id", "outcome": "dismissed" \| "improved" }`: an agent reply left the review queue |
 | `billing.updated`        | agents     | —                                     | `Billing` (`contracts/billing.md`): plan, status, seats, limits, usage, AI balance, prices. Sent on subscription changes, seat syncs, AI top-ups and recharges |
-| `saved_reply.*`, `view.*`, `automation.*`, `sla_policy.*`, `kb_article.*`, `kb_collection.*`, `team.*` | agents | — (a personal `view.*`: its owner, `private`) | `{ "<resource>": Obj }` / `{ "<resource>_id" }` |
+| `saved_reply.*`, `view.*`, `automation.*`, `sla_policy.*`, `kb_article.*`, `kb_collection.*`, `changelog_entry.*`, `team.*` | agents | — (a personal `view.*`: its owner, `private`) | `{ "<resource>": Obj }` / `{ "<resource>_id" }` |
+| `wiki_page.created` / `wiki_page.updated` / `wiki_page.moved` / `wiki_page.deleted` | agents | — | `{ "wiki_page": WikiNode, "updated_by": UserRef \| null }` (no body: refetch the page) / `{ "wiki_page_id", "wiki_page_ids": [...] }` (the page and its subpages, all removed) (`contracts/wiki.md`) |
 | `webhook.*` | agents | admins (`private`, `user:<uid>`) | `{ "webhook": Webhook }` / `{ "webhook_id" }` |
 | `brand.created` / `brand.updated` / `brand.deleted` | agents | — | `{ "brand": Brand }` / `{ "brand_id" }` |
 | `routing_rule.created` / `routing_rule.updated` / `routing_rule.deleted` | agents | — | `{ "routing_rule": RoutingRule }` / `{ "routing_rule_id" }` |
@@ -109,6 +110,7 @@ view to its owner.
 | `support_channel_connection.created` / `support_channel_connection.updated` / `support_channel_connection.deleted` | agents | — | `{ "support_channel_connection": Connection }` / `{ "support_channel_connection": Connection }` / `{ "support_channel_connection_id" }` (`contracts/support-channels.md`; never credentials). Updated on rotated credentials and on a new health state. Deleting one removes its destinations |
 | `support_channel_destination.created` / `support_channel_destination.deleted` | agents | — | `{ "support_channel_destination": Destination }` / `{ "support_channel_destination_id" }` |
 | `ticket_link.created` / `ticket_link.deleted` | agents | — | `{ "ticket_id", "link": Link }` / `{ "ticket_id", "link_id" }` |
+| `ticket_panel.created` / `ticket_panel.updated` / `ticket_panel.deleted` | agents | — | `{ "panel": TicketPanel }` / `{ "panel_id" }` (`contracts/integrations.md` "Ticket panels"; never a token, a secret or a URL's path). Updated too when a lookup finds the credentials refused, or working again |
 | `import.created` / `import.updated` | agents | — | `{ "import": Import }` (`contracts/imports.md`; never credentials). `updated` on every state change and as it writes, at most once a second and after every page. Imported tickets, messages, contacts and articles publish no events of their own: refetch lists |
 | `collab.changed` / `collab.accounts` | agents | scoped to people | ids only (contracts/collab.md "Events") |
 | `chat.typing` (not stored; gateway only) | public | `contact:<wid>:<cid>` | `{ "ticket_id": "...", "user": {"id","name"} }` |

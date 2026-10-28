@@ -36,6 +36,7 @@ import { parseHours, readUpload } from "./pictures";
 import { widgetPatch } from "./widget";
 import { checkBotId } from "./bots";
 import { forgetHelpDomain, registerHelpDomainRoutes } from "./helpDomains";
+import { removeBrandChangelog } from "./changelog";
 
 const TEAM_ROLES: TeamRole[] = ["lead", "member", "observer"];
 const MODES: AssignMode[] = ["none", "round_robin", "load_balanced"];
@@ -385,6 +386,7 @@ function registerBrandRoutes() {
       publish(ctx.ws, "widget.deleted", { widget_id: w.id });
     }
     ctx.ws.widgets = ctx.ws.widgets.filter((x) => x.brand_id !== b.id);
+    removeBrandChangelog(ctx.ws, b.id);
     ctx.ws.brands = ctx.ws.brands.filter((x) => x !== b);
     forgetHelpDomain(b.id);
     ctx.ws.brands.sort((x, y) => x.position - y.position).forEach((x, i) => (x.position = i));
@@ -552,8 +554,8 @@ function registerWidgetRoutes() {
 
   post("/v1/widgets/:id/secret/rotate", (ctx) => {
     if (roleIn(ctx.ws, db.meId) !== "owner" && roleIn(ctx.ws, db.meId) !== "admin") throw forbidden("Only admins can rotate the secret");
-    if (db.stepUp === "mfa_required") throw new HttpError(403, "mfa_required", "Turn on two-factor authentication to do this.");
-    if (db.stepUp === "reauth_required") throw new HttpError(403, "reauth_required", "Sign in again to do this.");
+    if (db.stepUp === "mfa_required") throw new HttpError(403, "mfa_required", "this action requires two-factor authentication");
+    if (db.stepUp === "reauth_required") throw new HttpError(403, "reauth_required", "For your security, sign in again to do this. Your last sign-in is more than 12 hours old.");
     const w = findWidget(ctx);
     const secret = `wsec_${randomToken(40)}`;
     ctx.ws.widgetSecrets[w.id] = secret;

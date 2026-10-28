@@ -25,6 +25,7 @@ var Columns = []Column{
 	{"web_push_subscriptions", "id", "sealed"},               // Web Push endpoints and keys
 	{"idempotency_keys", "id", "body_enc"},                   // stored responses for replays
 	{"ai_provider_keys", "workspace_id", "key_enc"},          // BYOK AI provider keys
+	{"ai_decision_keys", "workspace_id", "key_enc"},          // BYOK TypeSafe keys for Jev decisions
 	{"ai_widget_actions", "id", "args"},                      // tool calls waiting for a visitor
 	{"ai_mcp_servers", "id", "secrets_enc"},                  // MCP server credentials and OAuth tokens
 	{"ai_mcp_oauth_states", "state_hash", "flow_enc"},        // MCP OAuth flows in progress
@@ -33,6 +34,7 @@ var Columns = []Column{
 	{"imports", "id", "credentials_enc"},                     // import source credentials
 	{"support_channel_connections", "id", "credentials_enc"}, // Slack, Discord and Telegram credentials
 	{"collab_accounts", "id", "credentials_enc"},             // Collab mail account credentials
+	{"ticket_panels", "id", "secret_enc"},                    // ticket panel Shopify tokens and signing secrets
 }
 
 // NotSealed are the bytea columns that hold no d.Box output: hashes, public keys and

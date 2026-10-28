@@ -82,7 +82,8 @@
     "priority": "{{priority}} priority",
     "awaiting": "Waiting for a reply",
     "severity": "{{severity}}",
-    "receivedAt": "Sent to {{address}}"
+    "receivedAt": "Sent to {{address}}",
+    "assignedTo": "Assigned to {{name}}"
   },
   "waiting": {
     "label": "Waiting {{time}}",
@@ -115,7 +116,11 @@
   },
   "presence": {
     "viewing": "{{name}} is viewing",
-    "replying": "{{name}} is replying"
+    "replying": "{{name}} is replying",
+    "oneViewing": "{{name}} viewing",
+    "oneReplying": "{{name}} replying…",
+    "manyViewing": "{{n}} viewing",
+    "manyReplying": "{{name}} replying… +{{others}}"
   },
   "empty": {
     "unassigned": {
@@ -248,6 +253,8 @@
     "label": "Summary",
     "total_one": "{{count}} ticket",
     "total_other": "{{count}} tickets",
+    "firstShown": "First {{count}} shown",
+    "firstShownHint": "These numbers count only the tickets loaded so far. Scroll down to load more.",
     "awaiting": "awaiting reply",
     "urgent": "urgent",
     "overdue": "overdue",
@@ -656,6 +663,12 @@
     "discardTitle": "Discard this ticket?",
     "discardBody": "Your draft will be lost.",
     "discard": "Discard",
+    "keepWriting": "Keep writing",
+    "openPage": "Open full page",
+    "moreOnPage_one": "{{count}} more from the full page",
+    "moreOnPage_other": "{{count}} more from the full page",
+    "newContact": "New contact, created with the ticket",
+    "recipientHint": "Choose who it goes to, and their details and earlier tickets show here.",
     "needTo": "Add a recipient.",
     "needSubject": "Add a subject.",
     "needBody": "Write a message.",
@@ -854,5 +867,47 @@
     "notSent": "A reply you were sending was not sent. Open its ticket to send it again.",
     "tooLongToHold": "Sent at once: this reply is too long to hold for undo.",
     "noteNotSaved": "Couldn’t update the note"
+  },
+  "panels": {
+    "refresh": "Refresh {{name}}",
+    "collapse": "Hide {{name}}",
+    "expand": "Show {{name}}",
+    "noContact": "The contact has no email to look up.",
+    "empty": "Nothing about this contact.",
+    "emptyShopify": "No customer with this email in the store.",
+    "error": "Couldn’t load: {{message}}",
+    "retry": "Try again",
+    "orders_one": "{{count}} order",
+    "orders_other": "{{count}} orders",
+    "spent": "{{amount}} spent",
+    "noOrders": "No recent orders.",
+    "cancelled": "Cancelled",
+    "openCustomer": "Open the customer in Shopify",
+    "openOrder": "Open order {{number}} in Shopify",
+    "track": "Track",
+    "status": {
+      "paid": "Paid",
+      "pending": "Payment pending",
+      "authorized": "Authorized",
+      "partially_paid": "Partly paid",
+      "refunded": "Refunded",
+      "partially_refunded": "Partly refunded",
+      "voided": "Voided",
+      "expired": "Expired",
+      "fulfilled": "Fulfilled",
+      "unfulfilled": "Unfulfilled",
+      "partially_fulfilled": "Partly fulfilled",
+      "in_progress": "In progress",
+      "on_hold": "On hold",
+      "scheduled": "Scheduled",
+      "restocked": "Restocked"
+    },
+    "cancelledOn": "Cancelled {{date}}",
+    "unitPrice": "Unit price",
+    "shipping": "Shipping",
+    "discountCodes_one": "Discount code",
+    "discountCodes_other": "Discount codes",
+    "refunded": "{{amount}} refunded",
+    "openLink": "Open {{name}}"
   }
 }

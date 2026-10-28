@@ -572,18 +572,40 @@
   },
   "supportChannels": {
     "title": "Canaux de support",
-    "description": "Reproduisez les tickets par e-mail dans Slack, Discord et Telegram. Les collègues peuvent répondre, ajouter des notes et traiter les tickets depuis leur fil de discussion.",
+    "description": "Reproduisez les tickets par e-mail dans Slack, Discord, Telegram et Google Chat. Les collègues peuvent répondre, ajouter des notes et traiter les tickets depuis leur fil de discussion.",
     "linkAccount": "Lier mon compte",
     "linkError": "Impossible de créer un code de liaison.",
     "link": {
       "title": "Lier votre compte de chat",
-      "description": "Envoyez ce code au bot depuis votre compte de chat : /opendesk link {{code}} dans Slack, ou /link {{code}} dans Discord et Telegram. Il est utilisable une seule fois et expire dans 10 minutes.",
+      "description": "Envoyez ce code au bot depuis votre compte de chat : /opendesk link {{code}} dans Slack ou Google Chat, ou /link {{code}} dans Discord et Telegram. Il est utilisable une seule fois et expire dans 10 minutes.",
       "done": "Terminé"
     },
     "connections": {
       "title": "Connexions",
-      "description": "Les identifiants du bot sont stockés chiffrés. opendesk configure Discord et Telegram pour vous ; Slack nécessite quelques étapes dans ses propres paramètres.",
+      "description": "Les identifiants du bot sont stockés chiffrés. opendesk configure Discord et Telegram pour vous ; Slack et Google Chat nécessitent quelques étapes dans leurs paramètres.",
       "webhook": "Adresse des événements"
+    },
+    "operations": {
+      "title": "Fiabilité",
+      "description": "État des connexions, délai de livraison et activité des webhooks entrants sur les dernières 24 heures.",
+      "refresh": "Actualiser les métriques",
+      "unavailable": "Impossible de charger les métriques opérationnelles.",
+      "alerted_one": "{{count}} connexion est restée défaillante pendant au moins 15 minutes. Les administrateurs ont été avertis.",
+      "alerted_other": "{{count}} connexions sont restées défaillantes pendant au moins 15 minutes. Les administrateurs ont été avertis.",
+      "alerted_many": "{{count}} connexions sont restées défaillantes pendant au moins 15 minutes. Les administrateurs ont été avertis.",
+      "connectionHealth": "État des connexions",
+      "healthyCount": "{{healthy}} sur {{total}} opérationnelles",
+      "unhealthy_one": "{{count}} nécessite une intervention",
+      "unhealthy_other": "{{count}} nécessitent une intervention",
+      "unhealthy_many": "{{count}} nécessitent une intervention",
+      "allHealthy": "Aucune connexion défaillante",
+      "deliveryLatency": "Délai moyen de livraison",
+      "oldestPending": "Plus ancien en attente {{age}}",
+      "maximumLatency": "Maximum {{duration}}",
+      "webhookRejections": "Webhooks rejetés",
+      "duplicatesSuppressed": "Doublons supprimés",
+      "lastHours": "Dernières 24 heures",
+      "window": "Total des livraisons sur les dernières 24 heures"
     },
     "empty": {
       "title": "Aucun canal de support pour le moment",
@@ -656,6 +678,17 @@
         "description": "Reproduisez les tickets par e-mail dans des sujets de forum Telegram et traitez-les en parlant à Ollie.",
         "setup": "Créez un bot avec BotFather, désactivez son mode de confidentialité (/setprivacy) et collez son jeton. opendesk configure le webhook. Rendez ensuite le bot administrateur d’un groupe de forum.",
         "noChannels": "Aucun groupe de forum pour le moment. Rendez le bot administrateur d’un groupe avec les sujets activés, ou envoyez un message dans un groupe dont il fait déjà partie, puis actualisez."
+      },
+      "google_chat": {
+        "description": "Reproduisez les tickets par e-mail dans les espaces Google Chat et traitez-les en parlant à Ollie.",
+        "setup": "Activez l’API Google Chat et créez une clé de compte de service avec la portée chat.bot. Configurez une application Chat standard, et non un module complémentaire Google Workspace, pour le même projet et ajoutez-la aux espaces voulus.",
+        "steps": [
+          "Dans Google Cloud Console, activez l’API Google Chat et configurez une application Chat standard, et non un module complémentaire Google Workspace, pour le projet de ce compte de service.",
+          "Définissez l’URL de connexion et l’audience d’authentification sur l’adresse du webhook ci-dessus. Choisissez URL du point de terminaison HTTP comme audience.",
+          "Ajoutez la commande /opendesk et abonnez l’application aux événements de message, modification, suppression, clic sur une carte, ajout et retrait de l’application.",
+          "Ajoutez l’application Chat à chaque espace de discussion souhaité, puis actualisez la liste des espaces."
+        ],
+        "noChannels": "Aucun espace avec fils de discussion n’est disponible. Ajoutez l’application Chat à un espace nommé, puis actualisez."
       }
     },
     "field": {
@@ -663,7 +696,8 @@
       "signing_secret": "Secret de signature",
       "public_key": "Clé publique des interactions",
       "guild_id": "Serveur",
-      "webhook_secret": "Secret du webhook"
+      "webhook_secret": "Secret du webhook",
+      "service_account_json": "JSON du compte de service"
     },
     "connect": {
       "title": "Connecter {{name}}",

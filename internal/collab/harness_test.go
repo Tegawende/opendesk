@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"golang.org/x/time/rate"
 
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/config"
@@ -128,6 +129,8 @@ func newWorld(t *testing.T) *world {
 	d := testDeps(t)
 	ctx := context.Background()
 	w := &world{t: t, ctx: ctx, d: d, s: newService(d), wid: ids.New()}
+	w.s.busyWaits = []time.Duration{time.Millisecond, time.Millisecond}
+	w.s.paceLimits = map[string]paceLimit{ProviderGoogle: {perSecond: rate.Inf, atOnce: 8}, ProviderMicrosoft: {perSecond: rate.Inf, atOnce: 4}}
 	slug := "acme-" + crypto.RandomString(6)
 	mustExec(t, d, `INSERT INTO workspaces (id, name, slug, widget_key) VALUES ($1, 'Acme', $2, $3)`, w.wid, slug, "wk_"+crypto.RandomString(12))
 	mustExec(t, d, `INSERT INTO brands (id, workspace_id, name, slug, is_default) VALUES ($1, $2, 'Acme', $3, true)`, ids.New(), w.wid, slug)
@@ -269,6 +272,7 @@ func (w *world) api(p *auth.Principal) *httptest.Server {
 	s.registerCommentRoutes(api)
 	s.registerDetailRoutes(api)
 	s.registerSidebarRoutes(api)
+	s.registerCategoryRoutes(api)
 	r.Get("/v1/collab/attachments/{message_id}/{index}", s.attachmentHandler)
 	srv := httptest.NewServer(r)
 	w.t.Cleanup(srv.Close)
