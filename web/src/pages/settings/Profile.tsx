@@ -27,6 +27,7 @@ import { q } from "@/lib/queries";
 import { updateUser, useRole, useSession } from "@/lib/session";
 import { useTheme, type ThemePref } from "@/lib/theme";
 import { setConversationLayout, useConversationLayout } from "@/lib/conversationLayout";
+import { setConversationWidth, useConversationWidth, type ConversationWidth } from "@/lib/conversationWidth";
 
 export default function Profile() {
   const { t } = useTranslation("settings");
@@ -177,6 +178,7 @@ export default function Profile() {
         </div>
         <AssigneeSetting />
         <ConversationLayout />
+        <ConversationWidthSetting />
       </Section>
 
       <Section title={t("profile.clock.title")} description={t("profile.clock.hint")}>
@@ -246,6 +248,27 @@ function ConversationLayout() {
   return (
     <Row label={t("profile.conversation.label")} description={t("profile.conversation.hint")}>
       <Switch checked={on} onCheckedChange={setConversationLayout} aria-label={t("profile.conversation.label")} />
+    </Row>
+  );
+}
+
+/** How wide the conversation is: a readable measure, or the whole width of the ticket. */
+function ConversationWidthSetting() {
+  const { t } = useTranslation("settings");
+  const width = useConversationWidth();
+  return (
+    <Row label={t("profile.conversationWidth.label")} description={t("profile.conversationWidth.hint")} htmlFor="conversation-width">
+      <Select<ConversationWidth>
+        id="conversation-width"
+        aria-label={t("profile.conversationWidth.label")}
+        value={width}
+        onChange={setConversationWidth}
+        className="w-48"
+        options={[
+          { value: "limited", label: t("profile.conversationWidth.limited") },
+          { value: "full", label: t("profile.conversationWidth.full") },
+        ]}
+      />
     </Row>
   );
 }
