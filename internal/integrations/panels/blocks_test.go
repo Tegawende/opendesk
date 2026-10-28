@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
@@ -192,6 +194,11 @@ func TestCleanLinks(t *testing.T) {
 	if b[2].Lines[0].Links != nil || b[3].Items[0].Links != nil {
 		t.Fatalf("lines %+v, fields %+v", b[2].Lines[0].Links, b[3].Items[0].Links)
 	}
+	// A product's logo by its name, whatever its case: Odoo's.
+	odoo := `[{"type":"card","title":"S00042","links":[{"label":"Open in Odoo","url":"https://acme.odoo.com/odoo/sales/42","icon":" Odoo "}]}]`
+	if c := s.cleanBlocks(decodeList(t, odoo)); !reflect.DeepEqual(c[0].Links, []PanelLink{{Label: "Open in Odoo", URL: "https://acme.odoo.com/odoo/sales/42", Icon: "odoo"}}) {
+		t.Fatalf("odoo = %+v", c[0].Links)
+	}
 	// A card without links answers none, and the icon of a cleaned link is always one the app draws.
 	if c := s.cleanBlocks(decodeList(t, `[{"type":"card","title":"Bare","links":[]}]`)); c[0].Links != nil {
 		t.Fatalf("bare = %+v", c[0].Links)
@@ -203,6 +210,24 @@ func TestCleanLinks(t *testing.T) {
 	}
 	if raw, _ := json.Marshal(want[2]); string(raw) != `{"label":"Carrier","url":"https://carrier.example/t/1"}` {
 		t.Fatalf("json = %s", raw)
+	}
+}
+
+// TestLinkIconsHaveLogos: every product a link may name has its logo shipped with the app, so
+// an icon the server lets through is never a broken picture.
+func TestLinkIconsHaveLogos(t *testing.T) {
+	generic := map[string]bool{"external-link": true, "store": true, "shopping-cart": true, "receipt": true, "file-text": true, "truck": true,
+		"package": true, "user": true, "building": true, "phone": true, "mail": true, "credit-card": true, "map-pin": true}
+	for icon := range linkIcons {
+		if generic[icon] {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join("..", "..", "..", "web", "public", "logos", "apps", icon+".svg")); err != nil {
+			t.Errorf("link icon %q has no logo: %v", icon, err)
+		}
+	}
+	if !linkIcons["odoo"] {
+		t.Fatal("odoo is not a link icon")
 	}
 }
 
