@@ -573,7 +573,9 @@ export type TicketFilters = {
   /** Custom field filters, ANDed (max 20). */
   fields?: FieldFilter[];
 };
-export type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number; /** Shared with this team. */ team_id?: string | null; /** The sidebar heading it shows under (lib/viewSections). */ section?: string | null };
+export type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number; /** Shared with this team. */ team_id?: string | null; /** The sidebar heading it shows under (lib/viewSections). */ section?: string | null; /** What the sidebar shows beside the name; none shows the layers icon. */ icon?: ViewIcon | null };
+/** emoji: one emoji; icon: a name of the app's list (viewIcons.ts); text: one or two letters or digits. `color` tints an icon or text (a Tone), never an emoji. */
+export type ViewIcon = { kind: "emoji" | "icon" | "text"; value: string; color: string | null };
 export type SlaPolicy = {
   id: string;
   name: string;
@@ -1055,6 +1057,7 @@ export type SupportChannelDestination = {
   id: string;
   connection_id: string;
   team_id: string | null;
+  priority: "low" | "normal" | "high" | "urgent" | null;
   external_channel_id: string;
   external_channel_name: string;
   enabled: boolean;

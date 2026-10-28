@@ -477,7 +477,7 @@ export const api = {
     deliveries: (q?: ListQuery) => http.get<T.Page<T.SupportChannelDelivery>>("/v1/support-channels/deliveries", { query: q }),
     operations: () => http.get<T.SupportChannelOperations>("/v1/support-channels/operations"),
     retryDelivery: (eventSeq: number) => http.post<{ event_seq: number; status: "queued" }>(`/v1/support-channels/deliveries/${eventSeq}/retry`),
-    addDestination: (b: { connection_id: string; team_id?: string; external_channel_id: string; external_channel_name?: string; include_notes?: boolean; message_limit?: number }) =>
+    addDestination: (b: { connection_id: string; team_id?: string; priority?: "low" | "normal" | "high" | "urgent"; external_channel_id: string; external_channel_name?: string; include_notes?: boolean; message_limit?: number }) =>
       http.create<T.SupportChannelDestination>("/v1/support-channels/destinations", b),
     removeDestination: (id: string) => http.del(`/v1/support-channels/destinations/${id}`),
     linkCode: () => http.create<{ code: string; expires_at: string }>("/v1/me/support-channel-link-code", {}),
@@ -611,7 +611,7 @@ export const api = {
     reorder: (entity: T.FieldEntity, ids: string[]) => http.post<T.Page<T.CustomField>>("/v1/custom-fields/reorder", { entity, ids }),
   },
   savedReplies: crud<T.SavedReply, { title: string; shortcut: string; body_html: string; team_id?: string | null }>("/v1/saved-replies"),
-  views: crud<T.View, { name: string; filters: T.TicketFilters; shared: boolean; position?: number; team_id?: string | null; section?: string | null }>("/v1/views"),
+  views: crud<T.View, { name: string; filters: T.TicketFilters; shared: boolean; position?: number; team_id?: string | null; section?: string | null; icon?: T.ViewIcon | null }>("/v1/views"),
   slaPolicies: crud<T.SlaPolicy, Omit<T.SlaPolicy, "id" | "business_hours"> & { business_hours?: boolean }>("/v1/sla-policies"),
   automations: crud<T.Automation, Omit<T.Automation, "id" | "run_count">>("/v1/automations"),
   kb: {

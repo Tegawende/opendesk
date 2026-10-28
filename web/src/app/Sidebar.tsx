@@ -4,7 +4,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, EyeOff, Inbox, Keyboard, Layers, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
+import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, Copy, EyeOff, Inbox, Keyboard, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Fragment, lazy, Suspense, useEffect, useId, useRef, useState, type ReactNode } from "react";
@@ -20,6 +20,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuTrigger } from "@/components/ui/menu";
 import { Picker } from "@/components/ui/picker";
 import { sortTeams, TeamDot, useTeamsCtx } from "@/components/tickets/teams";
+import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { useHotkeys } from "@/lib/hotkeys";
 import { dur, ease } from "@/lib/motion";
 import type { Team, TicketCounts, View } from "@/lib/api/types";
@@ -374,6 +375,7 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
   const { data: counts } = useQuery(q.counts());
   const { data: views } = useQuery(q.views());
   const role = useRole();
+  const navigate = useNavigate();
   const { t } = useTranslation("shell");
   // The member's hidden rows, numbers, favorites and menus apply with or without Collab;
   // Collab adds the Mail section (contracts/collab.md SidebarPrefs).
@@ -457,25 +459,30 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
               row={(v, nested) => {
                 const nums = ticketRowNumbers(counts, hid.view(v.id));
                 return (
-                <NavTip rail={rail} label={v.name}>
+                <NavTip rail={rail} label={viewName(v)}>
                   <RowMenu
                     enabled
                     prefs={prefs}
                     badge={{ key: hid.view(v.id), kind: "ticket", sections: ["views"], numbers: nums }}
                     pin={{ kind: "view", id: v.id }}
                     hideId={hid.view(v.id)}
+                    items={
+                      atLeast(role, "agent")
+                        ? [{ label: t("nav.duplicateView"), icon: <Copy />, onSelect: () => void navigate({ to: "/settings/views", search: { duplicate: v.id } }) }]
+                        : undefined
+                    }
                     rail={rail}
-                    label={v.name}
+                    label={viewName(v)}
                   >
                   <Link
                     to="/views/$viewId/{-$ticketId}"
                     params={{ viewId: v.id, ticketId: undefined }}
                     className={cn(rowBase, rowShape(rail), rowIdle, nested && "pl-[22px]")}
                     activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
-                    aria-label={rail ? v.name : undefined}
+                    aria-label={rail ? viewName(v) : undefined}
                   >{withPill(<>
-                    <Layers />
-                    <Label rail={rail}>{v.name}</Label>
+                    <ViewIcon icon={v.icon} />
+                    <Label rail={rail}>{viewName(v)}</Label>
                     <WaitingBadge n={waitingFor({ kind: "view", id: v.id })} rail={rail} />
                     <Count n={shown(hid.view(v.id), "views", nums)} rail={rail} />
                   </>)}</Link>
