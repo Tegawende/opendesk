@@ -126,8 +126,9 @@ A call goes on the contact's open ticket (open, pending or on hold, most recentl
 else on their latest ticket solved (`solved_at`) within the connection's `reuse_days` (0: never);
 else on a new ticket on the `phone` channel, routed like any new ticket
 (`routing.Resolve` with channel `phone`, so routing rules can send phone tickets to a team),
-named "Call from …" or "Call to …" and running the `ticket_created` automations. Like an
-`api` ticket, a phone ticket has no reply address: replies there are recorded, not emailed. Merged,
+named "Call from …" or "Call to …" in the workspace's `locale` when the agent app speaks it
+(French or German; else English, `internal/phone/texts.go`), and running the `ticket_created`
+automations. Like an `api` ticket, a phone ticket has no reply address: replies there are recorded, not emailed. Merged,
 deleted, spam and closed tickets are never reused. A call is placed once, on its first event,
 so the insight card can show its ticket; the ticket moves up (`updated_at`, `ticket.updated`
 with `changes: ["calls"]`) when the call lands on it and when it ends.
@@ -203,7 +204,8 @@ With `insight_cards`, a ringing inbound call shows the caller's name (linked to 
 contact), the ticket the call went on and their three latest other tickets in the
 provider's app (Aircall: one card per call). Anyone in the provider's app reads it, so it
 names no ticket of a private team and no spam, merged or deleted one. The card is sent by
-the `phone.insight_card` job and dropped when it could not go out within three minutes.
+the `phone.insight_card` job and dropped when it could not go out within three minutes. Its
+labels and ticket statuses are in the workspace's language, like a call's ticket subject.
 
 ### Click to call
 

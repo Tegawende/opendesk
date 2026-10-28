@@ -514,7 +514,11 @@ func (s *Service) place(ctx context.Context, tx pgx.Tx, c PhoneConnection, call 
 			return err
 		}
 	}
-	subject := Subject(call.Direction, contactName, call.Number)
+	lang, err := workspaceCallLanguage(ctx, tx, wid)
+	if err != nil {
+		return err
+	}
+	subject := Subject(lang, call.Direction, contactName, call.Number)
 	brand, err := domain.ResolveBrand(ctx, tx, wid, nil, nil, nil)
 	if err != nil {
 		return err
@@ -541,19 +545,19 @@ func (s *Service) place(ctx context.Context, tx pgx.Tx, c PhoneConnection, call 
 	return nil
 }
 
-// Subject names a ticket a call opened. It is the team's to rename.
-func Subject(direction, name, number string) string {
+// Subject names a ticket a call opened, in lang (callTexts). It is the team's to rename.
+func Subject(lang, direction, name, number string) string {
 	who := name
 	if who == "" {
 		who = number
 	}
 	if who == "" {
-		return "Call from a withheld number"
+		return callText(lang, "withheld")
 	}
 	if direction == "outbound" {
-		return "Call to " + who
+		return callText(lang, "to") + who
 	}
-	return "Call from " + who
+	return callText(lang, "from") + who
 }
 
 // outsideHours reports whether the call started outside the business hours of its
