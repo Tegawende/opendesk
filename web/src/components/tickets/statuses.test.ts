@@ -24,7 +24,12 @@ describe("hidden statuses", () => {
   it("Finish selects solved with hidden statuses or a Closed presentation label", async () => {
     for (const labels of [hidden, { solved: { label: "Closed" }, closed: { hidden: true } }]) {
       const client = new QueryClient();
-      client.setQueryData(q.workspace().queryKey, { settings: { status_labels: labels } });
+      client.setQueryData(q.workspace().queryKey, {
+        id: "w", name: "Acme", slug: "acme", widget_key: "widget", created_at: "2026-10-28T00:00:00Z",
+        avatar_url: null, avatar_source: null,
+        images: { help_center_logo: null, help_center_favicon: null, widget_avatar: null, widget_launcher: null },
+        settings: { status_labels: labels },
+      });
       const host = document.createElement("div");
       const root = createRoot(host);
       function Finish() {
@@ -54,8 +59,8 @@ describe("the finishing action's words", () => {
   type Labels = Parameters<typeof finishWords>[0];
   const prod = { solved: { label: "Closed" }, pending: { hidden: true }, closed: { hidden: true } };
 
-  it("say solve while solved is offered, renamed or not", () => {
-    for (const labels of [undefined, { pending: { hidden: true } }, { solved: { label: "Solved" } }] as Labels[]) {
+  it("say solve when solved keeps its built-in name", () => {
+    for (const labels of [undefined, { pending: { hidden: true } }, { solved: { label: "Solved" } }] satisfies Labels[]) {
       const w = finishWords(labels);
       expect(w.verb).toBe("solve");
       expect(w.button()).toBe("Solve");
@@ -70,7 +75,7 @@ describe("the finishing action's words", () => {
   });
 
   it("say close when the semantic finish status is labelled Closed", () => {
-    for (const labels of [prod, { solved: { label: " closed " }, closed: { hidden: true } }] as Labels[]) {
+    for (const labels of [prod, { solved: { label: " closed " }, closed: { hidden: true } }] satisfies Labels[]) {
       const w = finishWords(labels);
       expect(w.verb).toBe("close");
       expect(w.button()).toBe("Close");
