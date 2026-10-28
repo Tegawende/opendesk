@@ -891,6 +891,84 @@ func TestSync(t *testing.T) {
 	e.Do("POST", "/v1/imports/"+x.ID.String()+"/sync", e.admin, nil).Want(t, 409)
 }
 
+// TestSyncTakesOffTheLabelsTheSourceTookOff: a sync takes off a ticket the labels it gave
+// it from the source that the source has since taken off, whether the import made the label
+// or found it here, and keeps the import's own label and any label someone put on the
+// ticket here. A ticket recorded before the import kept its labels stays as it is.
+func TestSyncTakesOffTheLabelsTheSourceTookOff(t *testing.T) {
+	e := newEnv(t)
+	// "vip" is a label the workspace already had: the import finds it.
+	err := e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
+		_, err := domain.CreateLabel(e.Ctx, tx, e.ws.ID, "vip")
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.f.mu.Lock()
+	e.f.tickets = append(e.f.tickets, source.Ticket{ID: "106", Ref: "#106", Subject: "Old", Status: "open", Channel: "email",
+		Requester: &source.Person{ID: "u2", Email: "carol@customer.test"}, Tags: []string{"legacy"}, CreatedAt: base.Add(72 * time.Hour),
+		UpdatedAt: base.Add(72 * time.Hour), Loaded: true,
+		Messages: []source.Message{{ID: "106-1", Author: source.Person{Email: "carol@customer.test"}, Text: "Hi", CreatedAt: base.Add(72 * time.Hour)}}})
+	e.f.mu.Unlock()
+	x := e.start(t, e.zendeskBody())
+	if done := e.drive(t, x.ID); done.Status != StatusCompleted {
+		t.Fatalf("first run %s %s", done.Status, done.LastError)
+	}
+	t101, t104, t106 := e.ticketByRef(t, "101"), e.ticketByRef(t, "104"), e.ticketByRef(t, "106")
+	// Someone labels 101 urgent and 104 billing here; 106 was recorded before imports kept
+	// the labels they gave.
+	e.Do("PATCH", "/v1/tickets/"+t101.String(), e.admin, map[string]any{"add_tags": []string{"urgent"}}).Want(t, 200)
+	e.Do("PATCH", "/v1/tickets/"+t104.String(), e.admin, map[string]any{"add_tags": []string{"billing"}}).Want(t, 200)
+	e.Exec(`UPDATE import_records SET tag_ids = NULL WHERE workspace_id = $1 AND kind = 'ticket' AND external_id = '106'`, e.ws.ID)
+
+	// Each sync sees a later change, within the sync's window.
+	changed := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	sync := func(change func(byID map[string]*source.Ticket)) {
+		t.Helper()
+		changed = changed.Add(time.Second)
+		e.f.mu.Lock()
+		byID := map[string]*source.Ticket{}
+		for i := range e.f.tickets {
+			e.f.tickets[i].UpdatedAt = changed
+			byID[e.f.tickets[i].ID] = &e.f.tickets[i]
+		}
+		change(byID)
+		e.f.mu.Unlock()
+		e.Do("POST", "/v1/imports/"+x.ID.String()+"/sync", e.admin, nil).Want(t, 200)
+		if synced := e.drive(t, x.ID); synced.Status != StatusCompleted {
+			t.Fatalf("sync %s %s", synced.Status, synced.LastError)
+		}
+	}
+	// The source takes vip off 101 and adds refund; gives 104 billing too; takes legacy off 106.
+	sync(func(byID map[string]*source.Ticket) {
+		byID["101"].Tags = []string{"login", "refund"}
+		byID["104"].Tags = []string{"vip", "billing"}
+		byID["106"].Tags = nil
+	})
+	if got := e.labels(t, t101); !slices.Equal(got, []string{"login", "refund", "urgent", "zendesk-import"}) {
+		t.Errorf("101 labels %v, want vip gone, login and refund from the source, urgent (put here) and the import's kept", got)
+	}
+	if got := e.labels(t, t106); !slices.Equal(got, []string{"legacy", "zendesk-import"}) {
+		t.Errorf("106 labels %v, want them kept: its record does not say what the import gave", got)
+	}
+	// Then the source takes every label off 104 and 101.
+	sync(func(byID map[string]*source.Ticket) {
+		byID["101"].Tags = nil
+		byID["104"].Tags = nil
+	})
+	if got := e.labels(t, t101); !slices.Equal(got, []string{"urgent", "zendesk-import"}) {
+		t.Errorf("101 labels %v, want only urgent (put here) and the import's", got)
+	}
+	if got := e.labels(t, t104); !slices.Equal(got, []string{"billing", "zendesk-import"}) {
+		t.Errorf("104 labels %v, want vip gone, billing kept: someone put it on here too", got)
+	}
+	// The labels stay in the workspace.
+	if n := e.count(t, `SELECT count(*) FROM tags WHERE workspace_id = $1 AND name IN ('vip', 'refund', 'legacy')`, e.ws.ID); n != 3 {
+		t.Errorf("%d of the labels left in the workspace, want 3", n)
+	}
+}
+
 func TestCSVImport(t *testing.T) {
 	e := newEnv(t)
 	csvData := "Ticket ID,Subject,Body,From email,From name,Author type,Status,Priority,Tags,Created at\n" +

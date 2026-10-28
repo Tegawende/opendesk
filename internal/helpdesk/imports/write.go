@@ -662,10 +662,21 @@ func (w *writer) writeTicketTx(ctx context.Context, tx pgx.Tx, t *source.Ticket,
 	if err := w.settle(ctx, tx, ticketID, t); err != nil {
 		return 0, err
 	}
-	if err := w.label(ctx, tx, ticketID, t); err != nil {
+	given, err := w.label(ctx, tx, ticketID, t)
+	if err != nil {
 		return 0, err
 	}
+	if prev != nil {
+		if err := w.unlabel(ctx, tx, t.ID, ticketID, given); err != nil {
+			return 0, err
+		}
+	}
 	if err := w.remember(ctx, tx, "ticket", t.ID, ticketID, result == outcomeCreated, updatedAt); err != nil {
+		return 0, err
+	}
+	// What the source gave it, for the next sync's unlabel.
+	if _, err := tx.Exec(ctx, `UPDATE import_records SET tag_ids = $5 WHERE workspace_id = $1 AND source = $2 AND account_key = $3
+		AND kind = 'ticket' AND external_id = $4`, wid, w.x.Source, w.x.AccountKey, t.ID, given); err != nil {
 		return 0, err
 	}
 	switch result {
@@ -858,26 +869,56 @@ func (w *writer) settle(ctx context.Context, tx pgx.Tx, id uuid.UUID, t *source.
 var tagUnsafe = regexp.MustCompile(`[^\p{L}\p{N} _\-./:&+#]+`)
 
 // label adds the import's label and the ticket's own labels. A label the workspace cannot
-// take (too many labels, one that does not apply to tickets) is left out.
-func (w *writer) label(ctx context.Context, tx pgx.Tx, ticketID uuid.UUID, t *source.Ticket) error {
+// take (too many labels, one that does not apply to tickets) is left out. It answers the
+// labels it gave from the source's, never nil.
+func (w *writer) label(ctx context.Context, tx pgx.Tx, ticketID uuid.UUID, t *source.Ticket) ([]uuid.UUID, error) {
 	names := []string{}
 	if w.x.Options.Tag != "" {
 		names = append(names, w.x.Options.Tag)
 	}
 	names = append(names, t.Tags...)
-	for _, raw := range names {
+	given := []uuid.UUID{}
+	for i, raw := range names {
 		id, err := w.tag(ctx, tx, raw)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if id == nil {
 			continue
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO ticket_tags (ticket_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, ticketID, *id); err != nil {
-			return err
+			return nil, err
+		}
+		// names[0] is the import's own label when it has one.
+		if fromSource := i > 0 || w.x.Options.Tag == ""; fromSource && !slices.Contains(given, *id) {
+			given = append(given, *id)
 		}
 	}
-	return nil
+	return given, nil
+}
+
+// unlabel takes off a ticket the labels an earlier run gave it from the source (its record's
+// tag_ids) that the source no longer gives it (given). The import's own label stays, and so
+// does a label someone put on the ticket here since (a tagged activity, by a person, an API
+// key or an automation). A ticket recorded before its labels were stays as it is.
+func (w *writer) unlabel(ctx context.Context, tx pgx.Tx, externalID string, ticketID uuid.UUID, given []uuid.UUID) error {
+	keep := slices.Clone(given)
+	if w.x.Options.Tag != "" {
+		id, err := w.tag(ctx, tx, w.x.Options.Tag)
+		if err != nil {
+			return err
+		}
+		if id != nil {
+			keep = append(keep, *id)
+		}
+	}
+	_, err := tx.Exec(ctx, `DELETE FROM ticket_tags tt USING import_records r
+		WHERE r.workspace_id = $1 AND r.source = $2 AND r.account_key = $3 AND r.kind = 'ticket' AND r.external_id = $4
+		  AND tt.ticket_id = $5 AND tt.tag_id = ANY(r.tag_ids) AND NOT (tt.tag_id = ANY($6))
+		  AND NOT EXISTS (SELECT 1 FROM activities a JOIN tags g ON g.id = tt.tag_id
+			WHERE a.workspace_id = $1 AND a.ticket_id = $5 AND a.type = 'tagged' AND lower(a.data->>'tag') = lower(g.name))`,
+		w.x.WorkspaceID, w.x.Source, w.x.AccountKey, externalID, ticketID, keep)
+	return err
 }
 
 func (w *writer) tag(ctx context.Context, tx pgx.Tx, raw string) (*uuid.UUID, error) {
