@@ -230,6 +230,7 @@
     "draft": "Entwurf",
     "draftTo": "An {{who}}",
     "draftNoRecipients": "Noch keine Empfänger",
+    "useDraft": "Entwurf verwenden",
     "toAlias": "An {{email}}",
     "toAliasHint": "An diese Adresse geschrieben. Ihre E-Mails anzeigen",
     "onTicket": "Im Ticket #{{number}}",

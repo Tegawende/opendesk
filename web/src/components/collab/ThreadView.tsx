@@ -21,7 +21,6 @@ import {
   MessageSquare,
   MoreHorizontal,
   PanelRight,
-  PencilLine,
   RefreshCw,
   Reply,
   ReplyAll,
@@ -63,6 +62,7 @@ import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import { AccountDot, LabelPill } from "./bits";
 import { CommentBar, Comments, Count, type CommentBarHandle } from "./Comments";
+import { DraftRow } from "./DraftRow";
 import { draftFromMessage, MailComposer, startDraft, useForwardBlock } from "./MailComposer";
 import { MailMessageItem } from "./MailMessageItem";
 import { PersonPanel } from "./PersonPanel";
@@ -111,35 +111,6 @@ function useWide() {
     },
     () => window.matchMedia(WIDE).matches,
     () => true,
-  );
-}
-
-/** A draft in the conversation: who it is to and how it starts; opening it continues it in the composer. */
-function DraftRow({ m, onOpen }: { m: MailMessage; onOpen: () => void }) {
-  const { t } = useTranslation("collab");
-  const to = [...m.to, ...m.cc].map((a) => a.name || a.email).join(", ");
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="group flex w-full items-center gap-3 rounded-lg border border-dashed border-line-strong bg-surface px-3.5 py-2.5 text-left outline-none transition-colors hover:bg-sunken focus-visible:shadow-[0_0_0_2px_var(--focus)]"
-    >
-      <span className="inline-flex h-[18px] shrink-0 items-center rounded-sm bg-tone-red-soft px-1.5 text-[10.5px] font-medium text-tone-red">
-        {m.drafted_by_ai ? t("thread.aiDraftBy", { name: m.drafted_by_ai }) : t("composer.draft")}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[12.5px] text-fg-2" data-ph-mask>
-          {to ? t("thread.draftTo", { who: to }) : t("thread.draftNoRecipients")}
-        </span>
-        <span className="block truncate text-xs text-fg-4" data-ph-mask>
-          {m.snippet || m.subject}
-        </span>
-      </span>
-      <span className="flex shrink-0 items-center gap-1 text-[11.5px] text-fg-3 group-hover:text-fg">
-        <PencilLine className="size-3.5" />
-        {t("composer.editDraft")}
-      </span>
-    </button>
   );
 }
 
@@ -697,7 +668,7 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
             return <MailMessageItem key={m.id} m={m} open={isOpen(m.id, i)} onToggle={() => (i === last ? setFoldedLast((f) => (f === m.id ? null : m.id)) : toggle(m.id))} />;
           })}
 
-          {drafts.map((m) => (canAct ? <DraftRow key={m.id} m={m} onOpen={() => editDraft(m)} /> : <MailMessageItem key={m.id} m={m} open={false} onToggle={() => undefined} />))}
+          {drafts.map((m) => (canAct ? <DraftRow key={m.id} m={m} composing={!!composer || !!editing} onOpen={() => editDraft(m)} /> : <MailMessageItem key={m.id} m={m} open={false} onToggle={() => undefined} />))}
 
           <AnimatePresence initial={false}>
             {detail.comments.length > 0 && (

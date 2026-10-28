@@ -496,6 +496,89 @@ func TestHTTPPanelBlocks(t *testing.T) {
 	}
 }
 
+// TestHTTPPanelLocale: the request carries the reader's language as the app said it, and an
+// answer is kept per language, so a reader never gets a copy made in another language.
+func TestHTTPPanelLocale(t *testing.T) {
+	e, ws := apiEnv(t)
+	var mu sync.Mutex
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req lookupRequest
+		_ = json.Unmarshal(body, &req)
+		mu.Lock()
+		bodies = append(bodies, string(body))
+		mu.Unlock()
+		text, ok := map[string]string{"fr": "Commande en route.", "de": "Bestellung unterwegs."}[req.Locale]
+		if !ok {
+			text = "Order on its way."
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"version": 2, "blocks": []any{map[string]any{"type": "note", "text": text}}})
+	}))
+	defer srv.Close()
+	admin, viewer := ws.Admin.As(ws), ws.Viewer.As(ws)
+	var created struct {
+		Panel Panel `json:"panel"`
+	}
+	e.Do("POST", "/v1/ticket-panels", admin, map[string]any{"kind": "http", "url": srv.URL + "/panel"}).Want(t, 201).JSON(t, &created)
+	path := "/v1/tickets/" + newTicket(t, e, ws.Agent.As(ws), "ada@example.com", nil) + "/panels/" + created.Panel.ID.String()
+	note := func(query string) string {
+		t.Helper()
+		d := readPanel(t, e, path+query, viewer)
+		if d.State != "ok" || len(d.Blocks) != 1 {
+			t.Fatalf("%s: data = %+v", query, d)
+		}
+		return d.Blocks[0].Text
+	}
+	asked := func() (int, string) {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(bodies), bodies[len(bodies)-1]
+	}
+
+	// No language said: the field is left out.
+	if got := note(""); got != "Order on its way." {
+		t.Fatalf("no locale = %q", got)
+	}
+	if _, raw := asked(); strings.Contains(raw, `"locale"`) {
+		t.Fatalf("request = %s", raw)
+	}
+	// French, then German: each asks the URL, which answers in it.
+	if got := note("?locale=fr"); got != "Commande en route." {
+		t.Fatalf("fr = %q", got)
+	}
+	if _, raw := asked(); !strings.Contains(raw, `"locale":"fr"`) {
+		t.Fatalf("request = %s", raw)
+	}
+	if got := note("?locale=de"); got != "Bestellung unterwegs." {
+		t.Fatalf("de = %q", got)
+	}
+	n, _ := asked()
+	if n != 3 {
+		t.Fatalf("asked %d times, want 3: one per language", n)
+	}
+	// Each language's copy answers its own readers for the minute.
+	for query, want := range map[string]string{"?locale=fr": "Commande en route.", "?locale=de": "Bestellung unterwegs.", "": "Order on its way."} {
+		if got := note(query); got != want {
+			t.Fatalf("%q kept = %q, want %q", query, got, want)
+		}
+	}
+	// Anything but a lowercase base language tag is ignored: the copy made without a language.
+	for _, bad := range []string{"FR", "fr-BE", "french", "f", "fr%0A", "%2E%2E"} {
+		if got := note("?locale=" + bad); got != "Order on its way." {
+			t.Fatalf("%q = %q", bad, got)
+		}
+	}
+	if m, _ := asked(); m != n {
+		t.Fatalf("asked %d more times, want none", m-n)
+	}
+	// Refresh asks again in the reader's language.
+	note("?locale=fr&refresh=true")
+	if m, raw := asked(); m != n+1 || !strings.Contains(raw, `"locale":"fr"`) || !strings.Contains(raw, `"refresh":true`) {
+		t.Fatalf("refresh: asked %d, request %s", m-n, raw)
+	}
+}
+
 // TestTicketReadingIsKept: an http panel reads a ticket once per version of the panel and the
 // ticket. A kept reading answers without the database or a lookup of the panel's; a new one
 // takes the panel's lookup before it reads, and the lookup it leads to asks with that one. A
@@ -553,7 +636,7 @@ func TestTicketReadingIsKept(t *testing.T) {
 	cancel()
 	const unread, refused = "error: Couldn't read the ticket.", "error: Too many lookups. Try again in a minute."
 
-	if got := shown(s.read(cancelled, newPanel(), ticket(), false)); got != unread {
+	if got := shown(s.read(cancelled, newPanel(), ticket(), false, "")); got != unread {
 		t.Fatalf("a new reading without the database = %q", got)
 	}
 
@@ -561,19 +644,19 @@ func TestTicketReadingIsKept(t *testing.T) {
 	x := newPanel()
 	spend(x, lookupsPerMinute-1)
 	want := "#1001 | " + contactEmail
-	if got := shown(s.read(e.Ctx, x, ticket(), false)); got != want || calls.Load() != 1 {
+	if got := shown(s.read(e.Ctx, x, ticket(), false, "")); got != want || calls.Load() != 1 {
 		t.Fatalf("the last lookup = %q, %d calls", got, calls.Load())
 	}
 	// None left: the kept reading and answer still answer, without the database.
 	for range 3 {
-		if got := shown(s.read(cancelled, x, ticket(), false)); got != want || calls.Load() != 1 {
+		if got := shown(s.read(cancelled, x, ticket(), false, "")); got != want || calls.Load() != 1 {
 			t.Fatalf("a repeated open = %q, %d calls", got, calls.Load())
 		}
 	}
 	// A new version of the ticket is read again: refused before the database is read.
 	e.Do("POST", "/v1/tickets/"+tk.ID.String()+"/messages", agent, map[string]any{"kind": "note", "body_html": "<p>See #1002</p>"}).Want(t, 201)
 	for _, ctx := range []context.Context{cancelled, e.Ctx} {
-		if got := shown(s.read(ctx, x, ticket(), false)); got != refused || calls.Load() != 1 {
+		if got := shown(s.read(ctx, x, ticket(), false, "")); got != refused || calls.Load() != 1 {
 			t.Fatalf("a new version with no lookup left = %q, %d calls", got, calls.Load())
 		}
 	}
@@ -585,29 +668,29 @@ func TestTicketReadingIsKept(t *testing.T) {
 	}
 	notes := "/v1/tickets/" + tk.ID.String() + "/messages"
 	e.Do("POST", notes, agent, map[string]any{"kind": "note", "body_html": "<p>Wrong customer: #3001</p>"}).Want(t, 201).JSON(t, &note)
-	if got := shown(s.read(e.Ctx, x, ticket(), false)); got != "#1001 #3001 #1002 | "+contactEmail {
+	if got := shown(s.read(e.Ctx, x, ticket(), false, "")); got != "#1001 #3001 #1002 | "+contactEmail {
 		t.Fatalf("a new note = %q", got)
 	}
 	before := ticket()
 	e.Do("DELETE", notes+"/"+note.ID, agent, nil).Want(t, 204)
 	after := ticket()
-	if got := shown(s.read(e.Ctx, x, after, false)); got != "#1001 #1002 | "+contactEmail || !after.UpdatedAt.After(before.UpdatedAt) {
+	if got := shown(s.read(e.Ctx, x, after, false, "")); got != "#1001 #1002 | "+contactEmail || !after.UpdatedAt.After(before.UpdatedAt) {
 		t.Fatalf("a deleted note = %q, updated_at %v then %v", got, before.UpdatedAt, after.UpdatedAt)
 	}
 	e.Do("POST", notes, agent, map[string]any{"kind": "note", "body_html": "<p>Draft about #3002</p>"}).Want(t, 201).JSON(t, &note)
-	if got := shown(s.read(e.Ctx, x, ticket(), false)); got != "#1001 #3002 #1002 | "+contactEmail {
+	if got := shown(s.read(e.Ctx, x, ticket(), false, "")); got != "#1001 #3002 #1002 | "+contactEmail {
 		t.Fatalf("a new note = %q", got)
 	}
 	before = ticket()
 	e.Do("POST", notes, agent, map[string]any{"kind": "reply", "body_html": "<p>It is on its way.</p>", "from_note_id": note.ID}).Want(t, 201)
 	after = ticket()
-	if got := shown(s.read(e.Ctx, x, after, false)); got != "#1001 #1002 | "+contactEmail || !after.UpdatedAt.After(before.UpdatedAt) {
+	if got := shown(s.read(e.Ctx, x, after, false, "")); got != "#1001 #1002 | "+contactEmail || !after.UpdatedAt.After(before.UpdatedAt) {
 		t.Fatalf("a note sent as a reply = %q, updated_at %v then %v", got, before.UpdatedAt, after.UpdatedAt)
 	}
 
 	// An incoming message moves the ticket: its reference and address are read at once.
 	before = ticket()
-	if got := shown(s.read(e.Ctx, x, before, false)); got != "#1001 #1002 | "+contactEmail {
+	if got := shown(s.read(e.Ctx, x, before, false, "")); got != "#1001 #1002 | "+contactEmail {
 		t.Fatalf("before = %q", got)
 	}
 	if err := e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
@@ -618,7 +701,7 @@ func TestTicketReadingIsKept(t *testing.T) {
 		t.Fatal(err)
 	}
 	after = ticket()
-	if got := shown(s.read(e.Ctx, x, after, false)); got != "#1001 #1003 #1002 | "+contactEmail+" ada.work@example.com" || !after.UpdatedAt.After(before.UpdatedAt) {
+	if got := shown(s.read(e.Ctx, x, after, false, "")); got != "#1001 #1003 #1002 | "+contactEmail+" ada.work@example.com" || !after.UpdatedAt.After(before.UpdatedAt) {
 		t.Fatalf("after an incoming message = %q, updated_at %v then %v", got, before.UpdatedAt, after.UpdatedAt)
 	}
 }
@@ -705,7 +788,7 @@ func TestTicketReadingsShareTheWorkspaceBudget(t *testing.T) {
 		t    *domain.Ticket
 		r    bool
 	}{{"a refresh", panels[1], ticket(), true}, {"a new panel", newPanel(ws), ticket(), false}, {"a new ticket", panels[2], other(), false}} {
-		if got := shown(s.read(cancelled, read.x, read.t, read.r)); got != refused {
+		if got := shown(s.read(cancelled, read.x, read.t, read.r, "")); got != refused {
 			t.Fatalf("%s past the workspace's readings = %q", read.name, got)
 		}
 	}
@@ -713,7 +796,7 @@ func TestTicketReadingsShareTheWorkspaceBudget(t *testing.T) {
 	// answer is not kept): a new reading would be refused.
 	before := calls.Load()
 	for _, x := range panels {
-		if got := shown(s.read(e.Ctx, x, ticket(), false)); got != "#1001" {
+		if got := shown(s.read(e.Ctx, x, ticket(), false, "")); got != "#1001" {
 			t.Fatalf("a kept reading = %q", got)
 		}
 	}
@@ -723,14 +806,14 @@ func TestTicketReadingsShareTheWorkspaceBudget(t *testing.T) {
 	// A new version of the ticket is refused before the database too.
 	e.Do("POST", "/v1/tickets/"+ticket().ID.String()+"/messages", ws.Agent.As(ws), map[string]any{"kind": "note", "body_html": "<p>See #1002</p>"}).Want(t, 201)
 	for _, ctx := range []context.Context{cancelled, e.Ctx} {
-		if got := shown(s.read(ctx, panels[0], ticket(), false)); got != refused {
+		if got := shown(s.read(ctx, panels[0], ticket(), false, "")); got != refused {
 			t.Fatalf("a new version past the workspace's readings = %q", got)
 		}
 	}
 
 	// Another workspace's panels read on.
 	ws2 := e.NewWorkspace()
-	if got := shown(s.read(e.Ctx, newPanel(ws2), openTicket(ws2)(), true)); got != "#1001" {
+	if got := shown(s.read(e.Ctx, newPanel(ws2), openTicket(ws2)(), true, "")); got != "#1001" {
 		t.Fatalf("another workspace = %q", got)
 	}
 }

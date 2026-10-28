@@ -1,9 +1,11 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import "@/i18n";
+import { afterEach, describe, expect, it } from "vitest";
+import { i18n } from "@/i18n";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { __resetClientForTests, configureClient, setTransport } from "@/lib/api/client";
+import { api } from "@/lib/api/endpoints";
 import type { PanelBlock, PanelOrder, PanelValue, ShopifyField, TicketPanelData } from "@/lib/api/types";
 import { panelDate, relDay } from "@/lib/format";
 import { DEFAULT_SHOPIFY_FIELDS, normalizeFields, shownData } from "@/lib/panelFields";
@@ -371,5 +373,28 @@ describe("URL ticket panel", () => {
         '<a href="https://erp.example.com/so/42" target="_blank" rel="noopener noreferrer" class="outline-none hover:underline focus-visible:underline">2026-11-04</a></dd></div>' +
         '<div class="flex items-baseline gap-2 text-[12px]"><dt class="w-2/5 shrink-0 truncate text-fg-4">Supplier</dt><dd class="min-w-0 flex-1 break-words text-fg-2">Flos</dd></div></dl></div></div>',
     );
+  });
+});
+
+describe("reading a panel", () => {
+  afterEach(() => __resetClientForTests());
+
+  it("tells the panel's URL the app's language, on a refresh too", async () => {
+    const asked: URL[] = [];
+    configureClient({ baseUrl: "https://api.test" });
+    setTransport(async (raw) => {
+      asked.push(new URL(raw));
+      return new Response(JSON.stringify(httpData([])), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    await i18n.changeLanguage("fr");
+    try {
+      await api.tickets.panel("t1", "p2");
+      await api.tickets.panel("t1", "p2", true);
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+    await api.tickets.panel("t1", "p2");
+    expect(asked.map((u) => u.pathname)).toEqual(Array(3).fill("/v1/tickets/t1/panels/p2"));
+    expect(asked.map((u) => Object.fromEntries(u.searchParams))).toEqual([{ locale: "fr" }, { refresh: "true", locale: "fr" }, { locale: "en" }]);
   });
 });
