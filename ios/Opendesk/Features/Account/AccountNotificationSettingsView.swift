@@ -24,8 +24,10 @@ struct AccountNotificationSettingsView: View {
             }
         }
         .task { await store.loadPreferences() }
+        #if DEBUG
         .onChange(of: env.router.demoAction) { _, _ in handleDemo() }
         .onAppear(perform: handleDemo)
+        #endif
     }
 
     // MARK: Holds

@@ -43,6 +43,7 @@ import {
   type TeamKey,
 } from "./content";
 import { contactRef, db, defaultRouting, userRef, type WsData } from "./db";
+import { seedPhone } from "./phone";
 import { brandLogo, logoMark, portrait } from "./avatars";
 import { teammatePresence, type Meta } from "./gateway";
 import { seedDefaultLabels } from "./labels";
@@ -132,6 +133,7 @@ export function baseWorkspace(id: string, name: string, slug: string): WsData {
     threads: [],
     originals: {},
     activities: [],
+    phone: [],
     tags: [],
     tagGroups: [],
     customFields: [],
@@ -1403,6 +1405,7 @@ function seedMargin(): WsData {
 
   seedTicketTypes(ws);
   seedMarginFields(ws, { maya: uid("maya"), jonas: uid("jonas"), lea: uid("lea"), priya: uid("priya") });
+  seedPhone(ws, userRef(uid("jonas"))!);
   return ws;
 }
 

@@ -1,0 +1,272 @@
+name: Publish desktop
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      prerelease:
+        required: true
+        type: boolean
+      create_release:
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-feed
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ inputs.tag }}
+      VERSION: ${{ inputs.version }}
+      PRERELEASE: ${{ inputs.prerelease }}
+      # Semantic version order, for the feed and the notes.
+      #   node -e "$SEMVER" gt <a> <b>          exits 0 when a > b
+      #   node -e "$SEMVER" prev <tag> <tags…>  the tag before <tag>: the previous
+      #                                         stable one for a stable tag, any
+      #                                         earlier one for a prerelease
+      SEMVER: |
+        const parse = (t) => {
+          const m = /^(?:(?:desktop-)?v)?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(String(t ?? "").trim());
+          return m && { core: [+m[1], +m[2], +m[3]], pre: m[4] ? m[4].split(".") : [] };
+        };
+        const cmp = (a, b) => {
+          for (let i = 0; i < 3; i++) if (a.core[i] !== b.core[i]) return a.core[i] - b.core[i];
+          if (!a.pre.length || !b.pre.length) return b.pre.length - a.pre.length;
+          for (let i = 0; ; i++) {
+            const x = a.pre[i], y = b.pre[i];
+            if (x === undefined || y === undefined) return x === y ? 0 : x === undefined ? -1 : 1;
+            const nx = /^\d+$/.test(x), ny = /^\d+$/.test(y);
+            if (nx && ny && +x !== +y) return +x - +y;
+            if (nx !== ny) return nx ? -1 : 1;
+            if (!nx && x !== y) return x < y ? -1 : 1;
+          }
+        };
+        const [cmd, ...args] = process.argv.slice(1);
+        if (cmd === "gt") {
+          const a = parse(args[0]), b = parse(args[1]);
+          process.exit(a && b && cmp(a, b) > 0 ? 0 : 1);
+        }
+        if (cmd === "prev") {
+          const cur = parse(args[0]);
+          const prev = args.slice(1)
+            .map((t) => [t, parse(t)])
+            .filter(([, v]) => v && cmp(v, cur) < 0 && (cur.pre.length > 0 || v.pre.length === 0))
+            .sort((a, b) => cmp(b[1], a[1]))[0];
+          if (prev) console.log(prev[0]);
+        }
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: desktop-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum -- * > SHA256SUMS && cat SHA256SUMS
+      - name: Release notes
+        if: inputs.create_release
+        run: |
+          set -euo pipefail
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          file() { for f in dist/$1; do [ -f "$f" ] && basename "$f" && return; done; echo "?"; }
+          link() { local f; f=$(file "$1"); printf '[%s](%s/%s)' "$2" "$base" "$f"; }
+
+          # What changed since the previous desktop release.
+          tags=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/desktop-v" --paginate --jq '.[].ref | ltrimstr("refs/tags/")')
+          # shellcheck disable=SC2086
+          prev=$(node -e "$SEMVER" prev "$TAG" $tags)
+          changes=""
+          if [ -n "$prev" ]; then
+            changes=$(gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" -f previous_tag_name="$prev" --jq .body) || changes=""
+          fi
+
+          {
+            echo "## opendesk desktop $VERSION"
+            echo
+            if [ "$PRERELEASE" = true ]; then
+              echo "A beta. Apps with **Get beta updates** turned on update to it; everyone else stays on the stable version."
+              echo
+            fi
+            # A system left out of the build (DESKTOP_RELEASE_EXCLUDE) is named as not in it.
+            if [ "$(file '*-mac.dmg')" != "?" ]; then
+              echo "- **macOS** 13 or later, Apple silicon and Intel: $(link '*-mac.dmg' 'dmg')"
+            else
+              echo "- **macOS**: not in this version"
+            fi
+            if [ "$(file '*-setup.exe')" != "?" ]; then
+              echo "- **Windows** 10 or later, x64 and arm64: $(link '*-setup.exe' 'installer')"
+            else
+              echo "- **Windows**: not in this version"
+            fi
+            if [ "$(file '*-linux-x86_64.AppImage')" != "?" ]; then
+              echo "- **Linux** x64: $(link '*-linux-x86_64.AppImage' 'AppImage') or $(link '*-linux-amd64.deb' 'deb'); arm64: $(link '*-linux-arm64.AppImage' 'AppImage') or $(link '*-linux-arm64.deb' 'deb')"
+            else
+              echo "- **Linux**: not in this version"
+            fi
+            echo
+            echo "Checksums are in [SHA256SUMS]($base/SHA256SUMS). Installed apps update themselves."
+            if [ "$PRERELEASE" != true ]; then
+              echo "The newest version is always at https://opendesk.sh/download."
+            fi
+            if [ -n "$changes" ]; then
+              echo
+              printf '%s\n' "$changes"
+            fi
+          } > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+      - name: Create the release
+        if: inputs.create_release
+        run: |
+          # Never "Latest": that badge, and /releases/latest, belong to the server's v* releases.
+          flags="--verify-tag --latest=false --title opendesk-desktop-$VERSION"
+          [ "$PRERELEASE" = true ] && flags="$flags --prerelease"
+          # shellcheck disable=SC2086
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md" $flags
+      - name: Refresh desktop-latest (the update feed and the download links)
+        run: |
+          set -euo pipefail
+          R="$GITHUB_REPOSITORY"
+          gt() { node -e "$SEMVER" gt "$1" "$2"; }
+          # The files a channel file points at, with their blockmaps.
+          refs() {
+            local f
+            for f in "$@"; do
+              [ -f "$f" ] || continue
+              sed -nE 's/^[[:space:]]*(- )?(url|path):[[:space:]]*//p' "$f" | tr -d "'\"\r"
+            done | sort -u | while read -r n; do [ -n "$n" ] && printf '%s\n%s.blockmap\n' "$n" "$n"; done
+          }
+          ver() { sed -nE 's/^version:[[:space:]]*//p' "$1" | tr -d "'\"\r" | head -n1; }
+          assets() { gh release view desktop-latest --repo "$R" --json assets --jq '.assets[].name'; }
+
+          if ! gh release view desktop-latest --repo "$R" >/dev/null 2>&1; then
+            gh release create desktop-latest --repo "$R" --target "$GITHUB_SHA" --latest=false \
+              --title "opendesk desktop (latest)" \
+              --notes "Update feed for installed desktop apps, and the stable download links on https://opendesk.sh/download. Release notes are on the versioned releases."
+          fi
+          # The channel files the feed serves now.
+          mkdir -p feed
+          gh release download desktop-latest --repo "$R" --dir feed --pattern 'latest*.yml' --pattern 'beta*.yml' 2>/dev/null || true
+
+          if [ "$PRERELEASE" = true ]; then
+            # Beta: the beta channel files and the installers they point at. The
+            # stable channel, the stable download names and version.json stay.
+            shopt -s nullglob
+            beta=(dist/beta*.yml)
+            [ ${#beta[@]} -gt 0 ] || { echo "::error::no beta*.yml in this build"; exit 1; }
+            files=()
+            while read -r n; do [ -f "dist/$n" ] && files+=("dist/$n"); done < <(refs "${beta[@]}")
+            gh release upload desktop-latest "${files[@]}" --repo "$R" --clobber
+            gh release upload desktop-latest "${beta[@]}" --repo "$R" --clobber
+            # Older prerelease leftovers: what the beta files just replaced pointed
+            # at, unless the new beta files, the stable channel or the beta files of
+            # a system left out of this build still use it.
+            replaced=() kept=()
+            for f in feed/beta*.yml; do if [ -f "dist/${f#feed/}" ]; then replaced+=("$f"); else kept+=("$f"); fi; done
+            in_use=$( { refs "${beta[@]}"; refs feed/latest*.yml; refs "${kept[@]}"; } )
+            have=$(assets)
+            refs "${replaced[@]}" | while read -r a; do
+              printf '%s\n' "$in_use" | grep -qxF "$a" && continue
+              printf '%s\n' "$have" | grep -qxF "$a" || continue
+              gh release delete-asset desktop-latest "$a" --repo "$R" --yes
+            done
+            echo "desktop-latest serves beta $VERSION"
+            exit 0
+          fi
+
+          # Stable. The download links on opendesk.sh/download use these names.
+          # A system left out of this build (DESKTOP_RELEASE_EXCLUDE) has none of
+          # its files in dist/ and keeps its previous ones.
+          mkdir -p stable
+          have=$(assets)
+          platforms=()
+          stable() {
+            # shellcheck disable=SC2206 # $1 is a glob
+            local m=(dist/$1)
+            [ ${#m[@]} -eq 1 ] && [ -f "${m[0]}" ] || { echo "::error::expected one dist/$1"; exit 1; }
+            cp "${m[0]}" "stable/$2"
+          }
+          # system, the file that says it was built, then its download names.
+          system() {
+            local os=$1 marker=$2; shift 2
+            if compgen -G "dist/$marker" >/dev/null; then
+              while [ $# -gt 0 ]; do stable "$1" "$2"; shift 2; done
+              platforms+=("$os")
+            elif printf '%s\n' "$have" | grep -qxF "$2"; then
+              platforms+=("$os")
+            fi
+          }
+          system mac '*-mac.dmg' '*-mac.dmg' opendesk-mac.dmg
+          system windows '*-setup.exe' '*-setup.exe' opendesk-windows.exe
+          system linux '*-linux-x86_64.AppImage' \
+            '*-linux-x86_64.AppImage' opendesk-linux-x64.AppImage '*-linux-arm64.AppImage' opendesk-linux-arm64.AppImage \
+            '*-linux-amd64.deb' opendesk-linux-amd64.deb '*-linux-arm64.deb' opendesk-linux-arm64.deb
+          # platforms: the systems with a download on desktop-latest, this version's or an earlier one.
+          jq -n --arg v "$VERSION" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg u "https://github.com/$R/releases/tag/$TAG" \
+            --argjson p "$(printf '%s\n' "${platforms[@]}" | jq -R . | jq -cs .)" \
+            '{version: $v, date: $d, notes_url: $u, platforms: $p}' > version.json
+
+          # A beta newer than this version keeps the beta channel; otherwise beta
+          # users move to this version.
+          keep_beta=false beta_version=
+          for f in feed/beta*.yml; do
+            if [ -f "$f" ] && gt "$(ver "$f")" "$VERSION"; then keep_beta=true beta_version=$(ver "$f"); fi
+          done
+
+          # This version's files first, then the channel files that point at them,
+          # then version.json, so nothing ever points at a missing file.
+          files=()
+          for f in dist/*; do case "$f" in *.yml) ;; *) files+=("$f") ;; esac; done
+          gh release upload desktop-latest "${files[@]}" stable/* --repo "$R" --clobber
+          gh release upload desktop-latest dist/latest*.yml --repo "$R" --clobber
+          [ "$keep_beta" = true ] || gh release upload desktop-latest dist/beta*.yml --repo "$R" --clobber
+          gh release upload desktop-latest version.json --repo "$R" --clobber
+
+          # Channel files this version did not replace (a newer beta, or a system
+          # left out of the build) stay, with what they point at, and so do the
+          # download names of a system left out. Everything else is a previous
+          # version's leftover.
+          kept=()
+          for f in feed/*.yml; do
+            [ -f "$f" ] || continue
+            n=${f#feed/}
+            case "$n" in
+              latest*) [ -f "dist/$n" ] || kept+=("$f") ;;
+              beta*) { [ "$keep_beta" = true ] || [ ! -f "dist/$n" ]; } && kept+=("$f") ;;
+            esac
+          done
+          keep=$( { (cd dist && printf '%s\n' *); (cd stable && printf '%s\n' *); echo version.json
+                    for f in "${kept[@]}"; do echo "${f#feed/}"; done; refs "${kept[@]}"
+                    printf '%s\n' "$have" | grep -xE 'opendesk-(mac\.dmg|windows\.exe|linux-.+)' || true; } )
+          assets | while read -r a; do
+            printf '%s\n' "$keep" | grep -qxF "$a" || gh release delete-asset desktop-latest "$a" --repo "$R" --yes
+          done
+          echo "desktop-latest serves $VERSION$([ "$keep_beta" = true ] && echo ", beta channel kept on $beta_version")"
+
+  site:
+    name: Redeploy the download page
+    needs: release
+    if: ${{ !inputs.prerelease }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Deploy the site
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ github.event.repository.default_branch }}
+        # opendesk.sh/download reads the version from desktop-latest at build time.
+        run: gh workflow run deploy.yml --repo "$GITHUB_REPOSITORY" --ref "$REF" -f target=site

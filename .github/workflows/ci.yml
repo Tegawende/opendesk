@@ -9,6 +9,10 @@ on:
     types: [checks_requested]
   # A manual run checks everything, whatever changed.
   workflow_dispatch:
+    inputs:
+      ios_version:
+        description: "Also validate a signed iOS version without uploading"
+        type: string
 
 # Read-only by default. Jobs that need more ask for it themselves.
 permissions:
@@ -41,6 +45,7 @@ jobs:
       admin: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.admin }}
       site: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.site }}
       docs: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.docs }}
+      ios: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.ios }}
       realtime: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.realtime }}
       e2e: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.e2e }}
       qa: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.qa }}
@@ -88,6 +93,10 @@ jobs:
               - *shared
               - 'docs/**'
               - 'brand/**'
+            ios:
+              - *shared
+              - 'ios/**'
+              - '.github/workflows/ios.yml'
             realtime:
               - *shared
               - 'realtime/**'
@@ -675,10 +684,19 @@ jobs:
       - name: Bundles
         run: pnpm exec wrangler deploy --dry-run --outdir dist
 
+  ios:
+    name: iOS
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
+    uses: ./.github/workflows/ios.yml
+    secrets: inherit
+    with:
+      version: ${{ inputs.ios_version || '' }}
+
   ci-status:
     name: CI status
     runs-on: ubuntu-latest
-    needs: [changes, secrets, go, migrations, web, admin, site, docs, realtime, e2e, qa, images, installer, terraform, cloudflare, help-worker]
+    needs: [changes, secrets, go, migrations, web, admin, site, docs, ios, realtime, e2e, qa, images, installer, terraform, cloudflare, help-worker]
     if: always()
     steps:
       # The one check to require in branch protection. Skipped jobs pass;

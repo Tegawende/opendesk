@@ -31,6 +31,7 @@ import { applyMockImap, syncReceiving } from "./handlers/mailhost";
 import { registerMcp } from "./handlers/mcp";
 import { registerNotificationPrefs } from "./handlers/notificationPrefs";
 import { registerSupportChannels } from "./handlers/supportChannels";
+import { registerPhone } from "./handlers/phone";
 import { registerTemplates } from "./handlers/templates";
 import { registerResources } from "./handlers/resources";
 import { registerSpaces } from "./handlers/spaces";
@@ -107,6 +108,7 @@ export function installMock(): void {
   registerBots();
   registerNotificationPrefs();
   registerSupportChannels();
+  registerPhone();
   registerTemplates();
   registerCollab();
   registerWorkspaces();

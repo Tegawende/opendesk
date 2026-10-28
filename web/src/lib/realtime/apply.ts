@@ -74,6 +74,7 @@ const simpleLists: Record<string, { key: () => readonly unknown[]; field: string
   integration: { key: () => qk.integrations, field: "integration" },
   ticket_panel: { key: () => qk.ticketPanels, field: "panel" },
   support_channel_connection: { key: () => qk.supportChannelConnections, field: "support_channel_connection" },
+  phone_connection: { key: () => qk.phoneConnections, field: "phone_connection" },
   support_channel_destination: { key: () => qk.supportChannelDestinations, field: "support_channel_destination" },
 };
 
@@ -304,6 +305,13 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
       const a = d.activity as Activity;
       const tid = (d.ticket_id as string) ?? a?.ticket_id;
       if (a && tid) appendUnique(qc, qk.activities(tid), a);
+      return;
+    }
+    case "activity.updated": {
+      // A call entry follows its call (contracts/phone.md).
+      const a = d.activity as Activity;
+      const tid = (d.ticket_id as string) ?? a?.ticket_id;
+      if (a && tid) upsertInList(qc, qk.activities(tid), a);
       return;
     }
     case "tag.merged": {

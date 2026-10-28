@@ -85,7 +85,7 @@ func writeTools() []*tool {
 					"priority": arr("", enum("", priorities...)),
 					"assignee": str(`"me", "none" or a teammate.`),
 					"label":    str("Label name."),
-					"channel":  enum("", "email", "chat", "api", "portal"),
+					"channel":  enum("", "email", "chat", "api", "portal", "phone"),
 					"query":    str("Full-text search."),
 				}),
 			}, "name", "filters"),
@@ -97,9 +97,9 @@ func writeTools() []*tool {
 			Description: "Create an automation, switched off, for an admin to review and enable. Needs the user's approval.",
 			Schema: obj(map[string]any{
 				"name":    str("Automation name."),
-				"trigger": enum("When it runs.", "ticket_created", "customer_replied", "agent_replied", "ticket_updated"),
+				"trigger": enum("When it runs.", "ticket_created", "customer_replied", "agent_replied", "ticket_updated", "call_ended"),
 				"conditions": arr("All must match.", obj(map[string]any{
-					"field": str("subject, body, from_email, received_at, channel, mailbox_id, priority, severity, status, tag, sentiment or field.<key>"),
+					"field": str("subject, body, from_email, received_at, channel, mailbox_id, priority, severity, status, tag, sentiment or field.<key>; on call_ended also call_outcome (answered, missed, voicemail), call_direction (inbound, outbound), call_missed_reason, call_time (business_hours, outside_business_hours), call_line (equals: a line id from GET /v1/phone/lines; contains: words of its name) or call_tag"),
 					"op":    enum("any and none on subject, body, from_email, received_at or tag: the text contains any, or none, of the phrases in value.", "contains", "not_contains", "equals", "not_equals", "gt", "gte", "lt", "lte", "any", "all", "none", "set", "not_set"),
 					"value": str("The value to compare; for any and none on a text field, up to 100 phrases, one per line."),
 				}, "field", "op", "value")),
@@ -701,7 +701,7 @@ type automationArgs struct {
 	Actions    []map[string]any `json:"actions"`
 }
 
-var triggers = []string{"ticket_created", "customer_replied", "agent_replied", "ticket_updated"}
+var triggers = []string{"ticket_created", "customer_replied", "agent_replied", "ticket_updated", "call_ended"}
 
 func proposeAutomation(_ context.Context, _ *runCtx, in json.RawMessage) (any, Preview, error) {
 	a, err := decode[struct {

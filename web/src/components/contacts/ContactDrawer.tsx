@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar } from "@/components/ui/avatar";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { Badge } from "@/components/ui/badge";
+import { PhoneNumber } from "./PhoneNumber";
 import { Button } from "@/components/ui/button";
 import { Field, Textarea, TextInput } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -239,7 +240,7 @@ function Overview({ c, onEdit }: { c: Contact; onEdit?: () => void }) {
       <RecordFields kind="contact" record={c} />
       <dl className="divide-y divide-line-soft">
         <Detail label={t("field.phone")} mono>
-          <span data-ph-mask>{c.phone || none}</span>
+          {c.phone ? <PhoneNumber phone={c.phone} /> : <span>{none}</span>}
         </Detail>
         <Detail label={t("field.externalId")} mono>
           {c.external_id || none}

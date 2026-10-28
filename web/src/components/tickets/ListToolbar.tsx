@@ -267,7 +267,7 @@ export function ListToolbar({
               </MenuCheckItem>
             </MenuSub>
             <MenuSub label={t("filter.channel")}>
-              {(["email", "chat", "api", "portal"] as Channel[]).map((c) => (
+              {(["email", "chat", "api", "portal", "phone"] as Channel[]).map((c) => (
                 <MenuCheckItem
                   key={c}
                   checked={search.channel === c}
@@ -489,7 +489,7 @@ export function ListToolbar({
                 {search.channel && (
                   <Chip key="channel" label={t("filter.remove")} onRemove={() => onSearch({ ...search, channel: undefined })}>
                     <ChannelIcon channel={search.channel as Channel} />
-                    {["email", "chat", "api", "portal"].includes(search.channel) ? channelLabel(search.channel as Channel) : search.channel}
+                    {["email", "chat", "api", "portal", "phone"].includes(search.channel) ? channelLabel(search.channel as Channel) : search.channel}
                   </Chip>
                 )}
                 {search.tag && (

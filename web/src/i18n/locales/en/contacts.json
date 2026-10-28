@@ -142,5 +142,6 @@
     "automatic": "Contacts are created automatically from email and chat",
     "search": "to search everything",
     "domains": "Companies group contacts by their email domain"
-  }
+  },
+  "callWith": "Call with {{provider}}"
 }

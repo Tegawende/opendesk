@@ -1,6 +1,7 @@
 package imports
 
 import (
+	"github.com/google/uuid"
 	"github.com/useopendesk/opendesk/internal/helpdesk/imports/source"
 	"slices"
 	"testing"
@@ -18,6 +19,11 @@ func TestReviewCombinedHumanLabelAfterMerge(t *testing.T) {
 				t.Fatal(d.Status)
 			}
 			src, dst := e.ticketByRef(t, "101"), e.ticketByRef(t, "102")
+			callID, activityID := uuid.New(), uuid.New()
+			e.Exec(`INSERT INTO activities (id, workspace_id, ticket_id, actor_type, type, data)
+                VALUES ($1, $2, $3, 'system', 'call', '{"summary":"Preserved call"}')`, activityID, e.ws.ID, src)
+			e.Exec(`INSERT INTO phone_calls (id, workspace_id, provider, external_call_id, ticket_id, activity_id, direction)
+                VALUES ($1, $2, 'aircall', 'combined-merge', $3, $4, 'inbound')`, callID, e.ws.ID, src, activityID)
 			e.Do("PATCH", "/v1/tickets/"+src.String(), e.admin, map[string]any{"remove_tags": []string{"vip"}}).Want(t, 200)
 			e.Do("PATCH", "/v1/tickets/"+src.String(), e.admin, map[string]any{"add_tags": []string{"vip"}}).Want(t, 200)
 			if mode == "manual" {
@@ -53,6 +59,14 @@ func TestReviewCombinedHumanLabelAfterMerge(t *testing.T) {
 				t.Fatalf("sync deleted the human label carried from merged ticket: %v", got)
 			}
 
+			var callTicket, activityTicket uuid.UUID
+			var summary string
+			e.Scalar(`SELECT ticket_id FROM phone_calls WHERE id=$1`, &callTicket, callID)
+			e.Scalar(`SELECT ticket_id FROM activities WHERE id=$1`, &activityTicket, activityID)
+			e.Scalar(`SELECT data->>'summary' FROM activities WHERE id=$1`, &summary, activityID)
+			if callTicket != dst || activityTicket != dst || summary != "Preserved call" {
+				t.Fatalf("merged call ownership/content: call=%s activity=%s summary=%q", callTicket, activityTicket, summary)
+			}
 			var sourceAudit, targetAudit int
 			e.Scalar(`SELECT count(*) FROM activities WHERE ticket_id=$1 AND type='tagged'`, &sourceAudit, src)
 			e.Scalar(`SELECT count(*) FROM activities WHERE ticket_id=$1 AND type='tagged'`, &targetAudit, dst)

@@ -28,7 +28,8 @@
     "email": "E-Mail",
     "chat": "Chat",
     "api": "API",
-    "portal": "Portal"
+    "portal": "Portal",
+    "phone": "Telefon"
   },
   "sentiment": {
     "positive": "Positiv",

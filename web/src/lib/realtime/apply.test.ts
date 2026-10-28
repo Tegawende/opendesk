@@ -1,7 +1,7 @@
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { inWorkspace } from "../api/client";
-import type { Member, Message, SupportChannelConnection, SupportChannelDestination, Thread, User, Workspace } from "../api/types";
+import type { Activity, Member, Message, PhoneConnection, SupportChannelConnection, SupportChannelDestination, Thread, User, Workspace } from "../api/types";
 import { qk } from "../queries";
 import { useSession } from "../session";
 import { env, ticket } from "../test/fixtures";
@@ -64,6 +64,26 @@ describe("support channel events", () => {
     applyEnvelope(qc, env(7, { type: "support_channel_destination.created", data: { support_channel_destination: destination } }), { me: "u1" });
     applyEnvelope(qc, env(8, { type: "support_channel_destination.deleted", data: { support_channel_destination_id: "d1" } }), { me: "u1" });
     expect(qc.getQueryData<SupportChannelDestination[]>(qk.supportChannelDestinations)).toEqual([]);
+  });
+});
+
+describe("phone events", () => {
+  it("keeps connections current and a call entry following its call", () => {
+    const qc = new QueryClient();
+    qc.setQueryData(qk.phoneConnections, []);
+    const connection = { id: "p1", provider: "aircall", name: "Support line" } as PhoneConnection;
+    applyEnvelope(qc, env(4, { type: "phone_connection.created", data: { phone_connection: connection } }), { me: "u1" });
+    expect(qc.getQueryData<PhoneConnection[]>(qk.phoneConnections)).toEqual([connection]);
+    applyEnvelope(qc, env(5, { type: "phone_connection.deleted", data: { phone_connection_id: "p1" } }), { me: "u1" });
+    expect(qc.getQueryData<PhoneConnection[]>(qk.phoneConnections)).toEqual([]);
+
+    const ringing: Activity = { id: "a1", ticket_id: "t1", actor: { type: "system", user: null }, type: "call", data: { stage: "ringing" }, created_at: "2026-10-27T10:00:00Z" };
+    qc.setQueryData(qk.activities("t1"), []);
+    applyEnvelope(qc, env(6, { type: "activity.created", data: { ticket_id: "t1", activity: ringing } }), { me: "u1" });
+    applyEnvelope(qc, env(7, { type: "activity.updated", data: { ticket_id: "t1", activity: { ...ringing, data: { stage: "ended", outcome: "answered" } } } }), { me: "u1" });
+    const list = qc.getQueryData<Activity[]>(qk.activities("t1"));
+    expect(list).toHaveLength(1);
+    expect(list?.[0].data).toEqual({ stage: "ended", outcome: "answered" });
   });
 });
 

@@ -63,8 +63,10 @@ struct AccountSecurityView: View {
                 .presentationDetents([.medium, .large])
                 .presentationCornerRadius(Theme.Radius.sheet)
         }
+        #if DEBUG
         .onAppear(perform: handleDemo)
         .onChange(of: env.router.demoAction) { _, _ in handleDemo() }
+        #endif
     }
 
     // MARK: Overview

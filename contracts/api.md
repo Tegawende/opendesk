@@ -77,7 +77,7 @@ type CompanyRef = { id: string; name: string; domain: string; avatar_url: string
 type TicketStatus = "open" | "pending" | "on_hold" | "solved" | "closed";
 type Priority = "low" | "normal" | "high" | "urgent";
 type Severity = "sev1" | "sev2" | "sev3" | "sev4"; // business impact, sev1 the most severe; a ticket may have none
-type Channel = "email" | "chat" | "api" | "portal";
+type Channel = "email" | "chat" | "api" | "portal" | "phone"; // phone: a ticket a call opened (contracts/phone.md)
 type Ticket = {
   id: string; number: number; subject: string; status: TicketStatus; priority: Priority; severity: Severity | null; channel: Channel;
   mailbox_id: string | null; contact: ContactRef | null; assignee: UserRef | null; team_id: string | null;
@@ -113,6 +113,7 @@ type Activity = { id: string; ticket_id: string; actor: { type: string; user: Us
 // activity types: status_changed{from,to, reason?: "sender_unverified" | "thread_replied", message_id?} (with "sender_unverified", from equals to: a reply that failed sender checks left the status where it was, actor "system"; "thread_replied": an answer in a third-party thread opened a pending or on-hold ticket, actor "system") priority_changed{from,to} severity_changed{from: Severity | null, to: Severity | null} assigned{from,to,via?: "round_robin"|"load_balanced"|"triage"} (actor "system", or "ai" for via "triage") team_changed{from,to,via: "agent"|"automation"|"api"|"triage"|..., mailbox_from?, mailbox_to? /* the reply address switched with the team */} brand_changed{from,to} mailbox_changed{from,to} /* the reply address */ tagged{tag} untagged{tag} sla_breached{kind} merged{into, into_number /* null when the target is in another, private team */, via?: "import" /* actor "system": an import's sync followed the source's merge */} csat_received{score} linked{link_id,url,title,provider} unlinked{url,title,provider} contact_changed{from,to} /* each {id, name} (the name, else the email) or null */
 // thread_started{thread_id, subject, to} thread_closed{thread_id, subject} thread_reopened{thread_id, subject} ("Threads"); note_edited{message_id} and note_deleted{message_id} record internal note changes without the note text; reply_retracted{message_id} records a chat reply taken back from the customer; message_deleted{message_id}, message_restored{message_id} and message_purged{message_id} record deletions of messages other than notes; note_sent_as_reply{message_id, reply_id} records a note sent as the reply written from it
 // field_changed{key, name, from, to} (one per custom field; from/to are FieldValue | null)
+// call{CallData} (actor "system", contracts/phone.md "Timeline"): one per phone call, updated in place as the call moves on (activity.updated)
 // AI (actor.type "ai", contracts/ai.md): ai_triaged{category,sentiment,language,priority,severity,via,model?,engine?}; AI changes carry {via, model?: "jev", confidence?: number} ai_answered{message_id,sources,tools} ai_action{action_id,tool,status} ai_handoff (actor "ai" or "contact")
 
 // Labels ("tags" in the API). See "Labels and custom fields" below.
@@ -170,9 +171,10 @@ type OAuthRequest = { id: string; client: OAuthClientInfo; scopes: string[]; exp
   workspaces: { id: string; name: string; role: Role; scopes: string[] /* requested ∩ role */ }[] };
 type AIClientConnection = { id: string; client: OAuthClientInfo; user: UserRef; mine: boolean; scopes: string[];
   created_at: string; last_used_at: string | null };
-type Automation = { id: string; name: string; trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated"; conditions: Condition[]; actions: Action[]; enabled: boolean; position: number; run_count: number };
+type Automation = { id: string; name: string; trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated" | "call_ended" /* contracts/phone.md "Automations" */; conditions: Condition[]; actions: Action[]; enabled: boolean; position: number; run_count: number };
 type Condition = {
-  field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "severity" | "status" | "tag" | "sentiment" | "ai_decide" | "assignee_id" | "team_id" | "brand_id" | "widget_id" | "received_at" | `field.${string}` | `contact.field.${string}`;
+  field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "severity" | "status" | "tag" | "sentiment" | "ai_decide" | "assignee_id" | "team_id" | "brand_id" | "widget_id" | "received_at" | `field.${string}` | `contact.field.${string}`
+    | "call_outcome" | "call_direction" | "call_missed_reason" | "call_time" | "call_line" | "call_tag"; // call_ended only (contracts/phone.md)
   op: "contains" | "not_contains" | "equals" | "not_equals" | "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "any" | "all" | "none" | "set" | "not_set";
   value: string; // up to 500 characters; any/none on a text field: a phrase list (below)
   question?: string; // ai_decide only: a yes/no question, 3..300 characters of plain text

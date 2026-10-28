@@ -579,6 +579,28 @@ func ApplyPatch(ctx context.Context, tx pgx.Tx, d *deps.Deps, principal *auth.Pr
 		applyOpts{Enqueue: true, RequireFields: true})
 }
 
+// AssignAnsweredCall assigns a ticket nobody has to the member who answered a call on it
+// (contracts/phone.md "Agents"), as the system, the way auto-assignment does. A ticket
+// already assigned, solved or closed, or a member no longer on its team, is left alone.
+func AssignAnsweredCall(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid, uid uuid.UUID) error {
+	var assignee, team *uuid.UUID
+	var status string
+	err := tx.QueryRow(ctx, `SELECT assignee_id, team_id, status FROM tickets WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
+		wid, tid).Scan(&assignee, &team, &status)
+	if db.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if assignee != nil || closing(status) || hd.CheckMember(ctx, tx, wid, uid) != nil || hd.CheckAssigneeOnTeam(ctx, tx, wid, team, &uid) != nil {
+		return nil
+	}
+	_, err = applyPatch(ctx, tx, d, wid, tid, Actor{Type: "system", Meta: map[string]any{"via": "phone"}},
+		Patch{Assignee: Opt[uuid.UUID]{Set: true, Value: uid}}, applyOpts{Enqueue: true, Lenient: true})
+	return err
+}
+
 // closing reports a solved or closed status.
 func closing(status string) bool {
 	return status == domain.StatusSolved || status == domain.StatusClosed

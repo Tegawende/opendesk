@@ -15,7 +15,7 @@ function labels<K extends string>(keys: readonly K[], group: string): Record<K, 
   return out;
 }
 
-const triggers = ["ticket_created", "customer_replied", "agent_replied", "ticket_updated"] as const satisfies readonly AutomationTrigger[];
+const triggers = ["ticket_created", "customer_replied", "agent_replied", "ticket_updated", "call_ended"] as const satisfies readonly AutomationTrigger[];
 
 export const triggerLabel: Record<AutomationTrigger, string> = labels(triggers, "triggers");
 export const triggerShort: Record<AutomationTrigger, string> = labels(triggers, "triggersShort");
@@ -26,9 +26,19 @@ export const triggerTone: Record<AutomationTrigger, Tone> = {
   customer_replied: "teal",
   agent_replied: "indigo",
   ticket_updated: "amber",
+  call_ended: "green",
 };
 
-const plainFields = ["subject", "body", "from_email", "channel", "mailbox_id", "received_at", "assignee_id", "team_id", "brand_id", "widget_id", "priority", "severity", "status", "tag"] as const;
+const plainFields = ["subject", "body", "from_email", "channel", "mailbox_id", "received_at", "assignee_id", "team_id", "brand_id", "widget_id", "priority", "severity", "status", "tag",
+  "call_outcome", "call_direction", "call_time", "call_missed_reason", "call_line", "call_tag"] as const;
+
+/** The call of a call_ended automation (contracts/phone.md "Automations"): only that trigger offers them. */
+export const callFields: ReadonlySet<ConditionField> = new Set(["call_outcome", "call_direction", "call_time", "call_missed_reason", "call_line", "call_tag"]);
+export const callOutcomes = ["missed", "voicemail", "answered"] as const;
+export const callDirections = ["inbound", "outbound"] as const;
+export const callTimes = ["outside_business_hours", "business_hours"] as const;
+/** Aircall's missed_call_reason values. */
+export const callReasons = ["out_of_opening_hours", "no_available_agent", "agents_did_not_answer", "abandoned_in_ivr", "abandoned_in_classic", "short_abandoned"] as const;
 
 /** Fields that only make sense once the workspace has teams, or a second brand (contracts/teams.md). */
 export const teamFields: ReadonlySet<ConditionField> = new Set(["team_id"]);
@@ -65,6 +75,7 @@ export function opsFor(field: ConditionField): ConditionOp[] {
   if (field === "sentiment") return ["equals", "not_equals"]; // the API stores "eq" as "equals"
   if (field === "ai_decide") return ["gt", "lt"];
   if (field === "received_at") return ["equals", "not_equals", "contains", "any", "none"];
+  if (field === "call_line" || field === "call_tag") return ["equals", "not_equals", "contains", "not_contains"];
   return field === "subject" || field === "body" || field === "from_email" ? ["contains", "not_contains", "any", "none", "equals", "not_equals"] : ["equals", "not_equals"];
 }
 

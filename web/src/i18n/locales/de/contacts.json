@@ -142,5 +142,6 @@
     "automatic": "Kontakte werden automatisch aus E-Mail und Chat erstellt",
     "search": "um alles zu durchsuchen",
     "domains": "Unternehmen gruppieren Kontakte nach ihrer E-Mail-Domain"
-  }
+  },
+  "callWith": "Mit {{provider}} anrufen"
 }

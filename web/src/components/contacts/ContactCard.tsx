@@ -4,6 +4,7 @@ import { Mail, Pencil, Phone } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Avatar } from "@/components/ui/avatar";
 import { CompanyGlyph } from "./bits";
+import { PhoneNumber } from "./PhoneNumber";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -88,9 +89,7 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
         {c.phone && (
           <div className="flex items-center gap-2 text-fg-2">
             <Phone className="size-3.5 shrink-0 text-fg-4" />
-            <span className="mono truncate text-xs" data-ph-mask>
-              {c.phone}
-            </span>
+            <PhoneNumber phone={c.phone} className="mono truncate text-xs" />
           </div>
         )}
       </dl>

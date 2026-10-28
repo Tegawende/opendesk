@@ -79,7 +79,8 @@
     "newUpdate": "Neues Update",
     "myTeams": "Meine Teams",
     "newTicket": "Neues Ticket",
-    "mailCategories": "Posteingangskategorien"
+    "mailCategories": "Posteingangskategorien",
+    "phone": "Telefon"
   },
   "folders": {
     "unassigned": "Nicht zugewiesen",
@@ -137,7 +138,8 @@
     "aiClients": "KI-Clients",
     "webhooks": "Webhooks",
     "auditLog": "Audit-Log",
-    "mailCategories": "Posteingangskategorien"
+    "mailCategories": "Posteingangskategorien",
+    "phone": "Telefon"
   },
   "settingsPage": "Einstellungsseite",
   "command": {

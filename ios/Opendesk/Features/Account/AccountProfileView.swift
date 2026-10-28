@@ -27,8 +27,10 @@ struct AccountProfileView: View {
             guard let item else { return }
             upload(item)
         }
+        #if DEBUG
         .onAppear(perform: handleDemo)
         .onChange(of: env.router.demoAction) { _, _ in handleDemo() }
+        #endif
     }
 
     // MARK: Photo
