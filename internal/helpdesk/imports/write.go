@@ -855,7 +855,27 @@ func (w *writer) absorb(ctx context.Context, tx pgx.Tx, into uuid.UUID, t *sourc
 	if err != nil {
 		return err
 	}
+	// Take every participating ticket lock in the same id order as a manual merge.
+	// Eligibility is read in later statements, after any waiting writer has committed.
+	locks := append(slices.Clone(others), into)
+	if _, err := pgxCollect[uuid.UUID](tx.Query(ctx, `SELECT id FROM tickets
+		WHERE workspace_id = $1 AND id = ANY($2) ORDER BY id FOR UPDATE`, wid, locks)); err != nil {
+		return err
+	}
 	for _, o := range others {
+		var eligible bool
+		if err := tx.QueryRow(ctx, `SELECT
+			(SELECT count(*) = 2 FROM tickets WHERE workspace_id = $1 AND id = ANY($2)
+				AND deleted_at IS NULL AND merged_into_id IS NULL)
+			AND EXISTS (SELECT 1 FROM messages m JOIN import_records r ON r.workspace_id = m.workspace_id AND r.local_id = m.id
+				WHERE m.workspace_id = $1 AND m.ticket_id = $3 AND r.kind = 'message'
+				AND r.source = $4 AND r.account_key = $5 AND r.external_id = ANY($6))`,
+			wid, []uuid.UUID{o, into}, o, w.x.Source, w.x.AccountKey, ext).Scan(&eligible); err != nil {
+			return err
+		}
+		if !eligible {
+			continue
+		}
 		var other bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM messages m WHERE m.workspace_id = $1 AND m.ticket_id = $2
 			AND NOT EXISTS (SELECT 1 FROM import_records r WHERE r.workspace_id = $1 AND r.source = $3 AND r.account_key = $4
