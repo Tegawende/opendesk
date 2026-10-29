@@ -2,13 +2,16 @@ package core
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
 // Online time (contracts/api.md "Agents report"). The app's heartbeats, while a member's
@@ -26,8 +29,8 @@ const PresenceGap = 10 * time.Minute
 // recordPresence notes that the member is in the app now. The member row is share-locked,
 // so a change of availability waits for it and the stretch never outlives the status.
 func recordPresence(ctx context.Context, tx pgx.Tx, wid, uid uuid.UUID) error {
-	// Settings writes and presence writes share the workspace-before-member order.
-	if _, err := tx.Exec(ctx, `SELECT 1 FROM workspaces WHERE id=$1 FOR SHARE`, wid); err != nil {
+	// Serialize setting changes before reading eligibility or locking a member.
+	if err := lockPresence(ctx, tx, wid, false); err != nil {
 		return err
 	}
 	var availability, role string
@@ -62,6 +65,11 @@ func recordPresence(ctx context.Context, tx pgx.Tx, wid, uid uuid.UUID) error {
 // removePresence deletes the workspace's online time when it turns online time off: what
 // it may not record, it does not keep either.
 func removePresence(ctx context.Context, tx pgx.Tx, wid uuid.UUID) error {
+	// Member deletion can cascade into presence before publishing a workspace event.
+	// Retry the setting transaction rather than wait for those rows under its workspace lock.
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM agent_presence WHERE workspace_id=$1 FOR UPDATE NOWAIT`, wid); err != nil {
+		return err
+	}
 	_, err := tx.Exec(ctx, `DELETE FROM agent_presence WHERE workspace_id = $1`, wid)
 	return err
 }
@@ -74,4 +82,36 @@ func closePresence(ctx context.Context, tx pgx.Tx, wid, uid uuid.UUID, self bool
 		SET open = false, ended_at = CASE WHEN $3 AND ended_at >= now() - make_interval(secs => $4) THEN now() ELSE ended_at END
 		WHERE workspace_id = $1 AND user_id = $2 AND open`, wid, uid, self, PresenceGap.Seconds())
 	return err
+}
+
+// lockPresence is shared by recording/availability and exclusive for setting changes.
+// Its two-key namespace is separate from the single-key trigger and event locks.
+func lockPresence(ctx context.Context, tx pgx.Tx, wid uuid.UUID, exclusive bool) error {
+	sql := `SELECT pg_advisory_xact_lock_shared(hashtext($1::text), 1886545267)`
+	if exclusive {
+		sql = `SELECT pg_advisory_xact_lock(hashtext($1::text), 1886545267)`
+	}
+	_, err := tx.Exec(ctx, sql, wid)
+	return err
+}
+
+func (s *svc) presenceSettingsTx(ctx context.Context, write func(pgx.Tx) error) error {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		err := s.tx(ctx, write)
+		var pe *pgconn.PgError
+		if !errors.As(err, &pe) || pe.Code != "55P03" {
+			return err
+		}
+		if time.Now().After(deadline) {
+			return httpx.Conflict("Online time is being updated. Try again.")
+		}
+		timer := time.NewTimer(20 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }

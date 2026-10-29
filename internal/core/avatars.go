@@ -218,15 +218,9 @@ func (s *svc) registerAvatars(api huma.API) {
 			if mc.Set && mc.Value != nil && (*mc.Value < 1 || *mc.Value > 1000) {
 				return nil, httpx.Validation("max_open_tickets must be between 1 and 1000, or null.")
 			}
-			// Like heartbeats, marking the account seen commits before workspace/member locks.
-			if self && in.Body.Availability != nil {
-				if _, err := s.d.DB.Pool.Exec(ctx, `UPDATE users SET last_seen_at = now() WHERE id = $1`, uid); err != nil {
-					return nil, httpx.Wrap(err)
-				}
-			}
 			var m CoreMember
 			err = s.tx(ctx, func(tx pgx.Tx) error {
-				if err := lockMemberWorkspace(ctx, tx, p.WorkspaceID); err != nil {
+				if err := lockPresence(ctx, tx, p.WorkspaceID, false); err != nil {
 					return err
 				}
 				var role string
@@ -244,6 +238,11 @@ func (s *svc) registerAvatars(api huma.API) {
 					max_open_tickets = CASE WHEN $4 THEN $5 ELSE max_open_tickets END WHERE workspace_id = $1 AND user_id = $2`,
 					p.WorkspaceID, uid, in.Body.Availability, mc.Set, mc.Value); err != nil {
 					return err
+				}
+				if self && in.Body.Availability != nil {
+					if _, err := tx.Exec(ctx, `UPDATE users SET last_seen_at = now() WHERE id = $1`, uid); err != nil {
+						return err
+					}
 				}
 				// Online time: going online yourself starts it now; leaving online ends it.
 				if a := in.Body.Availability; a != nil {
@@ -298,9 +297,6 @@ func (s *svc) registerAvatars(api huma.API) {
 			}
 			var m CoreMember
 			err = s.tx(ctx, func(tx pgx.Tx) error {
-				if err := lockMemberWorkspace(ctx, tx, p.WorkspaceID); err != nil {
-					return err
-				}
 				var role string
 				if err := tx.QueryRow(ctx, `SELECT role FROM members WHERE workspace_id = $1 AND user_id = $2 FOR UPDATE`,
 					p.WorkspaceID, uid).Scan(&role); err != nil {

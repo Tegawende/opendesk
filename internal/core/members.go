@@ -163,9 +163,6 @@ func (s *svc) registerMembers(api huma.API) {
 			next := auth.Role(in.Body.Role)
 			var m CoreMember
 			err = s.tx(ctx, func(tx pgx.Tx) error {
-				if err := lockMemberWorkspace(ctx, tx, p.WorkspaceID); err != nil {
-					return err
-				}
 				var cur string
 				if err := tx.QueryRow(ctx, `SELECT role FROM members WHERE workspace_id = $1 AND user_id = $2 FOR UPDATE`, p.WorkspaceID, uid).Scan(&cur); err != nil {
 					if db.IsNotFound(err) {
@@ -254,9 +251,6 @@ func (s *svc) registerMembers(api huma.API) {
 			}
 			var m CoreMember
 			err = s.tx(ctx, func(tx pgx.Tx) error {
-				if err := lockMemberWorkspace(ctx, tx, p.WorkspaceID); err != nil {
-					return err
-				}
 				// Someone else's profile only as far as their role allows (canManage): an
 				// admin edits agents and viewers, never the owner or another admin.
 				if uid != p.UserID {
@@ -308,9 +302,6 @@ func (s *svc) registerMembers(api huma.API) {
 			}
 			var lapsedKeys []uuid.UUID
 			err = s.tx(ctx, func(tx pgx.Tx) error {
-				if err := lockMemberWorkspace(ctx, tx, p.WorkspaceID); err != nil {
-					return err
-				}
 				var cur string
 				if err := tx.QueryRow(ctx, `SELECT role FROM members WHERE workspace_id = $1 AND user_id = $2 FOR UPDATE`, p.WorkspaceID, uid).Scan(&cur); err != nil {
 					if db.IsNotFound(err) {
@@ -413,10 +404,4 @@ func observeTeams(ctx context.Context, tx pgx.Tx, p *auth.Principal, uid uuid.UU
 		}
 	}
 	return nil
-}
-
-// lockMemberWorkspace orders membership changes with settings, routing and event writes.
-func lockMemberWorkspace(ctx context.Context, tx pgx.Tx, wid uuid.UUID) error {
-	_, err := tx.Exec(ctx, `SELECT 1 FROM workspaces WHERE id=$1 FOR UPDATE`, wid)
-	return err
 }
