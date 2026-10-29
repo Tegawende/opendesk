@@ -57,6 +57,8 @@ export type WorkspaceSettings = {
   message_delete?: "off" | "own" | "all";
   /** The composer shows "Send and solve" (or close, when solved is labelled Closed) as a button next to Send, not only in its menu. Default false. */
   send_and_finish_button?: boolean;
+  /** Heartbeats count toward each member's online time, shown in the agents report. Default true; false records and shows none. */
+  agent_online_time?: boolean;
   /** Display-only names and colours for the fixed statuses and priorities. */
   status_labels?: Partial<Record<TicketStatus, DisplayOverride>>;
   priority_labels?: Partial<Record<Priority, DisplayOverride>>;
@@ -1561,11 +1563,14 @@ export type ReportsAgentRow = {
   first_response_p50_minutes: number | null;
   /** Median time from the last assignment to them until solved. */
   handle_p50_minutes: number | null;
-  /** Time in the app with availability online; null when `online_time` is none. */
+  /** Time in the app with availability online; null when `online_time` is none or off. */
   online_minutes: number | null;
 };
-/** Whose rows and online time the caller sees: everyone's (admins), their own row only, or every row without online time (API keys). */
-export type ReportsOnlineTime = "all" | "self" | "none";
+/**
+ * Whose rows and online time the caller sees: everyone's (admins), their own row only, or every row without online time (API keys).
+ * off: the workspace turned online time off (settings.agent_online_time), so no row has any; the rows are still the caller's.
+ */
+export type ReportsOnlineTime = "all" | "self" | "none" | "off";
 export type ReportsAgents = { data: ReportsAgentRow[]; online_time: ReportsOnlineTime };
 
 export type MailboxTestLeg = { ok: boolean; error: string; /** The server's reply, scrubbed. */ detail?: string };
