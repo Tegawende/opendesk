@@ -180,7 +180,7 @@ export type BrandBody = Partial<Pick<T.Brand, "name" | "slug" | "color" | "local
   help_center?: Partial<Pick<T.Brand["help_center"], "enabled" | "title">>;
 };
 export type WidgetBody = { brand_id?: string; name?: string; team_id?: string | null; bot_id?: string | null; settings?: Partial<T.WidgetSettings> };
-export type RoutingRuleBody = Partial<Pick<T.RoutingRule, "name" | "enabled" | "match" | "conditions" | "team_id">>;
+export type RoutingRuleBody = Partial<Pick<T.RoutingRule, "name" | "enabled" | "match" | "conditions" | "team_id" | "skill_ids">>;
 export type RoutingTestBody = {
   channel: "email" | "chat";
   to?: string;
@@ -379,6 +379,12 @@ export const api = {
     reorder: (ids: string[]) => http.post<T.Page<T.Bot>>("/v1/bots/reorder", { ids }),
     uploadImage: (id: string, file: File | Blob) => http.put<T.Bot>(`/v1/bots/${id}/image`, imageForm(file)),
     removeImage: (id: string) => http.del<T.Bot>(`/v1/bots/${id}/image`),
+  },
+  skills: {
+    list: () => http.get<T.Page<T.Skill>>("/v1/skills"),
+    create: (b: { name: string }) => http.create<T.Skill>("/v1/skills", b),
+    update: (id: string, b: Partial<Pick<T.Skill, "name" | "archived">>) => http.patch<T.Skill>(`/v1/skills/${id}`, b),
+    replaceMembers: (id: string, member_ids: string[]) => http.put<T.Skill>(`/v1/skills/${id}/members`, { member_ids }),
   },
   routingRules: {
     ...crud<T.RoutingRule, RoutingRuleBody>("/v1/routing-rules"),

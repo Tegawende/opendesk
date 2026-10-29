@@ -70,6 +70,7 @@ const simpleLists: Record<string, { key: () => readonly unknown[]; field: string
   brand: { key: () => qk.brands, field: "brand" },
   widget: { key: () => qk.widgets, field: "widget" },
   routing_rule: { key: () => qk.routingRules, field: "routing_rule" },
+  skill: { key: () => qk.skills, field: "skill" },
   webhook: { key: () => qk.webhooks, field: "webhook" },
   integration: { key: () => qk.integrations, field: "integration" },
   ticket_panel: { key: () => qk.ticketPanels, field: "panel" },

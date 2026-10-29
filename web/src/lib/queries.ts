@@ -139,6 +139,9 @@ export const qk = {
   get bots() {
     return w(["bots"] as const);
   },
+  get skills() {
+    return w(["skills"] as const);
+  },
   get routingRules() {
     return w(["routing-rules"] as const);
   },
@@ -422,6 +425,7 @@ export const q = {
   brands: () => list(qk.brands, () => api.brands.list({ limit: 100 })),
   widgets: () => list(qk.widgets, () => api.widgets.list({ limit: 100 })),
   bots: () => list(qk.bots, () => api.bots.list()),
+  skills: () => list(qk.skills, () => api.skills.list()),
   routingRules: () => list(qk.routingRules, () => api.routingRules.list({ limit: 200 })),
   apiKeys: () => list(qk.apiKeys, () => api.apiKeys.list({ limit: 100 })),
   webhooks: () => list(qk.webhooks, () => api.webhooks.list({ limit: 100 })),

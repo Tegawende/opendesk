@@ -224,6 +224,10 @@ export type RoutingField =
   | `contact.field.${string}`;
 export type RoutingOp = "equals" | "not_equals" | "contains" | "not_contains" | "starts_with" | "gt" | "lt";
 export type RoutingCondition = { field: RoutingField; op: RoutingOp; value: string; question?: string };
+/** A workspace expertise label. Archived skills remain on existing tickets. */
+export type Skill = { id: string; name: string; archived: boolean; member_ids: string[] };
+/** The resolved label a route fixed on a ticket at creation time. */
+export type TicketSkill = Pick<Skill, "id" | "name">;
 export type RoutingRule = {
   id: string;
   name: string;
@@ -233,6 +237,7 @@ export type RoutingRule = {
   match: "all" | "any";
   conditions: RoutingCondition[];
   team_id: string;
+  skill_ids: string[];
   created_at: string;
   updated_at: string;
 };
@@ -242,6 +247,7 @@ export type RoutingTest = {
   mailbox_id: string | null;
   routed: TicketRouted | null;
   steps: { rule_id: string; name: string; matched: boolean | "unknown" }[];
+  required_skills: TicketSkill[];
   assign_mode: AssignMode;
 };
 
@@ -400,6 +406,7 @@ export type Ticket = {
   page_url: string;
   routed: TicketRouted | null;
   tags: TagRef[];
+  required_skills: TicketSkill[];
   fields: FieldValues;
   sla: TicketSla | null;
   first_responded_at: string | null;
