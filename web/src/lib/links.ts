@@ -5,6 +5,8 @@
 
 import { useRouter, type NavigateOptions } from "@tanstack/react-router";
 import { useCallback } from "react";
+import { useSession } from "./session";
+import { withWorkspaceParam } from "./workspaceParam";
 
 type Click = { button: number; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; defaultPrevented: boolean };
 
@@ -30,5 +32,6 @@ export function openInNewTab(href: string): void {
 /** The href of a router destination, for a link that navigates with that destination in place. */
 export function useHref(): (to: NavigateOptions) => string {
   const router = useRouter();
-  return useCallback((to: NavigateOptions) => router.buildLocation(to).href, [router]);
+  const workspaceId = useSession((s) => s.workspaceId);
+  return useCallback((to: NavigateOptions) => withWorkspaceParam(router.buildLocation(to).href, workspaceId), [router, workspaceId]);
 }
