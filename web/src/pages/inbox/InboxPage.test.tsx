@@ -16,7 +16,7 @@ import InboxPage from "./InboxPage";
 // Exercise the real page, infinite query and router. The detail double exposes the
 // send/undo callback boundary without mounting the editor or sending customer mail.
 vi.mock("@/components/tickets/detail/TicketDetail", () => ({
-  default: ({ ticketId, onSent }: { ticketId: string; onSent?: (t: Ticket, status: TicketStatus, heldMs: number) => boolean }) => {
+  default: function Detail({ ticketId, onSent }: { ticketId: string; onSent?: (t: Ticket, status: TicketStatus, heldMs: number) => boolean }) {
     const unsent = useUnsent((s) => s[ticketId]);
     return <div>
       <span>{ticketId}</span>
