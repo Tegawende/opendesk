@@ -190,7 +190,7 @@ export function registerBots() {
     const b = find(ctx);
     if (b.is_default) throw new HttpError(409, "bot_is_default", "The default bot cannot be deleted. Make another bot the default first.");
     const usage = botOut(ctx.ws, b).usage;
-    const names = [...usage.widgets.map((w) => w.name), ...usage.mailboxes.map((m) => m.email)];
+    const names = [...usage.widgets.map((w) => w.name), ...usage.mailboxes.map((m) => m.email), ...(usage.api_keys ?? []).map((k) => `the ${k.name} API key`)];
     if (names.length) {
       const shown = names.slice(0, 3).join(", ");
       const more = names.length > 3 ? ` and ${names.length - 3} more` : "";
