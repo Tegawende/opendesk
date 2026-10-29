@@ -254,6 +254,14 @@ func (s *svc) registerMe(api huma.API) {
 // the others. It refuses (409 sole_owner) while they own a workspace with other members.
 // It returns the users to disconnect and the stored files to purge.
 func (s *svc) deleteAccount(ctx context.Context, tx pgx.Tx, p *auth.Principal, uid uuid.UUID) ([]uuid.UUID, []string, error) {
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM users WHERE id=$1 FOR UPDATE`, uid); err != nil {
+		return nil, nil, err
+	}
+	// Lock every affected workspace in a stable order before its memberships.
+	if _, err := tx.Exec(ctx, `SELECT w.id FROM workspaces w JOIN members m ON m.workspace_id=w.id
+		WHERE m.user_id=$1 ORDER BY w.id FOR UPDATE OF w`, uid); err != nil {
+		return nil, nil, err
+	}
 	var keys []string
 	var disconnect []uuid.UUID
 	rows, err := tx.Query(ctx, `SELECT m.workspace_id, m.role,

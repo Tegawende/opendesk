@@ -26,6 +26,10 @@ const PresenceGap = 10 * time.Minute
 // recordPresence notes that the member is in the app now. The member row is share-locked,
 // so a change of availability waits for it and the stretch never outlives the status.
 func recordPresence(ctx context.Context, tx pgx.Tx, wid, uid uuid.UUID) error {
+	// Settings writes and presence writes share the workspace-before-member order.
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM workspaces WHERE id=$1 FOR SHARE`, wid); err != nil {
+		return err
+	}
 	var availability, role string
 	var on bool
 	err := tx.QueryRow(ctx, `SELECT m.availability, m.role, `+domain.OnlineTimeSQL+`
