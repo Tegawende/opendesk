@@ -560,8 +560,7 @@ func (w *writer) writeTicketTx(ctx context.Context, tx pgx.Tx, t *source.Ticket,
 	var contactID *uuid.UUID
 	result := outcomeCreated
 	if prev != nil {
-		var cid *uuid.UUID
-		err := tx.QueryRow(ctx, `SELECT contact_id FROM tickets WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL`, wid, prev.localID).Scan(&cid)
+		err := tx.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL`, wid, prev.localID).Scan(&ticketID)
 		if db.IsNotFound(err) {
 			// Deleted here since: it stays deleted.
 			return outcomeUnchanged, w.remember(ctx, tx, "ticket", t.ID, prev.localID, false, updatedAt)
@@ -569,7 +568,7 @@ func (w *writer) writeTicketTx(ctx context.Context, tx pgx.Tx, t *source.Ticket,
 		if err != nil {
 			return 0, err
 		}
-		ticketID, contactID, result = prev.localID, cid, outcomeUpdated
+		ticketID, result = prev.localID, outcomeUpdated
 	} else {
 		if contactID, err = w.contact(ctx, tx, t.Requester); err != nil {
 			return 0, err
@@ -607,6 +606,12 @@ func (w *writer) writeTicketTx(ctx context.Context, tx pgx.Tx, t *source.Ticket,
 	// Messages the source moved here from a ticket an earlier run wrote bring that ticket along.
 	if err := w.absorb(ctx, tx, ticketID, t); err != nil {
 		return 0, err
+	}
+	if prev != nil {
+		// After the ordered merge locks, before messages need the current requester.
+		if contactID, err = w.follow(ctx, tx, ticketID, t); err != nil {
+			return 0, err
+		}
 	}
 	written, err := w.written(ctx, tx, msgs)
 	if err != nil {
@@ -819,6 +824,41 @@ func recipients(in []string) []string {
 		}
 	}
 	return out
+}
+
+// follow gives a ticket the source's requester when the source has changed it since an
+// earlier run (it moved the ticket to the customer who answered, say), as a sync brings the
+// source's status and assignee. A ticket the source leaves without a requester keeps its
+// contact, and so does one worked here: someone changed its contact here or wrote on it (a
+// message no import wrote, as undo counts it), or it is a live chat, which stays with its
+// visitor. It answers the ticket's contact.
+func (w *writer) follow(ctx context.Context, tx pgx.Tx, ticketID uuid.UUID, t *source.Ticket) (*uuid.UUID, error) {
+	wid := w.x.WorkspaceID
+	var current *uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT contact_id FROM tickets WHERE workspace_id = $1 AND id = $2
+		AND deleted_at IS NULL FOR UPDATE`, wid, ticketID).Scan(&current); err != nil {
+		return nil, err
+	}
+	if t.Requester == nil {
+		return current, nil
+	}
+	// A separate statement sees work committed by the writer we waited for.
+	var kept bool
+	if err := tx.QueryRow(ctx, `SELECT t.channel = 'chat'
+		OR EXISTS (SELECT 1 FROM activities a WHERE a.workspace_id = $1 AND a.ticket_id = $2 AND a.type = 'contact_changed')
+		OR EXISTS (SELECT 1 FROM messages m WHERE m.workspace_id = $1 AND m.ticket_id = $2 AND NOT EXISTS (SELECT 1 FROM import_records r
+			WHERE r.workspace_id = $1 AND r.kind = 'message' AND r.local_id = m.id))
+		FROM tickets t WHERE t.workspace_id = $1 AND t.id = $2`, wid, ticketID).Scan(&kept); err != nil || kept {
+		return current, err
+	}
+	id, err := w.contact(ctx, tx, t.Requester)
+	if err != nil || id == nil || (current != nil && *current == *id) {
+		return current, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE tickets SET contact_id = $3 WHERE workspace_id = $1 AND id = $2`, wid, ticketID, *id); err != nil {
+		return current, err
+	}
+	return id, nil
 }
 
 // written is which of msgs an earlier run wrote (their message records).
