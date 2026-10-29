@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { useNavigate, useParams, useRouter, useSearch } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CircleCheck, CircleDashed, Clock, Inbox, ShieldAlert, User, Users } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
@@ -132,6 +132,7 @@ export default function InboxPage() {
   const params = useParams({ strict: false }) as { folder?: string; viewId?: string; teamId?: string; ticketId?: string };
   const search = useSearch({ strict: false }) as InboxSearch;
   const navigate = useNavigate();
+  const router = useRouter();
   const qc = useQueryClient();
   const canEdit = atLeast(useRole(), "agent");
   const update = useUpdateTicket();
@@ -268,6 +269,19 @@ export default function InboxPage() {
   // Appearance). A reply still in its undo window that is undone brings its ticket back.
   const nextAfterSend = useNextTicketAfterSend();
   const leftHeld = useRef(new Set<string>());
+  const pendingAdvance = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const cancel = () => pendingAdvance.current?.abort();
+    const stopNavigation = router.subscribe("onBeforeNavigate", cancel);
+    const stopSession = useSession.subscribe((state, previous) => {
+      if (state.workspaceId !== previous.workspaceId || state.user?.id !== previous.user?.id) cancel();
+    });
+    return () => {
+      cancel();
+      stopNavigation();
+      stopSession();
+    };
+  }, [router, listKey]);
   const onSent = (t: Ticket, status: TicketStatus, heldMs: number): boolean => {
     if (!nextAfterSend || !me || !tickets.some((x) => x.id === t.id)) return false;
     const teams = qc.getQueryData<Team[]>(qk.teams);
@@ -276,8 +290,16 @@ export default function InboxPage() {
       leftHeld.current.add(t.id);
       setTimeout(() => leftHeld.current.delete(t.id), heldMs + 1000);
     }
+    pendingAdvance.current?.abort();
+    const advance = new AbortController();
+    pendingAdvance.current = advance;
     const before = tickets;
-    const land = (next: Ticket | undefined) => (next ? open(next) : close());
+    const land = (next: Ticket | undefined) => {
+      if (advance.signal.aborted) return;
+      pendingAdvance.current = null;
+      if (next) open(next);
+      else close();
+    };
     const next = nextInList(before, t.id);
     // The last ticket loaded: the next one may be on the list's next page.
     if (next || !list.hasNextPage) land(next);
@@ -287,7 +309,10 @@ export default function InboxPage() {
   useEffect(
     () =>
       useUnsent.subscribe((s) => {
-        for (const id of Object.keys(s)) if (leftHeld.current.delete(id)) go(id, true);
+        for (const id of Object.keys(s)) if (leftHeld.current.delete(id)) {
+          pendingAdvance.current?.abort();
+          go(id, true);
+        }
       }),
     [go],
   );
