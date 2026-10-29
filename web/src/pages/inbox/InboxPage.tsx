@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams, useRouter, useSearch } from "@tanstack/react-router";
+import { useNavigate, useParams, useRouter, useSearch, type NavigateOptions } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CircleCheck, CircleDashed, Clock, Inbox, ShieldAlert, User, Users } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
@@ -36,6 +36,7 @@ import { useDocumentTitle } from "@/app/RootLayout";
 import { TeamDot, useTeamsCtx } from "@/components/tickets/teams";
 import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { TeamTabs } from "./TeamTabs";
+import { useHref } from "@/lib/links";
 
 const TicketDetail = lazy(() => import("@/components/tickets/detail/TicketDetail"));
 
@@ -253,14 +254,21 @@ export default function InboxPage() {
   useEffect(() => () => realtime()?.setWatched([]), []);
 
   // The same list page serves folders, views and team inboxes.
-  const go = useCallback(
-    (ticketId: string | undefined, search: InboxSearch | true, replace?: boolean) => {
-      if (params.viewId) void navigate({ to: "/views/$viewId/{-$ticketId}", params: { viewId: params.viewId, ticketId }, search, replace });
-      else if (params.teamId) void navigate({ to: "/teams/$teamId/{-$ticketId}", params: { teamId: params.teamId, ticketId }, search, replace });
-      else void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: params.folder!, ticketId }, search, replace });
+  const dest = useCallback(
+    (ticketId: string | undefined, search: InboxSearch | true): NavigateOptions => {
+      if (params.viewId) return { to: "/views/$viewId/{-$ticketId}", params: { viewId: params.viewId, ticketId }, search };
+      if (params.teamId) return { to: "/teams/$teamId/{-$ticketId}", params: { teamId: params.teamId, ticketId }, search };
+      return { to: "/inbox/$folder/{-$ticketId}", params: { folder: params.folder!, ticketId }, search };
     },
-    [navigate, params.folder, params.viewId, params.teamId],
+    [params.folder, params.viewId, params.teamId],
   );
+  const go = useCallback(
+    (ticketId: string | undefined, search: InboxSearch | true, replace?: boolean) => void navigate({ ...dest(ticketId, search), replace }),
+    [navigate, dest],
+  );
+  // Each row's link: its ticket open in this list, with the list's filters and sort.
+  const toHref = useHref();
+  const rowHrefs = useMemo(() => new Map(tickets.map((t) => [t.id, toHref(dest(t.id, search))])), [tickets, toHref, dest, search]);
   const open = useCallback((t: Ticket | undefined) => t && go(t.id, true), [go]);
   const close = useCallback(() => go(undefined, true), [go]);
 
@@ -551,6 +559,7 @@ export default function InboxPage() {
                     compact={compact}
                     hideAssignee={fid === "mine"}
                     fresh={Date.parse(t.last_message_at) > shownAt}
+                    href={rowHrefs.get(t.id) ?? ""}
                     onOpen={open}
                     onToggle={toggle}
                     onHover={prefetch}
