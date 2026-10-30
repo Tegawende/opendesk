@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
+	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/displayname"
 	"github.com/useopendesk/opendesk/internal/events"
@@ -557,6 +558,13 @@ func LogActivity(ctx context.Context, tx pgx.Tx, wid, ticketID uuid.UUID, actorT
 	if data == nil {
 		data = map[string]any{}
 	}
+	// An API key's change remembers which key made it, so the timeline can name it.
+	var key *uuid.UUID
+	if p := auth.FromContext(ctx); actorType == "api" && p != nil && p.Kind == auth.KindAPIKey && p.APIKeyID != uuid.Nil {
+		id := p.APIKeyID
+		key = &id
+		data["api_key_id"] = id.String()
+	}
 	a := Activity{ID: ids.New(), TicketID: ticketID, Actor: ActivityActor{Type: actorType}, Type: typ, Data: data, CreatedAt: time.Now().UTC()}
 	if _, err := tx.Exec(ctx, `INSERT INTO activities (id, workspace_id, ticket_id, actor_type, actor_user_id, type, data, created_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, a.ID, wid, ticketID, actorType, actorUserID, typ, data, a.CreatedAt); err != nil {
@@ -568,6 +576,14 @@ func LogActivity(ctx context.Context, tx pgx.Tx, wid, ticketID uuid.UUID, actorT
 			return a, err
 		}
 		a.Actor.User = &u
+	}
+	if key != nil {
+		var name string
+		if err := tx.QueryRow(ctx, `SELECT name FROM api_keys WHERE id = $1`, *key).Scan(&name); err != nil && !db.IsNotFound(err) {
+			return a, err
+		} else if err == nil {
+			a.Actor.APIKey = &APIKeyRef{ID: *key, Name: name}
+		}
 	}
 	_, err := events.Publish(ctx, tx, events.Event{WorkspaceID: wid, Type: "activity.created", TicketID: &ticketID,
 		Data: map[string]any{"ticket_id": ticketID, "activity": a}})

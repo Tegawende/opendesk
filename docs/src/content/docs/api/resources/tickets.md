@@ -185,7 +185,7 @@ curl https://api.opendesk.sh/v1/tickets/1042/merge \
 
 ## Activities
 
-`GET /v1/tickets/{id}/activities` returns the timeline entries that are not messages:
+`GET /v1/tickets/{id}/activities` returns the timeline entries that are not messages. An entry an API key made (`actor.type` `"api"`) names the key in `actor.api_key` (`{ id, name }`), and its id in `data.api_key_id`; `api_key` is `null` for an entry recorded before keys were, and once the key is deleted.
 
 | Type | Data |
 | --- | --- |

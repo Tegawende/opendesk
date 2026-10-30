@@ -46,18 +46,24 @@ type FromAccountInput struct {
 	ReplyTo   string `json:"reply_to,omitempty" maxLength:"254" doc:"address (the address's own reply-to), mailbox (the ticket's reply address) or an email address; left out: the workspace's collab_ticket_reply_to"`
 }
 
-const activitySelect = `SELECT a.id, a.ticket_id, a.actor_type, a.type, a.data, a.created_at, u.id, u.name, u.email, u.avatar_url
-FROM activities a LEFT JOIN users u ON u.id = a.actor_user_id`
+const activitySelect = `SELECT a.id, a.ticket_id, a.actor_type, a.type, a.data, a.created_at, u.id, u.name, u.email, u.avatar_url,
+	k.id, k.name
+FROM activities a LEFT JOIN users u ON u.id = a.actor_user_id
+LEFT JOIN api_keys k ON a.actor_type = 'api' AND k.workspace_id = a.workspace_id AND k.id::text = a.data->>'api_key_id'`
 
 func scanActivity(row pgx.Row) (domain.Activity, error) {
 	var a domain.Activity
 	var uID *uuid.UUID
-	var uName, uEmail, uAvatar *string
-	if err := row.Scan(&a.ID, &a.TicketID, &a.Actor.Type, &a.Type, &a.Data, &a.CreatedAt, &uID, &uName, &uEmail, &uAvatar); err != nil {
+	var uName, uEmail, uAvatar, kName *string
+	var kID *uuid.UUID
+	if err := row.Scan(&a.ID, &a.TicketID, &a.Actor.Type, &a.Type, &a.Data, &a.CreatedAt, &uID, &uName, &uEmail, &uAvatar, &kID, &kName); err != nil {
 		return a, err
 	}
 	if uID != nil {
 		a.Actor.User = &domain.UserRef{ID: *uID, Name: str(uName), Email: str(uEmail), AvatarURL: domain.Avatar(str(uAvatar))}
+	}
+	if kID != nil {
+		a.Actor.APIKey = &domain.APIKeyRef{ID: *kID, Name: str(kName)}
 	}
 	if a.Data == nil {
 		a.Data = map[string]any{}

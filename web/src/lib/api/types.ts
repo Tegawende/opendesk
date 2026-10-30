@@ -573,7 +573,8 @@ export type CallData = {
 export type Activity = {
   id: string;
   ticket_id: string;
-  actor: { type: string; user: UserRef | null };
+  /** api_key: the key an API change was made with; null for others, older entries and deleted keys. */
+  actor: { type: string; user: UserRef | null; api_key?: { id: string; name: string } | null };
   type: ActivityType;
   data: Record<string, unknown>;
   created_at: string;

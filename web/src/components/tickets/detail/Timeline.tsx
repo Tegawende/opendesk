@@ -46,6 +46,8 @@ function actorName(a: Activity, t: TFunction<"inbox">, ollie: string) {
   // The AI acts on someone's behalf (actor.user), but the change is Ollie's.
   if (isAIActor(a.actor)) return ollie;
   if (a.actor.user) return a.actor.user.name;
+  // An API key's change (a routine, an integration) names the key it was made with.
+  if (a.actor.api_key?.name) return a.actor.api_key.name;
   if (typeof a.data.automation_name === "string") return t("activity.automationNamed", { name: a.data.automation_name });
   if (a.actor.type === "automation") return t("activity.automation");
   if (a.actor.type === "contact") return t("activity.customer");
