@@ -28,6 +28,8 @@ import { updateUser, useRole, useSession } from "@/lib/session";
 import { useTheme, type ThemePref } from "@/lib/theme";
 import { setConversationLayout, useConversationLayout } from "@/lib/conversationLayout";
 import { setConversationWidth, useConversationWidth, type ConversationWidth } from "@/lib/conversationWidth";
+import { setNextTicketAfterSend, useNextTicketAfterSend } from "@/lib/nextTicket";
+import { useDisplay } from "@/components/tickets/fields";
 
 export default function Profile() {
   const { t } = useTranslation("settings");
@@ -179,6 +181,7 @@ export default function Profile() {
         <AssigneeSetting />
         <ConversationLayout />
         <ConversationWidthSetting />
+        <NextTicketSetting />
       </Section>
 
       <Section title={t("profile.clock.title")} description={t("profile.clock.hint")}>
@@ -216,6 +219,19 @@ function Sounds() {
         </Row>
       ))}
     </div>
+  );
+}
+
+/** After a send that takes a ticket out of its list, the next one opens. On until switched off, per browser. */
+function NextTicketSetting() {
+  const { t } = useTranslation("settings");
+  const on = useNextTicketAfterSend();
+  // Named after the workspace's finish action: "Send and solve", "Send and close".
+  const label = t("profile.nextTicket.label", { action: useDisplay().finishWords.sendTip() });
+  return (
+    <Row label={label} description={t("profile.nextTicket.hint")}>
+      <Switch checked={on} onCheckedChange={setNextTicketAfterSend} aria-label={label} />
+    </Row>
   );
 }
 

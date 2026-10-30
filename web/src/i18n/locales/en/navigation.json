@@ -163,6 +163,7 @@
     "switchWorkspace": "Switch to {{workspace}}",
     "move": "to move",
     "open": "to open",
+    "newTab": "in a new tab",
     "workspaceSettings": "Workspace settings",
     "aiSettings": "AI settings",
     "aiOverview": "AI agent overview",

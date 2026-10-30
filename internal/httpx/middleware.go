@@ -305,7 +305,7 @@ func (l *Limiter) Take(key string, limit int, period time.Duration) (ok bool, re
 }
 
 // Per-credential request limits (ASVS 11.1.4): every request an API key, a person or a
-// widget visitor makes counts, and writes also count on their own.
+// widget visitor or customer makes counts, and writes also count on their own.
 const (
 	credentialRequestsPerMinute = 1200
 	credentialWritesPerMinute   = 600
@@ -336,6 +336,8 @@ func CredentialLimit(l *Limiter, clientIP func(*http.Request) string) func(http.
 				id = "key:" + p.APIKeyID.String()
 			case auth.KindVisitor:
 				id = "visitor:" + p.VisitorID.String()
+			case auth.KindCustomer:
+				id = "customer:" + p.SessionID.String()
 			default:
 				id = "user:" + p.UserID.String()
 			}
