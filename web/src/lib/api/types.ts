@@ -2520,6 +2520,8 @@ export type MailAccount = {
   unread: number;
   /** Shared accounts can track work separately from provider read state. */
   handling_enabled: boolean;
+  /** Reply answers everyone on the message by default, for everyone answering from this account. */
+  reply_all: boolean;
   /** IMAP accounts, can_manage only. */
   imap?: MailImapSettings;
   created_at: string;
@@ -2824,6 +2826,8 @@ export type MailThreadAccount = {
   display_name: string;
   color: string;
   provider: string;
+  /** The account's reply default; older servers omit it. */
+  reply_all?: boolean;
   signature_html: string;
   /** The addresses it sends from, its own first. */
   identities?: MailIdentity[];
