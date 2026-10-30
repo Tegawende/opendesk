@@ -369,7 +369,7 @@ func TestBotsBackfill(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A later migration refers to bots: it is undone first, as a rollback would.
-	keyBot, err := migrations.FS.ReadFile("000706_api_key_bot.down.sql")
+	keyBot, err := migrations.FS.ReadFile("000707_api_key_bot.down.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

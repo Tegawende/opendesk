@@ -94,7 +94,7 @@ interface BotLook {
 | GET | `/v1/bots/{id}` | members | → `Bot` |
 | POST | `/v1/bots` | admin (`settings:write`) | `{name, role?, language?, look?, personality?}` → `201 Bot` (missing keys take the defaults: the Ollie look, a friendly personality); goes last |
 | PATCH | `/v1/bots/{id}` | admin | `{name?, role?, language?, look?, personality?}` → `Bot`. `look` is replaced whole; `personality` keys are merged |
-| DELETE | `/v1/bots/{id}` | admin | → `204`. `409 bot_is_default` for the default bot; `409 bot_in_use` while a widget or mailbox answers as it, or a live API key speaks as it (the detail names them). A revoked or expired key keeps no bot |
+| DELETE | `/v1/bots/{id}` | admin | → `204`. `409 bot_is_default` for the default bot; `409 bot_in_use` while a widget or mailbox answers as it, a live API key speaks as it, or undeleted outbound replies still await email delivery or remain failed. Queued chat follow-ups count until their job ends or is cancelled. Delivered messages and chat replies without a queued follow-up do not prevent deletion. The detail names the use; pending or failed replies must finish sending or be deleted first. A revoked or expired key keeps no bot |
 | POST | `/v1/bots/{id}/duplicate` | admin | → `201 Bot`: "<name> copy" with the same look (an uploaded picture is not copied: `kind` falls back to `built`), personality, role and language, placed right after |
 | POST | `/v1/bots/{id}/default` | admin | → `Bot`: it becomes the default (widgets and mailboxes without a bot answer as it) |
 | POST | `/v1/bots/reorder` | admin | `{ids}`: every bot once → `{data: Bot[]}` |

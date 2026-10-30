@@ -24,6 +24,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
 	"github.com/useopendesk/opendesk/internal/images"
+	"github.com/useopendesk/opendesk/internal/jobs"
 )
 
 // The /v1/bots API and the public avatar endpoints (contracts/bots.md "Endpoints").
@@ -484,6 +485,19 @@ func (h *handler) remove(ctx context.Context, p *auth.Principal, id uuid.UUID) e
 			}
 			return httpx.E(http.StatusConflict, "bot_in_use", b.Name+" still answers on "+strings.Join(shown, ", ")+more+
 				". Pick another bot there first.")
+		}
+		var pending bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM messages m
+			WHERE m.workspace_id = $1 AND m.bot_id = $2 AND m.kind = 'reply' AND m.direction = 'outbound'
+			AND m.deleted_at IS NULL AND (m.delivery_status IN ('pending', 'failed')
+				OR m.delivery_status = 'none' AND EXISTS (SELECT 1 FROM river_job j
+					WHERE j.kind = $3 AND j.args->>'workspace_id' = $1::text AND j.args->>'message_id' = m.id::text
+					AND j.state IN ('available', 'pending', 'retryable', 'running', 'scheduled'))))`,
+			wid, id, (jobs.ChatFollowUpArgs{}).Kind()).Scan(&pending); err != nil {
+			return err
+		}
+		if pending {
+			return httpx.E(http.StatusConflict, "bot_in_use", b.Name+" has email replies waiting to send or marked as failed. Wait for sending to finish or delete those replies first.")
 		}
 		if oldPrefix, err = images.Forget(ctx, tx, b.avatar); err != nil {
 			return err
