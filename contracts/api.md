@@ -19,6 +19,8 @@ it exists, and this file is the contract the parts are built against.
 - Workspace-scoped routes need `OD-Workspace: <id>` (agents) or an API key. An `OD-Workspace` the caller is not a member of (or that no longer exists) is treated as absent: `400 workspace_required`, the same answer either way.
 - PATCH bodies: an omitted or `null` member is left unchanged. Clear an optional reference with `""`
   (mailbox `team_id`, KB article `collection_id`) unless the route documents `null` (ticket PATCH, contact `company_id`).
+  A relationship list is similarly preserved when omitted; routes that support clearing it document an
+  explicit empty array (for example, routing-rule `skill_ids`).
 - Idempotency: `Idempotency-Key` header (1..255 printable ASCII) on authenticated POST routes, kept 24h per
   workspace and principal. A retry with the same key, route and body replays the stored response with
   `Idempotent-Replayed: true`; a different body or route is `422 idempotency_key_reused`, a retry while the first
@@ -55,6 +57,7 @@ type WorkspaceSettings = { brand_color?: string; timezone?: string; help_center_
   undo_send_seconds?: 0 | 5 | 10 | 20 | 30 /* default 5: the app holds an agent's reply on an email (or any other non-chat) ticket this long before it POSTs it, with Undo (back into the composer) and Turn into internal note; nothing reaches the server until then, so the API itself never delays; 0 sends at once */;
   undo_send_chat_seconds?: 0 | 5 | 10 | 20 | 30 /* default 0: the same for replies on chat tickets, which go at once unless set */;
   send_and_finish_button?: boolean /* default false: the app's composer shows "Send and solve" (or "Send and close" when solved is labelled Closed; a custom finish label) as a segment before Send rather than only in its menu, in the same words as the ticket header's finish button; display only */;
+  agent_online_time?: boolean /* default true: heartbeats count toward each member's online time and the agents report shows it ("Agents report"); false records none, deletes the online time recorded so far (agent_presence), and the report answers online_time "off" */;
   status_labels?: Partial<Record<TicketStatus, DisplayOverride>>; priority_labels?: Partial<Record<Priority, DisplayOverride>> /* display only; the API values never change */ };
 type DisplayOverride = { label?: string /* 1..40, no < > */; color?: LabelColor; hidden?: boolean /* status_labels only: left out of the menus agents pick a status from (a ticket in it keeps it; the API, automations and snooze still set it); never open or solved; finishing always sets solved, including when its display label is Closed */ };
 type Membership = { workspace: Workspace; role: Role; suspended: boolean /* an instance admin suspended it: its routes answer 403 workspace_suspended (contracts/admin.md) */ };
@@ -78,10 +81,11 @@ type TicketStatus = "open" | "pending" | "on_hold" | "solved" | "closed";
 type Priority = "low" | "normal" | "high" | "urgent";
 type Severity = "sev1" | "sev2" | "sev3" | "sev4"; // business impact, sev1 the most severe; a ticket may have none
 type Channel = "email" | "chat" | "api" | "portal" | "phone"; // phone: a ticket a call opened (contracts/phone.md)
+type TicketSkill = { id: string; name: string }; // a workspace skill required by this ticket's matched route
 type Ticket = {
   id: string; number: number; alias: string | null /* optional, workspace-unique reference; not an authorization token */; subject: string; status: TicketStatus; priority: Priority; severity: Severity | null; channel: Channel;
   mailbox_id: string | null; contact: ContactRef | null; assignee: UserRef | null; team_id: string | null;
-  tags: TagRef[]; fields: FieldValues; sla: { policy_id: string; first_response_due_at: string | null; resolution_due_at: string | null; breached: boolean } | null;
+  tags: TagRef[]; required_skills: TicketSkill[] /* fixed when the ticket is created; automatic assignment requires every one, while manual assignment remains available */; fields: FieldValues; sla: { policy_id: string; first_response_due_at: string | null; resolution_due_at: string | null; breached: boolean } | null;
   first_responded_at: string | null; solved_at: string | null; snoozed_until: string | null;
   last_message_at: string; last_customer_message_at: string | null; waiting_since: string | null /* the customer's first unanswered public message; null once anyone (or the AI agent) replied */; unanswered_count: number /* the customer's public messages since the last outbound public reply; 0 once replied */; last_message_preview: string; message_count: number;
   spam: boolean; csat: { score: number; comment: string } | null; custom: Record<string, unknown>;
@@ -282,7 +286,7 @@ type NotificationPreferences = {
 | PATCH | `/v1/me` | `{name?, avatar_url?, time_format?}` → `User`. `time_format` is account-wide, across workspaces; another value is `422`. `avatar_url` is a picture to copy: an https URL fetched and processed server-side (asynchronously; `member.updated` follows), `""` removes the picture |
 | PUT | `/v1/me/avatar` | multipart `file` (PNG, JPEG, GIF or WebP, at most 5 MB) → `User` with `avatar_source: "upload"`. Audit `user.avatar_updated` |
 | DELETE | `/v1/me/avatar` | → `User` with no picture; the next Google or GitHub sign-in brings the provider picture back. Audit `user.avatar_removed` |
-| POST | `/v1/me/heartbeat` | → 204. Marks the user seen (auto-away). The web app sends it every 2 minutes while a tab is visible, the iPhone app every 5 while open. With `OD-Workspace` it also counts toward the member's online time there ("Agents report") |
+| POST | `/v1/me/heartbeat` | → 204. Marks the user seen (auto-away). The web app sends it every 2 minutes while a tab is visible, the iPhone app every 5 while open. With `OD-Workspace` it also counts toward the member's online time there ("Agents report"), unless the workspace's `settings.agent_online_time` is false |
 | POST | `/v1/me/password` | `{current_password, new_password}` → 204 |
 | GET | `/v1/me/sessions` / DELETE `/v1/me/sessions/{id}` | paginated `[{id, user_agent, ip, created_at, last_used_at, current, client: "web"\|"desktop"\|"ios"}]` / revoke (deletes the session's push devices) |
 | POST | `/v1/me/devices` | `{platform: "ios", token?, relay_token?, environment: "production"\|"sandbox", app_version, name}` → `Device`. Exactly one of `token` (hex APNs token, `push: "direct"`) or `relay_token` (`push: "relay"`); the other mode answers `422 push_unavailable`. Upserts by token and binds the device to the calling session, which keeps one device (a new token replaces the old). Audit `push_device.registered` |
@@ -573,7 +577,7 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 | GET | `/v1/wiki/search?q=&limit=` | viewer (`wiki:read`) → `{data: WikiSearchHit[]}` (default 20, at most 50) |
 | GET | `/v1/search?q=&brand_id=` | → `{tickets: Ticket[], contacts: Contact[], articles: KbArticle[], wiki_pages: WikiSearchHit[]}` (5 each; each kind only with its read scope). `brand_id` (optional) narrows the articles to what that brand shows: its own and those of every brand |
 | GET | `/v1/reports/overview?from=&to=&team_id=&brand_id=` | → `{created, solved, open_now, first_response_p50_minutes, resolution_p50_minutes, csat_avg, csat_count, sla_breached, by_day: [{date, created, solved}], by_channel: {...}, by_severity: Record<Severity \| "none", number> /* tickets created in the range */, by_agent: [{user, solved, first_response_p50_minutes}], by_team: [{team_id: string \| null, created, solved, open_now, first_response_p50_minutes}], by_brand: [{brand_id, created, solved, open_now, first_response_p50_minutes}]}`. `team_id` (a team, or `none`) and `brand_id` narrow every figure. Private teams' tickets are counted, with no subjects or contacts |
-| GET | `/v1/reports/agents?from=&to=&team_id=&brand_id=` | → `{data: ReportAgent[], online_time: "all" \| "self" \| "none"}`, one row per member, most solved first; a member who is not an admin gets their own row only ("Agents report"). Same range, roles, scope and filters as the overview |
+| GET | `/v1/reports/agents?from=&to=&team_id=&brand_id=` | → `{data: ReportAgent[], online_time: "all" \| "self" \| "none" \| "off"}`, one row per member, most solved first; a member who is not an admin gets their own row only ("Agents report"). Same range, roles, scope and filters as the overview |
 | POST | `/v1/attachments` | multipart `file` → `Attachment` (unattached, linked when sent). Only whoever uploaded it (that user, or that API key) may send it in `attachment_ids` (`422` otherwise) |
 | GET | `/v1/attachments/{id}` | → 302 to signed URL or streamed. For img tags, the links messages carry are signed (`?exp=&sig=`) and work for one to two hours. A file on a ticket the caller may not see is `404` (contracts/teams.md "Visibility"); an upload not sent yet is its uploader's alone (`404` for anyone else) |
 
@@ -593,7 +597,7 @@ type ReportAgent = { user: UserRef;
   replies_per_solved: number | null;          // their public replies on the tickets of `solved` since each was created (also before the range), divided by solved; null when 0
   first_response_p50_minutes: number | null;  // the overview's by_agent figure: their tickets created in the range
   handle_p50_minutes: number | null;          // over `solved`: from the last assigned activity to them before the solve (else the ticket's creation) to solved_at
-  online_minutes: number | null;              // time in the app with availability online, inside the range; null when online_time is none
+  online_minutes: number | null;              // time in the app with availability online, inside the range; null when online_time is none or off
 };
 ```
 
@@ -601,9 +605,13 @@ A member's work and online time are personal, and `online_time` says what the ca
 for owners and admins (and API keys with `settings:read`), every row with online time; `self` for
 other members, their own row alone, with its online time (an empty `data` when they have no row,
 as a viewer or off the filtered team); `none` for other API keys, every row without online time
-(`online_minutes` null), as `tickets:read` already reads every ticket. Online time comes from
+(`online_minutes` null), as `tickets:read` already reads every ticket. A workspace can turn online
+time off (`settings.agent_online_time: false`, for instance where recording it needs the team's
+consent or a works council's agreement): turning it off deletes the workspace's stretches, nothing
+is recorded while it is off, and the report answers `off` to everyone, with each caller's rows as
+above and `online_minutes` null. Online time comes from
 `agent_presence`: each `POST /v1/me/heartbeat` with `OD-Workspace` from an owner, admin or agent
-whose `availability` is `online` extends their open stretch, or closes it at its last heartbeat
+whose `availability` is `online`, in a workspace with online time on, extends their open stretch, or closes it at its last heartbeat
 and starts a new one when the last came more than 10 minutes ago.
 Setting your own availability to `online` starts a stretch; leaving `online` ends it (now when
 you change it yourself, at the last heartbeat when someone else does). Stretches are kept 400 days
@@ -831,6 +839,47 @@ Product updates a workspace publishes on its help centers (contracts/teams.md "S
 - A brand's entries go with it when it is deleted (`changelog_entry.deleted` each); null is every brand.
 - The slug is taken from the title unless given; a slug in use is `409 conflict`. Entries and articles have
   separate slugs.
+
+### Customer portal authentication (owner: backend-helpdesk)
+
+The portal uses a separate customer identity for existing contacts; see [Customer portal](customer-portal.md).
+The public routes below are rate limited and use Turnstile. They set `Cache-Control: no-store`.
+
+| method | path | notes |
+| --- | --- | --- |
+| GET | `/v1/public/help/{workspace_slug}/portal/config` | Public brand config: `{title, logo_url, color, locale, locale_fixed, help_url}`. `help_url` is the active verified help-center host, or the configured default URL |
+| POST | `/v1/public/help/{workspace_slug}/portal/auth/login` | `{email, password, turnstile_token}` → `{access_token, expires_at}` and sets the customer refresh cookie. Unknown contacts and invalid passwords receive the same invalid-credentials response. A legacy password that no longer meets policy returns `{change_password: true}` with no token or session |
+| POST | `/v1/public/help/{workspace_slug}/portal/auth/forgot` | `{email, turnstile_token}` → `204`. The response does not reveal whether an eligible contact exists; email lookup and delivery are queued |
+| POST | `/v1/public/help/{workspace_slug}/portal/auth/reset` | `{token, password, turnstile_token}` → `204`. The one-time link is scoped to its workspace, contact and email snapshot; success consumes it and revokes the contact's other customer sessions |
+| POST | `/v1/customer/portal/auth/refresh` | `{workspace_slug}` plus the customer refresh cookie → `{access_token, expires_at}` and rotates the cookie. The slug must resolve to the session's enabled help center |
+| POST | `/v1/customer/portal/auth/logout` | Customer access token → `204`, revokes that session and clears its refresh cookie |
+
+HTTPS uses the host-only HttpOnly `__Host-od_customer_refresh` cookie with SameSite=Lax and Path `/`; HTTP development uses `od_customer_refresh`. The cookie is accepted only without Origin or from the configured app origin, and is never returned in a body.
+
+### Customer portal tickets (owner: backend-helpdesk)
+
+These routes require a customer access token. The live customer session supplies both workspace
+and contact identity. Member tokens, API keys and widget visitor tokens do not grant access.
+A contact can read and reply to their own tickets, including tickets assigned to private teams.
+Tickets belonging to another contact or workspace, spam tickets and deleted tickets return `404`.
+Responses are `Cache-Control: no-store`.
+
+```ts
+type CustomerTicket = { id: string; number: number; subject: string; status: TicketStatus; created_at: string; updated_at: string };
+type CustomerMessage = { id: string; direction: "inbound" | "outbound"; body_text: string; created_at: string };
+```
+
+| method | path | notes |
+| --- | --- | --- |
+| GET | `/v1/customer/portal/tickets` | `{data: CustomerTicket[], next_cursor: string \| null}`; `limit` defaults to 50, range 1..100. Ordered by `updated_at DESC, id DESC`; pass `next_cursor` as `cursor` for the next page |
+| GET | `/v1/customer/portal/tickets/{id}` | `CustomerTicket` |
+| GET | `/v1/customer/portal/tickets/{id}/messages` | `{data: CustomerMessage[], next_cursor: string \| null}`; same bounded `limit` and `cursor`, ordered chronologically by `created_at ASC, id ASC`. Only public replies, with text only; notes, side threads, removed/purged/retracted messages and failed sender-check messages are omitted |
+| POST | `/v1/customer/portal/tickets/{id}/messages` | `{body: string}` (1..10000 characters; whitespace-only refused) → `201 CustomerMessage`. Plain text is trimmed and safely converted to HTML for storage. Written as an inbound contact reply through the normal message transaction, ticket events and `customer_replied` trigger. Pending, on-hold and solved tickets reopen; closed tickets stay closed |
+
+The customer shapes expose no internal ticket fields, agent identities, HTML, email headers,
+attachments or internal activities. Replies accept only plain text; ticket creation, uploads, CCs,
+status changes and side threads are outside these routes. Cursors are opaque, bounded to 512
+characters and validated; malformed or incomplete cursors return `400`.
 
 ### Public, no auth (owner: backend-helpdesk)
 | method | path | notes |

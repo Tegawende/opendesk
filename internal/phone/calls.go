@@ -525,7 +525,7 @@ func (s *Service) place(ctx context.Context, tx pgx.Tx, c PhoneConnection, call 
 		return err
 	}
 	t, err := domain.CreateTicket(ctx, tx, domain.NewTicket{WorkspaceID: wid, Subject: subject, Channel: domain.ChannelPhone,
-		ContactID: call.ContactID, TeamID: res.TeamID, Routed: res.Routed, BrandID: &brand})
+		ContactID: call.ContactID, TeamID: res.TeamID, Routed: res.Routed, BrandID: &brand, RequiredSkillIDs: res.RequiredSkillIDs})
 	if err != nil {
 		return err
 	}

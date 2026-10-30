@@ -31,7 +31,7 @@ import { copyText } from "@/components/ui/copy-button";
 import { ChannelIcon, channelLabel, PriorityPill, SeverityChip, severityLabel, severityOrder, SlaPill, slaState, StatusPill, TicketNumber } from "../bits";
 import { useOllieNote } from "../ollie";
 import { aiDecisions } from "@/lib/decisions";
-import type { Message, Thread, Ticket } from "@/lib/api/types";
+import type { Message, Thread, Ticket, TicketStatus } from "@/lib/api/types";
 import { Morph } from "@/components/motion";
 import { CheckBurst } from "../CheckBurst";
 import { intent } from "../motion";
@@ -97,12 +97,15 @@ export default function TicketDetail({
   onPrev,
   onNext,
   position,
+  onSent,
 }: {
   ticketId: string;
   onClose: () => void;
   onPrev?: () => void;
   onNext?: () => void;
   position?: { index: number; total: number };
+  /** A send that sets a status (Composer onSent); true when the page moves on from the ticket. */
+  onSent?: (t: Ticket, status: TicketStatus, heldMs: number) => boolean;
 }) {
   // The URL may carry the uuid or the ticket number; messages need the uuid.
   const ticket = useQuery(q.ticket(ticketId));
@@ -222,6 +225,8 @@ export default function TicketDetail({
     setBurst((n) => n + 1);
     if (onNext) setTimeout(onNext, reduced ? 0 : 520);
   };
+  // A finish the server will refuse for an empty required field: the reply fails here, in view.
+  const refused = (status: TicketStatus) => !!t && (status === "solved" || status === "closed") && missingForSolve(ticketFields, t).length > 0;
   const spam = () => {
     if (!t || !canEdit) return;
     const was = t.spam;
@@ -456,7 +461,7 @@ export default function TicketDetail({
             threads={threads.data}
             threadActions={threadActions}
           />
-          {t && canEdit && <Composer ref={composer} ticket={t} />}
+          {t && canEdit && <Composer ref={composer} ticket={t} onSent={onSent && ((status, heldMs) => !refused(status) && onSent(t, status, heldMs))} />}
         </div>
         {panel && (
           <ResizeHandle

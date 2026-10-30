@@ -70,6 +70,7 @@ const simpleLists: Record<string, { key: () => readonly unknown[]; field: string
   brand: { key: () => qk.brands, field: "brand" },
   widget: { key: () => qk.widgets, field: "widget" },
   routing_rule: { key: () => qk.routingRules, field: "routing_rule" },
+  skill: { key: () => qk.skills, field: "skill" },
   webhook: { key: () => qk.webhooks, field: "webhook" },
   integration: { key: () => qk.integrations, field: "integration" },
   ticket_panel: { key: () => qk.ticketPanels, field: "panel" },
@@ -497,6 +498,12 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
   // refetches so an admin's copy keeps it.
   if (resource === "mailbox") {
     void qc.invalidateQueries({ queryKey: qk.mailboxes });
+    return;
+  }
+
+  // What Ollie may do in support channels is one record per workspace.
+  if (resource === "support_channel_ollie") {
+    if (d.support_channel_ollie) qc.setQueryData(qk.supportChannelOllie, d.support_channel_ollie);
     return;
   }
 
