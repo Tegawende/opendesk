@@ -70,8 +70,8 @@ view to its owner.
 
 | type                     | visibility | topics (besides workspace)            | data |
 | ------------------------ | ---------- | ------------------------------------- | ---- |
-| `ticket.created`         | agents     | —                                     | `{ "ticket": Ticket }` |
-| `ticket.updated`         | agents     | `user:<assignee>` when assignee changes | `{ "ticket": Ticket, "changes": ["status","assignee_id","tags","fields",...] }` |
+| `ticket.created`         | agents     | —                                     | `{ "ticket": Ticket }` (including the route's fixed `required_skills`) |
+| `ticket.updated`         | agents     | `user:<assignee>` when assignee changes | `{ "ticket": Ticket, "changes": ["status","assignee_id","tags","fields",...] }` (the ticket's fixed `required_skills` remain in its Ticket shape) |
 | `ticket.deleted`         | agents     | —                                     | `{ "ticket_id": "..." }` |
 | `message.created`        | agents (note) / public (reply on chat ticket) / agents (reply on email ticket) | `contact:<wid>:<cid>:<brand_id>` when public | `{ "ticket_id": "...", "message": Message }` |
 | `message.updated`        | agents (public on chat tickets, never for a marker) | `contact:<wid>:<cid>:<brand_id>` when public | `{ "ticket_id": "...", "message": Message }` (delivery status; an internal note's edit; a message deleted, restored or purged; a note sent as a reply; the widget agent's action card status and visitor rating, `contracts/agent.md`). A deleted message, or a note sent as a reply, is always its marker (`domain.Tombstone`: no text, files or action card) and goes to the team alone, whoever publishes it (delivery, bounce, action card) |
@@ -104,12 +104,14 @@ view to its owner.
 | `webhook.*` | agents | admins (`private`, `user:<uid>`) | `{ "webhook": Webhook }` / `{ "webhook_id" }` |
 | `brand.created` / `brand.updated` / `brand.deleted` | agents | — | `{ "brand": Brand }` / `{ "brand_id" }` |
 | `routing_rule.created` / `routing_rule.updated` / `routing_rule.deleted` | agents | — | `{ "routing_rule": RoutingRule }` / `{ "routing_rule_id" }` |
+| `skill.created` / `skill.updated` / `skill.members_updated` | agents, owner/admin recipients only | — | `{ "skill": { "id", "name", "archived", "member_ids" } }`; updated includes archive/restore, members_updated replaces the full set |
 | `widget.created` / `widget.updated` / `widget.deleted` | agents | — | `{ "widget": Widget }` / `{ "widget_id" }` |
 | `email_template.updated` | agents | — | `{ "brand_id", "kind": "layout" \| "csat" }` (contracts/templates.md): a brand's email layout or CSAT email was saved or reset; refetch it |
 | `bot.created` / `bot.updated` / `bot.deleted` | agents | — | `{ "bot": Bot }` / `{ "bot_id" }` (contracts/bots.md); a new default, a reorder or a new picture is `bot.updated` of each bot it changed |
 | `integration.created` / `integration.updated` / `integration.deleted` | agents | — | `{ "integration": Integration }` / `{ "integration_id" }` (`contracts/integrations.md`; never credentials) |
 | `support_channel_connection.created` / `support_channel_connection.updated` / `support_channel_connection.deleted` | agents | — | `{ "support_channel_connection": Connection }` / `{ "support_channel_connection": Connection }` / `{ "support_channel_connection_id" }` (`contracts/support-channels.md`; never credentials). Updated on rotated credentials and on a new health state. Deleting one removes its destinations |
-| `support_channel_destination.created` / `support_channel_destination.deleted` | agents | — | `{ "support_channel_destination": Destination }` / `{ "support_channel_destination_id" }` |
+| `support_channel_destination.created` / `support_channel_destination.updated` / `support_channel_destination.deleted` | agents | — | `{ "support_channel_destination": Destination }` / `{ "support_channel_destination": Destination }` / `{ "support_channel_destination_id" }`. Updated when its Ollie settings change |
+| `support_channel_ollie.updated` | agents | — | `{ "support_channel_ollie": { "actions": string[] } }`: what Ollie may change in support channel threads (`contracts/support-channels.md` "Ollie") |
 | `phone_connection.created` / `phone_connection.updated` / `phone_connection.deleted` | agents | admins (`private`, `user:<uid>`) | `{ "phone_connection": PhoneConnection }` / `{ "phone_connection_id" }` (`contracts/phone.md`; never credentials). Updated on settings, rotated credentials and every new health state |
 | `ticket_link.created` / `ticket_link.deleted` | agents | — | `{ "ticket_id", "link": Link }` / `{ "ticket_id", "link_id" }` |
 | `ticket_panel.created` / `ticket_panel.updated` / `ticket_panel.deleted` | agents | — | `{ "panel": TicketPanel }` / `{ "panel_id" }` (`contracts/integrations.md` "Ticket panels"; never a token, a secret or a URL's path). Updated too when a lookup finds the credentials refused, or working again |

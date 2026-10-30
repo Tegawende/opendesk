@@ -163,6 +163,7 @@
     "switchWorkspace": "Zu {{workspace}} wechseln",
     "move": "zum Bewegen",
     "open": "zum Öffnen",
+    "newTab": "in neuem Tab",
     "workspaceSettings": "Workspace-Einstellungen",
     "aiSettings": "KI-Einstellungen",
     "aiOverview": "KI-Agent: Übersicht",
