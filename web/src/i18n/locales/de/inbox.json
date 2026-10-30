@@ -354,6 +354,14 @@
     "details": "Details",
     "ticket": "Ticket",
     "copyLink": "Link kopieren",
+    "reference": "Referenz",
+    "referenceHint": "Füge eine optionale Referenz hinzu, mit der Kunden oder Teammitglieder dieses Ticket finden. Verwende 2 bis 40 Buchstaben, Ziffern oder Bindestriche, darunter mindestens einen Buchstaben. UUID-Formate sind für Ticket-IDs reserviert.",
+    "referencePlaceholder": "BESTELLUNG-42",
+    "noReference": "Keine",
+    "copyReference": "Referenz kopieren",
+    "editReference": "Referenz bearbeiten",
+    "addReference": "Referenz hinzufügen",
+    "saveReference": "Referenz speichern",
     "channel": "Kanal",
     "mailbox": "Postfach",
     "created": "Erstellt",
@@ -365,7 +373,8 @@
     "receivedAt": "Empfangen an",
     "aliasOf": "Ein Alias von {{address}}",
     "startedOn": "Gestartet auf",
-    "importedFrom": "Importiert aus"
+    "importedFrom": "Importiert aus",
+    "requiredSkills": "Erforderliche Fähigkeiten"
   },
   "sla": {
     "title": "SLA",
@@ -418,6 +427,7 @@
     "slaFirst": "Das Ziel für die erste Antwort wurde verfehlt",
     "slaResolution": "Das Lösungsziel wurde verfehlt",
     "subject": "<b>{{who}}</b> hat den Betreff geändert",
+    "alias": "<b>{{who}}</b> hat die Ticketreferenz geändert",
     "snoozed": "<b>{{who}}</b> hat dies zurückgestellt",
     "snoozedUntil": "<b>{{who}}</b> hat dies bis <m>{{when}}</m> zurückgestellt",
     "unsnoozed": "Zurückstellung beendet",
@@ -869,6 +879,35 @@
     "notSent": "Eine Antwort, die du senden wolltest, wurde nicht gesendet. Öffne ihr Ticket, um sie erneut zu senden.",
     "tooLongToHold": "Sofort gesendet: diese Antwort ist zu lang, um sie fürs Rückgängigmachen zurückzuhalten.",
     "noteNotSaved": "Die Notiz konnte nicht aktualisiert werden"
+  },
+  "call": {
+    "withheld": "einer unterdrückten Nummer",
+    "inProgress": "Läuft",
+    "ringing": "Klingelt",
+    "voicemail": "Mailbox",
+    "missed": "Verpasst",
+    "noAnswer": "Keine Antwort",
+    "answered": "Angenommen",
+    "outboundBy": "{{who}} hat {{caller}} angerufen",
+    "outbound": "Anruf bei {{caller}}",
+    "inboundAnsweredBy": "{{caller}} hat angerufen, {{who}} hat angenommen",
+    "inbound": "Anruf von {{caller}}",
+    "outsideHours": "Außerhalb der Geschäftszeiten",
+    "line": "Leitung {{line}}",
+    "playRecording": "Aufnahme abspielen",
+    "playVoicemail": "Mailbox-Nachricht abspielen",
+    "openIn": "In {{provider}} öffnen",
+    "summary": "Zusammenfassung",
+    "showTranscript": "Transkript zeigen",
+    "hideTranscript": "Transkript ausblenden",
+    "reason": {
+      "out_of_opening_hours": "Außerhalb der Öffnungszeiten",
+      "short_abandoned": "Schnell aufgelegt",
+      "abandoned_in_ivr": "Im Menü aufgelegt",
+      "abandoned_in_classic": "In der Warteschleife aufgelegt",
+      "no_available_agent": "Niemand verfügbar",
+      "agents_did_not_answer": "Niemand hat abgenommen"
+    }
   },
   "panels": {
     "refresh": "{{name}} aktualisieren",

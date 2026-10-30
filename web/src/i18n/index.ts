@@ -137,7 +137,7 @@ export function inSentence(label: string): string {
 
 /** Public routes, which load only the namespaces they show. */
 export function isPublicPath(pathname: string): boolean {
-  return /^\/(help|csat)(\/|$)/.test(pathname);
+  return /^\/(help|csat|portal)(\/|$)/.test(pathname);
 }
 
 // The language a customer-facing page chose, so Intl formatting follows the
@@ -173,6 +173,14 @@ export function resetLocale() {
 }
 
 resetLocale();
+
+/**
+ * The language the app shows, as a lowercase base tag ("en", "fr", "de"): what a server that
+ * writes text for this reader is told (a ticket panel's URL, contracts/integrations.md).
+ */
+export function uiLanguage(): string {
+  return (i18n.resolvedLanguage || i18n.language || "en").split("-")[0].toLowerCase();
+}
 
 /** The language a customer-facing page chose, or null in the agent app. */
 export function pageLanguage(): string | null {

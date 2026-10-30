@@ -1,6 +1,7 @@
 // The in-memory database behind mock mode.
 
 import type {
+  PhoneConnection,
   Activity,
   AIFeature,
   AISettings,
@@ -42,6 +43,7 @@ import type {
   AssignmentRule,
   Brand,
   RoutingRule,
+  Skill,
   Widget,
   Availability,
   BusinessHours,
@@ -103,6 +105,8 @@ export type WsData = {
   threads: Thread[];
   originals: Record<string, string>;
   activities: Activity[];
+  /** Phone connections (contracts/phone.md; handlers/phone.ts). */
+  phone: PhoneConnection[];
   tags: Tag[];
   tagGroups: TagGroup[];
   customFields: CustomField[];
@@ -144,6 +148,7 @@ export type WsData = {
   /** Each widget's identity verification secret, never answered after create or rotate. */
   widgetSecrets: Record<string, string>;
   routingRules: RoutingRule[];
+  skills: Skill[];
   /** The AI agent's bots (contracts/bots.md; mock/bots.ts makes the default on first use). */
   bots?: Bot[];
   /** Notification channels each member set here, by user id then type; unset ones follow the defaults (handlers/notificationPrefs.ts). */

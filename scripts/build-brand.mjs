@@ -65,7 +65,7 @@ const files = {
   // keeps clear space around it. site/scripts/og.mjs renders them to PNG.
   "social/avatar.svg": svg(1024, 1024, `<rect width="1024" height="1024" fill="${INK}"/>` + mark(256, 256, 512, PAPER)),
   "social/avatar-light.svg": svg(1024, 1024, `<rect width="1024" height="1024" fill="${PAPER}"/>` + mark(256, 256, 512, INK)),
-  "icons/app-icon.svg": tile(512, INK, PAPER),
+  "icons/app-icon.svg": tile(512, PAPER, INK),
   "icons/app-icon-light.svg": tile(512, PAPER, INK),
   // Adapts to the browser tab theme.
   "icons/favicon.svg": svg(64, 64,
@@ -99,3 +99,16 @@ for (const [from, to, published] of pngs) {
   copyFileSync(join(root, to), join(site, published));
   console.log("wrote", to, "and site/public/brand/" + published);
 }
+
+// Installed app icons keep the paper tile in every appearance.
+for (const [name, size] of [["icon-192.png", 192], ["icon-512.png", 512], ["apple-touch-icon.png", 180]]) {
+  const out = join(root, "icons", name);
+  await sharp(Buffer.from(files["icons/app-icon.svg"])).resize(size, size).png({ compressionLevel: 9 }).toFile(out);
+  for (const app of ["web", "site"]) copyFileSync(out, join(repo, app, "public", name));
+  if (name === "apple-touch-icon.png") copyFileSync(out, join(repo, "docs", "public", name));
+}
+
+await sharp(Buffer.from(svg(1024, 1024,
+  `<rect width="1024" height="1024" fill="${PAPER}"/>` + mark(225.28, 225.28, 573.44, INK))))
+  .png({ compressionLevel: 9 })
+  .toFile(join(repo, "ios", "Opendesk", "Assets.xcassets", "AppIcon.appiconset", "AppIcon-Light.png"));

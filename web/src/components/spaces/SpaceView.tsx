@@ -15,7 +15,7 @@ import { EmptyState } from "@/components/ui/empty";
 import type { SidebarSectionId, Space, SpaceItem, SpaceSection } from "@/lib/api/types";
 import { hid, livePins } from "@/lib/collab/sidebarPrefs";
 import { cn } from "@/lib/cn";
-import { orderViews } from "@/lib/viewSections";
+import { findSection, orderViews } from "@/lib/viewSections";
 import { folders as ticketFolders } from "@/lib/folders";
 import { useSession } from "@/lib/session";
 import { canSeeTeam, useOverview, useWorkspacesData, type WorkspaceData } from "@/lib/spaces/hooks";
@@ -66,8 +66,11 @@ function RemoteSection({ d, id, first, rail, mark, ctx }: { d: WorkspaceData; id
   let list: (RowModel | null)[] = [];
   switch (id) {
     case "favorites":
-      // Without Collab its mail favorites build no row (buildRow), the ticket ones do.
-      list = livePins(p, (pin) => row(pin.kind, pin.id, ["favorites"])).map((x) => x.target);
+      // Without Collab its mail favorites build no row (buildRow), the ticket ones do; a pinned
+      // view section, its views (lib/viewSections), each once.
+      list = livePins(p, (pin) =>
+        pin.kind === "view_section" ? findSection(d.views ?? [], pin.id)?.views.map((v) => row("view", v.id, ["favorites"])) : [row(pin.kind, pin.id, ["favorites"])],
+      ).flatMap((x) => x.target);
       break;
     case "inbox":
       list = ticketFolders.filter((f) => !hidden.has(hid.ticketFolder(f.id))).map((f) => row("ticket_folder", f.id));
@@ -97,7 +100,7 @@ function RemoteSection({ d, id, first, rail, mark, ctx }: { d: WorkspaceData; id
       list = SPACE_PAGES.map((pg) => row("page", pg));
       break;
   }
-  const models = list.filter((m): m is RowModel => !!m);
+  const models = list.filter((m, i): m is RowModel => !!m && list.findIndex((x) => x?.key === m.key) === i);
   if (!models.length) return null;
   return (
     <SectionMarkCtx.Provider value={mark}>

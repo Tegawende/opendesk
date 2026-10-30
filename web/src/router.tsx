@@ -1,3 +1,4 @@
+import { captureResetToken } from "@/lib/customerPortal/resetToken";
 // The route table. Every page is a lazy chunk preloaded on link intent, carries
 // its tab title in staticData.title, and prefetches its first queries in its
 // loader through the same queryOptions its components read.
@@ -98,6 +99,21 @@ const csatLegacyRoute = createRoute({
   component: page(() => import("./pages/public/Csat")),
   staticData: { title: "rateYourConversation" },
 });
+
+// Capture before createRouter subscribes to browser history.
+const initialPortalResetPath = window.location.pathname;
+const initialPortalResetToken = captureResetToken();
+
+// Customer portal routes are public and never enter the agent app layout.
+const portalPage = page(() => import("./pages/public/CustomerPortal"));
+const portalRoute = createRoute({ getParentRoute: () => rootRoute, path: "/portal/$slug", component: portalPage });
+const portalForgotRoute = createRoute({ getParentRoute: () => rootRoute, path: "/portal/$slug/forgot", component: portalPage });
+const portalResetRoute = createRoute({
+  getParentRoute: () => rootRoute, path: "/portal/$slug/reset",
+  beforeLoad: ({ location }) => ({ portalResetToken: location.pathname === initialPortalResetPath ? initialPortalResetToken : "" }),
+  component: portalPage,
+});
+const portalTicketRoute = createRoute({ getParentRoute: () => rootRoute, path: "/portal/$slug/tickets/$ticketId", component: portalPage });
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
 
@@ -692,6 +708,9 @@ const sSupportChannels = settingsPage("/support-channels", "supportChannels", ()
     qc.ensureQueryData(q.teams()),
   ]),
 );
+const sPhone = settingsPage("/phone", "phone", () => import("./pages/settings/Phone"), (qc) =>
+  Promise.all([qc.ensureQueryData(q.phoneProviders()), qc.ensureQueryData(q.phoneConnections())]),
+);
 const sMailboxNew = createRoute({
   getParentRoute: () => settingsLayout,
   path: "/mailboxes/new",
@@ -932,6 +951,7 @@ const routeTree = rootRoute.addChildren([
   helpRoute,
   csatRoute,
   csatLegacyRoute,
+  portalRoute, portalForgotRoute, portalResetRoute, portalTicketRoute,
   authLayout.addChildren([
     loginRoute,
     registerRoute,
@@ -982,6 +1002,7 @@ const routeTree = rootRoute.addChildren([
       sRoutingRule,
       sMailboxes,
       sSupportChannels,
+      sPhone,
       sMailboxNew,
       sMailboxDetail,
       sMailAccounts,

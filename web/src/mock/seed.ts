@@ -43,6 +43,7 @@ import {
   type TeamKey,
 } from "./content";
 import { contactRef, db, defaultRouting, userRef, type WsData } from "./db";
+import { seedPhone } from "./phone";
 import { brandLogo, logoMark, portrait } from "./avatars";
 import { teammatePresence, type Meta } from "./gateway";
 import { seedDefaultLabels } from "./labels";
@@ -132,6 +133,7 @@ export function baseWorkspace(id: string, name: string, slug: string): WsData {
     threads: [],
     originals: {},
     activities: [],
+    phone: [],
     tags: [],
     tagGroups: [],
     customFields: [],
@@ -163,6 +165,7 @@ export function baseWorkspace(id: string, name: string, slug: string): WsData {
     widgets: [],
     widgetSecrets: {},
     routingRules: [],
+    skills: [],
   };
 }
 
@@ -660,7 +663,13 @@ function seedMargin(): WsData {
   ws.widget = marketingSite.settings;
 
   // Routing rules, first match wins.
-  const rule = (name: string, position: number, match: RoutingRule["match"], conditions: RoutingRule["conditions"], team: Parameters<typeof teamId>[0], run_count: number, enabled = true): RoutingRule => ({
+  ws.skills = [
+    { id: uuid(), name: "Billing", archived: false, member_ids: [uid("maya"), uid("lea"), uid("sam")] },
+    { id: uuid(), name: "French", archived: false, member_ids: [uid("maya"), uid("priya")] },
+    { id: uuid(), name: "Security", archived: false, member_ids: [uid("jonas"), uid("priya")] },
+  ];
+  const skillId = (name: string) => ws.skills.find((skill) => skill.name === name)!.id;
+  const rule = (name: string, position: number, match: RoutingRule["match"], conditions: RoutingRule["conditions"], team: Parameters<typeof teamId>[0], run_count: number, enabled = true, skill_ids: string[] = []): RoutingRule => ({
     id: uuid(),
     name,
     enabled,
@@ -669,6 +678,7 @@ function seedMargin(): WsData {
     match,
     conditions,
     team_id: teamId(team)!,
+    skill_ids,
     created_at: ago((150 - position * 20) * DAY),
     updated_at: ago((20 - position * 3) * DAY),
   });
@@ -677,7 +687,7 @@ function seedMargin(): WsData {
       { field: "subject", op: "contains", value: "invoice" },
       { field: "subject", op: "contains", value: "refund" },
       { field: "body", op: "contains", value: "VAT" },
-    ], "Billing", 214),
+    ], "Billing", 214, true, [skillId("Billing")]),
     rule("GDPR requests to Legal", 1, "any", [
       { field: "subject", op: "contains", value: "GDPR" },
       { field: "subject", op: "contains", value: "DPA" },
@@ -689,7 +699,7 @@ function seedMargin(): WsData {
       { field: "subject", op: "contains", value: "disclosure" },
       { field: "body", op: "contains", value: "CVE-" },
       { field: "topic", op: "equals", value: docsTopics[1].id },
-    ], "Security", 9),
+    ], "Security", 9, true, [skillId("Security")]),
     rule("Partner domains to Partnerships", 3, "any", [
       { field: "from_domain", op: "equals", value: "copperleaf.dev" },
       { field: "from_domain", op: "equals", value: "fjord.ai" },
@@ -1403,6 +1413,7 @@ function seedMargin(): WsData {
 
   seedTicketTypes(ws);
   seedMarginFields(ws, { maya: uid("maya"), jonas: uid("jonas"), lea: uid("lea"), priya: uid("priya") });
+  seedPhone(ws, userRef(uid("jonas"))!);
   return ws;
 }
 

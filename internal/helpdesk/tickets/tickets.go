@@ -54,13 +54,13 @@ type listIn struct {
 	Tag        string `query:"tag" doc:"Comma-separated label names: tickets carrying any of them"`
 	TagNot     string `query:"tag_not" doc:"Comma-separated label names: tickets carrying none of them"`
 	Untagged   bool   `query:"untagged" doc:"Tickets carrying no label"`
-	Channel    string `query:"channel" enum:"email,chat,api,portal,"`
+	Channel    string `query:"channel" enum:"email,chat,api,portal,phone,"`
 	ChannelNot string `query:"channel_not" doc:"Comma-separated channels: tickets on none of them"`
 	ContactID  string `query:"contact_id"`
 	ContactNot string `query:"contact_not" doc:"Comma-separated contact ids: tickets whose contact is none of them"`
 	CompanyNot string `query:"company_not" doc:"Comma-separated company ids: tickets whose contact belongs to none of them"`
 	ViewID     string `query:"view_id" doc:"Apply a saved view's filters; explicit filters override it"`
-	Q          string `query:"q" maxLength:"200" doc:"Full text over subjects and messages, or #number"`
+	Q          string `query:"q" maxLength:"200" doc:"Full text over tickets and contacts, exact ticket alias, or #number"`
 	Spam       string `query:"spam" enum:"true,false,any," doc:"Default false (spam hidden); true lists only spam"`
 	Sort       string `query:"sort" maxLength:"60" doc:"last_message_at (default), created_at, priority, severity, due or field.<key>"`
 	Order      string `query:"order" enum:"asc,desc," doc:"Default desc, asc for due"`
@@ -210,6 +210,7 @@ func CreateTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 
 type ticketPatchBody struct {
 	Subject      *string        `json:"subject,omitempty" maxLength:"500"`
+	Alias        Opt[string]    `json:"alias,omitempty" doc:"Optional workspace-unique reference; null clears it"`
 	Status       *string        `json:"status,omitempty" enum:"open,pending,on_hold,solved,closed"`
 	Priority     *string        `json:"priority,omitempty" enum:"low,normal,high,urgent"`
 	Severity     Opt[string]    `json:"severity,omitempty" doc:"sev1, sev2, sev3, sev4, or null to clear"`
@@ -228,7 +229,7 @@ type ticketPatchBody struct {
 }
 
 func (b ticketPatchBody) toPatch() (Patch, error) {
-	p := Patch{Subject: b.Subject, Status: b.Status, Priority: b.Priority, Severity: b.Severity, Spam: b.Spam, Tags: b.Tags, AddTags: b.AddTags,
+	p := Patch{Subject: b.Subject, Alias: b.Alias, Status: b.Status, Priority: b.Priority, Severity: b.Severity, Spam: b.Spam, Tags: b.Tags, AddTags: b.AddTags,
 		RemoveTags: b.RemoveTags, Custom: b.Custom, Fields: b.Fields, Snooze: b.SnoozedUntil}
 	var err error
 	if p.Contact, err = optID(b.ContactID, "contact_id"); err != nil {
@@ -379,7 +380,7 @@ func registerTickets(d *deps.Deps, api huma.API) {
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "get-ticket", Method: http.MethodGet, Path: "/v1/tickets/{id}",
-		Summary: "Get a ticket", Tags: tags, Description: "id is the uuid, #number or number."},
+		Summary: "Get a ticket", Tags: tags, Description: "id is the uuid, alias, #number or number."},
 		func(ctx context.Context, in *struct {
 			ID string `path:"id"`
 		}) (*ticketOut, error) {
@@ -805,7 +806,7 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 	if err != nil {
 		return domain.Ticket{}, err
 	}
-	nt.TeamID, nt.Routed = routed.TeamID, routed.Routed
+	nt.TeamID, nt.Routed, nt.RequiredSkillIDs = routed.TeamID, routed.Routed, routed.RequiredSkillIDs
 	if nt.TeamID != nil && nt.Routed == nil {
 		nt.Routed = &domain.TicketRouted{Via: "api"}
 	}
@@ -900,6 +901,19 @@ func deleteTicket(ctx context.Context, tx pgx.Tx, wid, id uuid.UUID) error {
 
 // mergeTickets moves src's messages and tags into dst and closes src.
 func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uuid.UUID, actor Actor) error {
+	return merge(ctx, tx, d, wid, src, dst, actor, false)
+}
+
+// MergeFromSource merges src into dst because the source of an import merged them there
+// (contracts/imports.md "Bring over what changed"): src's messages, third-party threads and
+// labels move to dst and both timelines say so, as a person's merge, but src is closed the
+// way a sync closes a ticket its source retired, starting nothing (no automation,
+// notification or archiving in the mailbox's provider). The caller checks both tickets.
+func MergeFromSource(ctx context.Context, tx pgx.Tx, wid, src, dst uuid.UUID) error {
+	return merge(ctx, tx, nil, wid, src, dst, Actor{Type: "system", Meta: map[string]any{"via": "import"}}, true)
+}
+
+func merge(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uuid.UUID, actor Actor, quiet bool) error {
 	if src == dst {
 		return httpx.Validation("a ticket cannot be merged into itself")
 	}
@@ -938,8 +952,28 @@ func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uu
 	if _, err := tx.Exec(ctx, `UPDATE messages SET ticket_id = $3 WHERE workspace_id = $1 AND ticket_id = $2`, wid, src, dst); err != nil {
 		return err
 	}
+	rows, err := tx.Query(ctx, `UPDATE activities SET ticket_id = $3 WHERE workspace_id = $1 AND ticket_id = $2 AND type = 'call' RETURNING id, data`, wid, src, dst)
+	if err != nil {
+		return err
+	}
+	type movedCallEntry struct {
+		ID   uuid.UUID
+		Data map[string]any
+	}
+	entries, err := pgx.CollectRows(rows, pgx.RowToStructByPos[movedCallEntry])
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if _, err := domain.UpdateActivity(ctx, tx, wid, entry.ID, entry.Data); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE phone_calls SET ticket_id = $3, updated_at = now() WHERE workspace_id = $1 AND ticket_id = $2`, wid, src, dst); err != nil {
+		return err
+	}
 	// Third-party threads go with their messages, and show on the target for everyone.
-	rows, err := tx.Query(ctx, `UPDATE ticket_threads SET ticket_id = $3, updated_at = now() WHERE workspace_id = $1 AND ticket_id = $2 RETURNING id`, wid, src, dst)
+	rows, err = tx.Query(ctx, `UPDATE ticket_threads SET ticket_id = $3, updated_at = now() WHERE workspace_id = $1 AND ticket_id = $2 RETURNING id`, wid, src, dst)
 	if err != nil {
 		return err
 	}
@@ -952,8 +986,8 @@ func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uu
 			return err
 		}
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO ticket_tags (ticket_id, tag_id) SELECT $2, tag_id FROM ticket_tags WHERE ticket_id = $1
-		ON CONFLICT DO NOTHING`, src, dst); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO ticket_tags (ticket_id, tag_id, local_owned) SELECT $2, tag_id, local_owned FROM ticket_tags WHERE ticket_id = $1
+		ON CONFLICT (ticket_id, tag_id) DO UPDATE SET local_owned = ticket_tags.local_owned OR EXCLUDED.local_owned`, src, dst); err != nil {
 		return err
 	}
 	// Recompute the target's conversation fields from its messages.
@@ -982,9 +1016,19 @@ func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uu
 		WHERE workspace_id = $1 AND id = $2`, wid, src, dst); err != nil {
 		return err
 	}
-	closed := domain.StatusClosed
-	if _, err := applyPatch(ctx, tx, d, wid, src, actor, Patch{Status: &closed, Snooze: Opt[time.Time]{Set: true, Null: true}}, applyOpts{}); err != nil {
-		return err
+	srcChanged := []string{"merged_into", "message_count"}
+	if quiet {
+		if _, err := tx.Exec(ctx, `UPDATE tickets SET status = 'closed', solved_at = COALESCE(solved_at, now()),
+			closed_at = COALESCE(closed_at, now()), waiting_since = NULL, unanswered_count = 0, snoozed_until = NULL
+			WHERE workspace_id = $1 AND id = $2`, wid, src); err != nil {
+			return err
+		}
+		srcChanged = append(srcChanged, "status")
+	} else {
+		closed := domain.StatusClosed
+		if _, err := applyPatch(ctx, tx, d, wid, src, actor, Patch{Status: &closed, Snooze: Opt[time.Time]{Set: true, Null: true}}, applyOpts{}); err != nil {
+			return err
+		}
 	}
 	// The source's timeline names the target only when everyone who sees the source may see
 	// it too: a target in another, private team stays unnamed.
@@ -1008,10 +1052,10 @@ func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uu
 	if _, err := domain.LogActivity(ctx, tx, wid, dst, actor.Type, actor.UserID, "merged", from); err != nil {
 		return err
 	}
-	if err := domain.PublishTicketUpdated(ctx, tx, wid, src, []string{"merged_into", "message_count"}); err != nil {
+	if err := domain.PublishTicketUpdated(ctx, tx, wid, src, srcChanged); err != nil {
 		return err
 	}
-	return domain.PublishTicketUpdated(ctx, tx, wid, dst, []string{"messages", "tags", "last_message_at"})
+	return domain.PublishTicketUpdated(ctx, tx, wid, dst, []string{"messages", "calls", "tags", "last_message_at"})
 }
 
 func queryOf(ctx huma.Context) url.Values {

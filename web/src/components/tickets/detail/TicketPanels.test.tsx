@@ -1,9 +1,11 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import "@/i18n";
+import { afterEach, describe, expect, it } from "vitest";
+import { i18n } from "@/i18n";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { __resetClientForTests, configureClient, setTransport } from "@/lib/api/client";
+import { api } from "@/lib/api/endpoints";
 import type { PanelBlock, PanelOrder, PanelValue, ShopifyField, TicketPanelData } from "@/lib/api/types";
 import { panelDate, relDay } from "@/lib/format";
 import { DEFAULT_SHOPIFY_FIELDS, normalizeFields, shownData } from "@/lib/panelFields";
@@ -260,6 +262,7 @@ describe("URL ticket panel", () => {
               links: [
                 { label: "Open in the shop", url: "https://admin.shopify.com/store/lumen-store/orders/1001", icon: "shopify" },
                 { label: "Open in the ERP", url: "https://erp.example.com/odoo/sales/42", icon: "receipt" },
+                { label: "Open in Odoo", url: "https://acme.odoo.com/odoo/sales/42", icon: "odoo" },
                 { label: "carrier", url: "https://carrier.example/t/JD0123" },
                 { label: "Odd", url: "https://odd.example/x", icon: "rocket" },
               ],
@@ -271,7 +274,7 @@ describe("URL ticket panel", () => {
     );
     const doc = new DOMParser().parseFromString(html, "text/html");
     const links = [...doc.querySelectorAll("article a[aria-label]")];
-    expect(links.map((a) => a.getAttribute("aria-label"))).toEqual(["Open in the shop", "Open in the ERP", "carrier", "Odd"]);
+    expect(links.map((a) => a.getAttribute("aria-label"))).toEqual(["Open in the shop", "Open in the ERP", "Open in Odoo", "carrier", "Odd"]);
     for (const a of links) {
       expect(a.getAttribute("target")).toBe("_blank");
       expect(a.getAttribute("rel")).toBe("noopener noreferrer");
@@ -279,12 +282,13 @@ describe("URL ticket panel", () => {
     expect(links[0].getAttribute("href")).toBe("https://admin.shopify.com/store/lumen-store/orders/1001");
     // The title keeps its own link.
     expect(doc.querySelector('h4 a[href="https://erp.example.com/so/42"]')).not.toBeNull();
-    // Shopify's shipped logo, the receipt drawn as an icon, a letter for no icon or one the app does not know.
+    // Shopify's and Odoo's shipped logos, the receipt drawn as an icon, a letter for no icon or one the app does not know.
     expect(links[0].querySelector("img")?.getAttribute("src")).toBe("/logos/apps/shopify.svg");
     expect(links[1].querySelector("svg.lucide-receipt")).not.toBeNull();
-    expect(links[2].textContent).toBe("C");
-    expect(links[3].textContent).toBe("O");
-    expect(links[3].querySelector("img")).toBeNull();
+    expect(links[2].querySelector("img")?.getAttribute("src")).toBe("/logos/apps/odoo.svg");
+    expect(links[3].textContent).toBe("C");
+    expect(links[4].textContent).toBe("O");
+    expect(links[4].querySelector("img")).toBeNull();
     // Nothing but the app's own pictures.
     for (const img of doc.querySelectorAll("img")) expect(img.getAttribute("src")).toMatch(/^\/logos\/apps\//);
     const row = doc.querySelector('a[aria-label="PDF"]');
@@ -369,5 +373,28 @@ describe("URL ticket panel", () => {
         '<a href="https://erp.example.com/so/42" target="_blank" rel="noopener noreferrer" class="outline-none hover:underline focus-visible:underline">2026-11-04</a></dd></div>' +
         '<div class="flex items-baseline gap-2 text-[12px]"><dt class="w-2/5 shrink-0 truncate text-fg-4">Supplier</dt><dd class="min-w-0 flex-1 break-words text-fg-2">Flos</dd></div></dl></div></div>',
     );
+  });
+});
+
+describe("reading a panel", () => {
+  afterEach(() => __resetClientForTests());
+
+  it("tells the panel's URL the app's language, on a refresh too", async () => {
+    const asked: URL[] = [];
+    configureClient({ baseUrl: "https://api.test" });
+    setTransport(async (raw) => {
+      asked.push(new URL(raw));
+      return new Response(JSON.stringify(httpData([])), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    await i18n.changeLanguage("fr");
+    try {
+      await api.tickets.panel("t1", "p2");
+      await api.tickets.panel("t1", "p2", true);
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+    await api.tickets.panel("t1", "p2");
+    expect(asked.map((u) => u.pathname)).toEqual(Array(3).fill("/v1/tickets/t1/panels/p2"));
+    expect(asked.map((u) => Object.fromEntries(u.searchParams))).toEqual([{ locale: "fr" }, { refresh: "true", locale: "fr" }, { locale: "en" }]);
   });
 });

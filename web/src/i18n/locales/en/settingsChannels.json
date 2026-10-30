@@ -627,6 +627,62 @@
       "lastHours": "Last 24 hours",
       "window": "Delivery totals from the last 24 hours"
     },
+    "ollie": {
+      "title": "Ollie in support channels",
+      "description": "Ollie summarizes each new ticket thread, suggests replies, answers questions and warns about SLAs and unhappy customers. Choose which changes it may make when it decides to.",
+      "error": "Couldn't save what Ollie may do.",
+      "commands": "Typed commands such as reply, note and status are the agent's own and always work. Changes Ollie suggests to a customer reply, a new ticket or a close still ask for confirmation.",
+      "actions": {
+        "reply": {
+          "title": "Send replies",
+          "hint": "Ollie may prepare a reply to the customer. It's sent only after the agent confirms."
+        },
+        "note": {
+          "title": "Add internal notes",
+          "hint": "Ollie may add a note the customer can't see."
+        },
+        "assign_self": {
+          "title": "Assign tickets",
+          "hint": "Ollie may assign the ticket to the agent talking to it."
+        },
+        "status": {
+          "title": "Change status",
+          "hint": "Ollie may change the ticket's status. Closing asks for confirmation."
+        },
+        "priority": {
+          "title": "Change priority",
+          "hint": "Ollie may raise or lower the ticket's priority."
+        },
+        "create_ticket": {
+          "title": "Create tickets",
+          "hint": "Ollie may create a ticket from a channel message after confirmation."
+        }
+      },
+      "channel": {
+        "label": "Ollie settings for {{name}}",
+        "title": "Ollie in #{{name}}",
+        "description": "How Ollie works in this channel's ticket threads.",
+        "summary": "Summarize new threads",
+        "summaryHint": "Ollie posts what the customer needs, what they've tried, their sentiment and urgency when a ticket's thread opens. Uses AI credits.",
+        "warnings": "SLA and sentiment warnings",
+        "warningsHint": "Ollie warns in the thread when an SLA target is near or missed, and when the customer sounds unhappy.",
+        "length": "Response length",
+        "lengthHint": "How long Ollie's answers and suggestions are in this channel.",
+        "lengthValues": {
+          "brief": "Brief",
+          "standard": "Standard",
+          "detailed": "Detailed"
+        },
+        "personality": "Personality",
+        "personalityHint": "How Ollie sounds here. It shapes tone only and never changes what Ollie may do.",
+        "personalityPlaceholder": "Friendly and upbeat, plain words, no jargon",
+        "personalityInvalid": "The personality can't contain < or >.",
+        "submit": "Save",
+        "cancel": "Cancel",
+        "saved": "Ollie settings saved.",
+        "error": "Couldn't save Ollie's settings."
+      }
+    },
     "empty": {
       "title": "No support channels yet",
       "body": "Connect a bot, then choose where each team's email tickets appear.",
@@ -818,6 +874,104 @@
       "pending": "Waiting for confirmation in Gmail",
       "none": "Gmail lists no other addresses.",
       "sendOnly": "Google doesn't share this account's other send-as addresses with a send-only connection. Add them above by hand."
+    }
+  },
+  "phone": {
+    "title": "Phone",
+    "description": "Connect your cloud phone system. Every call lands on the caller's ticket, with who took it, how long it lasted and its recording.",
+    "connections": {
+      "title": "Phone systems",
+      "description": "Calls from these accounts are documented on tickets."
+    },
+    "empty": {
+      "title": "No phone system yet",
+      "body": "Connect Aircall and every call is documented on the caller's ticket.",
+      "tipTimeline": "Calls in the ticket timeline",
+      "tipMissed": "Missed calls never go unanswered",
+      "tipAutomations": "Automations when a call ends"
+    },
+    "health": {
+      "healthy": "Receiving calls",
+      "action_required": "Action needed",
+      "error": "Not working",
+      "unknown": "Not checked yet",
+      "test": "Test",
+      "tested": "The connection works.",
+      "testedAttention": "The connection needs attention.",
+      "testError": "Couldn't test the connection."
+    },
+    "healthCode": {
+      "receiving": "Calls are sent to opendesk.",
+      "webhook_missing": "The phone system is not sending calls to opendesk. Test the connection to set it up again.",
+      "credentials_refused": "The phone system refused the credentials. Replace them with working ones.",
+      "provider_unreachable": "Couldn't reach the phone system. Try again in a moment."
+    },
+    "lastEvent": "Last call event {{when}}",
+    "noEventYet": "No call yet. Calls show up on tickets as soon as they ring.",
+    "webhook": "Webhook address, registered in your account by opendesk",
+    "rotate": {
+      "label": "Replace the credentials of {{name}}",
+      "title": "Replace the credentials of {{name}}",
+      "submit": "Replace",
+      "saved": "Credentials replaced."
+    },
+    "disconnectLabel": "Disconnect {{name}}",
+    "disconnectTitle": "Disconnect the phone system?",
+    "disconnectBody": "opendesk removes its own webhook from {{name}} and stops documenting new calls. Calls already on tickets stay.",
+    "disconnect": "Disconnect",
+    "disconnected": "Phone system disconnected.",
+    "disconnectError": "Couldn't disconnect the phone system.",
+    "saveError": "Couldn't save the change.",
+    "placement": {
+      "title": "Calls from {{name}}",
+      "description": "Where a call goes, and what it does there.",
+      "reuse": "Use a recently solved ticket",
+      "reuseHint": "When the caller has no open ticket, the call goes on their latest ticket solved in the chosen time.",
+      "reuseNever": "When the caller has no open ticket, the call opens a new one.",
+      "never": "Never",
+      "day": "Within 1 day",
+      "daysN": "Within {{n}} days",
+      "assign": "Assign answered calls",
+      "assignHint": "A ticket nobody has goes to the teammate who took the call. Teammates are matched by their email.",
+      "cards": "Show the caller in Aircall",
+      "cardsHint": "While a call rings, Aircall shows the caller, the ticket the call goes on and their latest tickets.",
+      "dial": "Call from opendesk",
+      "dialHint": "Phone numbers on contacts and tickets open your phone app. Set Aircall as the default app for phone links to call with it."
+    },
+    "automations": {
+      "title": "Automations",
+      "description": "Automations can run when a call ends, with its outcome, direction, line, labels and whether it came outside business hours.",
+      "docs": "Phone guide",
+      "docsHint": "Setup steps and automation examples.",
+      "openDocs": "Open the guide"
+    },
+    "example": {
+      "name": "Missed call outside opening hours",
+      "hint": "Reopen the caller's ticket, add a note and raise its priority. Created switched off, for you to review.",
+      "create": "Create this automation",
+      "note": "Missed call outside opening hours: call back.",
+      "created": "Automation created, switched off.",
+      "error": "Couldn't create the automation."
+    },
+    "providers": {
+      "title": "Phone systems you can connect",
+      "descriptionAdmin": "Pick one to connect it with its API key.",
+      "description": "An admin can connect a phone system."
+    },
+    "provider": {
+      "aircall": "Cloud phone system. Calls, recordings and AI summaries land on tickets."
+    },
+    "field": {
+      "api_id": "API ID",
+      "api_token": "API token"
+    },
+    "connect": {
+      "title": "Connect {{name}}",
+      "aircallSetup": "In Aircall, open Integrations & API, then API keys, and create a key. Paste its API ID and token here: opendesk registers its own webhook in your account and leaves the others alone.",
+      "cancel": "Cancel",
+      "submit": "Connect",
+      "connected": "{{name}} connected.",
+      "error": "Couldn't connect {{name}}."
     }
   }
 }

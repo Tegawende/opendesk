@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -45,6 +46,7 @@ var systemActor = Actor{Type: "system"}
 // Patch is a set of ticket changes. Nil and unset fields are left alone.
 type Patch struct {
 	Subject  *string
+	Alias    Opt[string]
 	Status   *string
 	Priority *string
 	Severity Opt[string] // null or "" clears
@@ -67,7 +69,7 @@ type Patch struct {
 }
 
 func (p Patch) empty() bool {
-	return p.Subject == nil && p.Status == nil && p.Priority == nil && !p.Severity.Set && !p.Contact.Set && !p.Assignee.Set && !p.Team.Set && !p.Snooze.Set &&
+	return p.Subject == nil && !p.Alias.Set && p.Status == nil && p.Priority == nil && !p.Severity.Set && !p.Contact.Set && !p.Assignee.Set && !p.Team.Set && !p.Snooze.Set &&
 		p.Mailbox == nil && p.Brand == nil && p.Spam == nil && p.Tags == nil && len(p.AddTags) == 0 && len(p.RemoveTags) == 0 && p.Custom == nil && p.Fields == nil
 }
 
@@ -92,6 +94,7 @@ func (p Patch) checkCaller(ctx context.Context, q db.Querier, pr *auth.Principal
 
 type ticketState struct {
 	Number   int64
+	Alias    *string
 	Subject  string
 	Status   string
 	Priority string
@@ -111,10 +114,10 @@ type ticketState struct {
 
 func lockTicket(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID) (ticketState, error) {
 	var s ticketState
-	err := tx.QueryRow(ctx, `SELECT number, subject, status, priority, severity, contact_id, assignee_id, team_id, snoozed_until, spam, custom, fields,
+	err := tx.QueryRow(ctx, `SELECT number, alias, subject, status, priority, severity, contact_id, assignee_id, team_id, snoozed_until, spam, custom, fields,
 		channel, brand_id, mailbox_id, routed
 		FROM tickets WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`, wid, tid).
-		Scan(&s.Number, &s.Subject, &s.Status, &s.Priority, &s.Severity, &s.Contact, &s.Assignee, &s.Team, &s.Snoozed, &s.Spam, &s.Custom, &s.Fields,
+		Scan(&s.Number, &s.Alias, &s.Subject, &s.Status, &s.Priority, &s.Severity, &s.Contact, &s.Assignee, &s.Team, &s.Snoozed, &s.Spam, &s.Custom, &s.Fields,
 			&s.Channel, &s.Brand, &s.Mailbox, &s.Routed)
 	if err != nil {
 		if db.IsNotFound(err) {
@@ -130,6 +133,8 @@ func lockTicket(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID) (ticketState
 	}
 	return s, nil
 }
+
+var ticketAliasPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{1,39}$`)
 
 // applyOpts controls follow-up work of a patch.
 type applyOpts struct {
@@ -178,6 +183,24 @@ func applyPatch(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID
 			next.Subject = s
 			changes = append(changes, "subject")
 			acts = append(acts, act{"subject_changed", map[string]any{"from": cur.Subject, "to": s}})
+		}
+	}
+	if p.Alias.Set {
+		var to *string
+		if !p.Alias.Null && strings.TrimSpace(p.Alias.Value) != "" {
+			v := strings.ToUpper(strings.TrimSpace(p.Alias.Value))
+			if !ticketAliasPattern.MatchString(v) || !strings.ContainsAny(v, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+				return nil, httpx.Validation("alias must be 2 to 40 letters, numbers or hyphens, and include a letter")
+			}
+			if _, err := uuid.Parse(v); err == nil {
+				return nil, httpx.Validation("alias must be distinct from a UUID ticket reference")
+			}
+			to = &v
+		}
+		if !sameStr(cur.Alias, to) {
+			next.Alias = to
+			changes = append(changes, "alias")
+			acts = append(acts, act{"alias_changed", map[string]any{"from": strOrNil(cur.Alias), "to": strOrNil(to)}})
 		}
 	}
 	if p.Status != nil {
@@ -501,19 +524,22 @@ func applyPatch(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID
 		}
 	}
 	if len(changes) > 1 || !tagChanged {
-		_, err = tx.Exec(ctx, `UPDATE tickets SET subject = $3, status = $4, priority = $5, contact_id = $6, assignee_id = $7, team_id = $8,
-			snoozed_until = $9, spam = $10, custom = $11, fields = $12, severity = $13,
-			solved_at = CASE WHEN $4 IN ('solved', 'closed') THEN COALESCE(solved_at, now()) ELSE NULL END,
-			closed_at = CASE WHEN $4 = 'closed' THEN COALESCE(closed_at, now()) ELSE NULL END,
-			brand_id = $14, mailbox_id = $15, routed = $16,
+		_, err = tx.Exec(ctx, `UPDATE tickets SET subject = $3, alias = $4, status = $5, priority = $6, contact_id = $7, assignee_id = $8, team_id = $9,
+			snoozed_until = $10, spam = $11, custom = $12, fields = $13, severity = $14,
+			solved_at = CASE WHEN $5 IN ('solved', 'closed') THEN COALESCE(solved_at, now()) ELSE NULL END,
+			closed_at = CASE WHEN $5 = 'closed' THEN COALESCE(closed_at, now()) ELSE NULL END,
+			brand_id = $15, mailbox_id = $16, routed = $17,
 			updated_at = now()
 			WHERE workspace_id = $1 AND id = $2`,
-			wid, tid, next.Subject, next.Status, next.Priority, next.Contact, next.Assignee, next.Team, next.Snoozed, next.Spam, next.Custom, next.Fields, next.Severity,
+			wid, tid, next.Subject, next.Alias, next.Status, next.Priority, next.Contact, next.Assignee, next.Team, next.Snoozed, next.Spam, next.Custom, next.Fields, next.Severity,
 			next.Brand, next.Mailbox, next.Routed)
 	} else {
 		_, err = tx.Exec(ctx, `UPDATE tickets SET updated_at = now() WHERE workspace_id = $1 AND id = $2`, wid, tid)
 	}
 	if err != nil {
+		if db.IsUniqueViolation(err, "tickets_ws_alias_key") {
+			return nil, httpx.E(409, "ticket_alias_taken", "That ticket reference is already in use.")
+		}
 		return nil, fmt.Errorf("update ticket: %w", err)
 	}
 	for _, a := range acts {
@@ -577,6 +603,28 @@ func ApplyPatch(ctx context.Context, tx pgx.Tx, d *deps.Deps, principal *auth.Pr
 	}
 	return applyPatch(ctx, tx, d, principal.WorkspaceID, tid, actorOf(principal), patch,
 		applyOpts{Enqueue: true, RequireFields: true})
+}
+
+// AssignAnsweredCall assigns a ticket nobody has to the member who answered a call on it
+// (contracts/phone.md "Agents"), as the system, the way auto-assignment does. A ticket
+// already assigned, solved or closed, or a member no longer on its team, is left alone.
+func AssignAnsweredCall(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid, uid uuid.UUID) error {
+	var assignee, team *uuid.UUID
+	var status string
+	err := tx.QueryRow(ctx, `SELECT assignee_id, team_id, status FROM tickets WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`,
+		wid, tid).Scan(&assignee, &team, &status)
+	if db.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if assignee != nil || closing(status) || hd.CheckMember(ctx, tx, wid, uid) != nil || hd.CheckAssigneeOnTeam(ctx, tx, wid, team, &uid) != nil {
+		return nil
+	}
+	_, err = applyPatch(ctx, tx, d, wid, tid, Actor{Type: "system", Meta: map[string]any{"via": "phone"}},
+		Patch{Assignee: Opt[uuid.UUID]{Set: true, Value: uid}}, applyOpts{Enqueue: true, Lenient: true})
+	return err
 }
 
 // closing reports a solved or closed status.

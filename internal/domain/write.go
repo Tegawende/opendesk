@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -67,6 +68,62 @@ func upsertContactByEmail(ctx context.Context, tx pgx.Tx, wid uuid.UUID, email, 
 	return id, created, nil
 }
 
+// PhoneDigitsSQL is the digits of contacts.phone that calls match on: a trunk "(0)"
+// written after the country code ("+32 (0)470 ...") is dropped before the digits are kept,
+// as phone.NormalizeNumber does on the call's side. It is the expression of
+// contacts_phone_digits_idx, so the index serves the lookup: change both together.
+const PhoneDigitsSQL = `regexp_replace(regexp_replace(phone, '\(0\)', '', 'g'), '[^0-9]', '', 'g')`
+
+// PhoneContact is the contact a phone number belongs to.
+type PhoneContact struct {
+	ID uuid.UUID
+	// Created: the number was new, and the contact was made for it.
+	Created bool
+	// Blocked: the team blocked the contact; nothing they send reaches a ticket.
+	Blocked bool
+}
+
+// ContactByPhone finds the contact a phone number belongs to, or creates one named name
+// (else the number), and announces it (contracts/phone.md "Contacts"). number is E.164
+// ("+3247...") or national digits; contacts match on the number's digits, written with or
+// without a 00 prefix. Callers of one number are serialized for the transaction, so two
+// calls from a new number make one contact.
+func ContactByPhone(ctx context.Context, tx pgx.Tx, wid uuid.UUID, number, name string) (PhoneContact, error) {
+	digits := strings.TrimPrefix(number, "+")
+	if digits == "" || strings.Trim(digits, "0123456789") != "" {
+		return PhoneContact{}, fmt.Errorf("contact by phone: not a number")
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "contact-phone:"+wid.String()+":"+digits); err != nil {
+		return PhoneContact{}, err
+	}
+	var found PhoneContact
+	err := tx.QueryRow(ctx, `SELECT id, blocked FROM contacts WHERE workspace_id = $1 AND phone <> ''
+		AND `+PhoneDigitsSQL+` = ANY($2) ORDER BY updated_at DESC, id LIMIT 1`,
+		wid, []string{digits, "00" + digits}).Scan(&found.ID, &found.Blocked)
+	if err == nil {
+		return found, nil
+	}
+	if !db.IsNotFound(err) {
+		return PhoneContact{}, fmt.Errorf("contact by phone: %w", err)
+	}
+	if name = displayname.Clean(name, displayname.Person); name == "" {
+		name = number
+	}
+	id := ids.New()
+	if _, err := tx.Exec(ctx, `INSERT INTO contacts (id, workspace_id, name, phone) VALUES ($1, $2, $3, $4)`,
+		id, wid, name, truncateRunes(number, 40)); err != nil {
+		return PhoneContact{}, fmt.Errorf("create contact: %w", err)
+	}
+	c, err := LoadContact(ctx, tx, wid, id)
+	if err != nil {
+		return PhoneContact{}, err
+	}
+	if _, err := events.Publish(ctx, tx, events.Event{WorkspaceID: wid, Type: "contact.created", Data: map[string]any{"contact": c}}); err != nil {
+		return PhoneContact{}, err
+	}
+	return PhoneContact{ID: id, Created: true}, nil
+}
+
 type NewTicket struct {
 	WorkspaceID uuid.UUID
 	Subject     string
@@ -78,8 +135,10 @@ type NewTicket struct {
 	ContactID   *uuid.UUID
 	AssigneeID  *uuid.UUID
 	TeamID      *uuid.UUID
-	Custom      map[string]any
-	Fields      map[string]any // custom field values, validated by the caller
+	// RequiredSkillIDs is the route's workspace-scoped expertise requirements.
+	RequiredSkillIDs []uuid.UUID
+	Custom           map[string]any
+	Fields           map[string]any // custom field values, validated by the caller
 	// BrandID defaults to the brand of MailboxID, else of WidgetID, else the default brand.
 	BrandID  *uuid.UUID
 	WidgetID *uuid.UUID
@@ -152,6 +211,15 @@ func CreateTicket(ctx context.Context, tx pgx.Tx, nt NewTicket) (Ticket, error) 
 		brandID, nt.WidgetID, nt.OriginMailboxID, strings.ToLower(strings.TrimSpace(nt.ReceivedAt)), truncateRunes(nt.PageURL, 500), nt.Routed, created)
 	if err != nil {
 		return Ticket{}, fmt.Errorf("insert ticket: %w", err)
+	}
+	requiredSkills := slices.Clone(nt.RequiredSkillIDs)
+	slices.SortFunc(requiredSkills, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	requiredSkills = slices.Compact(requiredSkills)
+	if len(requiredSkills) > 0 {
+		if _, err := tx.Exec(ctx, `INSERT INTO ticket_skills (workspace_id, ticket_id, skill_id)
+			SELECT $1, $2, unnest($3::uuid[])`, nt.WorkspaceID, id, requiredSkills); err != nil {
+			return Ticket{}, fmt.Errorf("insert ticket skills: %w", err)
+		}
 	}
 	t, err := LoadTicket(ctx, tx, nt.WorkspaceID, id)
 	if err != nil {
@@ -503,6 +571,32 @@ func LogActivity(ctx context.Context, tx pgx.Tx, wid, ticketID uuid.UUID, actorT
 	}
 	_, err := events.Publish(ctx, tx, events.Event{WorkspaceID: wid, Type: "activity.created", TicketID: &ticketID,
 		Data: map[string]any{"ticket_id": ticketID, "activity": a}})
+	return a, err
+}
+
+// UpdateActivity replaces a timeline entry's data and publishes activity.updated. Only
+// entries that follow something still changing are updated: a call's (contracts/phone.md).
+func UpdateActivity(ctx context.Context, tx pgx.Tx, wid, id uuid.UUID, data map[string]any) (Activity, error) {
+	if data == nil {
+		data = map[string]any{}
+	}
+	a := Activity{ID: id, Data: data}
+	var actorUser *uuid.UUID
+	err := tx.QueryRow(ctx, `UPDATE activities SET data = $3 WHERE workspace_id = $1 AND id = $2
+		RETURNING ticket_id, actor_type, actor_user_id, type, created_at`, wid, id, data).
+		Scan(&a.TicketID, &a.Actor.Type, &actorUser, &a.Type, &a.CreatedAt)
+	if err != nil {
+		return a, fmt.Errorf("update activity: %w", err)
+	}
+	if actorUser != nil {
+		u, err := LoadUserRef(ctx, tx, *actorUser)
+		if err != nil {
+			return a, err
+		}
+		a.Actor.User = &u
+	}
+	_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: wid, Type: "activity.updated", TicketID: &a.TicketID,
+		Data: map[string]any{"ticket_id": a.TicketID, "activity": a}})
 	return a, err
 }
 

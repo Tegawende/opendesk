@@ -7,9 +7,16 @@ name: Release
 #   installer fetches (docker-compose.yml, compose.external-proxy.yml,
 #   Caddyfile, env.template, opendesk-ctl) listed in SHA256SUMS, plus
 #   images.json with the digests.
+#   desktop installers and update feeds for the same version.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to release"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -29,31 +36,53 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
+      semver: ${{ steps.v.outputs.semver }}
       prerelease: ${{ steps.v.outputs.prerelease }}
+      sha: ${{ steps.source.outputs.sha }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
       - id: v
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
             echo "::error::$TAG is not a semver tag (v1.2.3 or v1.2.3-rc.1)"; exit 1
           fi
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          echo "semver=${TAG#v}" >> "$GITHUB_OUTPUT"
           case "$TAG" in *-*) echo "prerelease=true" ;; *) echo "prerelease=false" ;; esac >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: refs/tags/${{ steps.v.outputs.version }}
+      - id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Release is unpublished
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.v.outputs.version }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::$TAG is already published; rerun its failed jobs instead"; exit 1
+          fi
       - name: Installer checksum is current
         run: cd deploy/install && sha256sum -c install.sh.sha256
       # An upgrade from the previous release applies only versions above its
       # highest, so every migration it lacks must be numbered above that.
       - name: Migrations are ordered after the previous release
         env:
-          SHA: ${{ github.sha }}
+          SHA: ${{ steps.source.outputs.sha }}
         run: |
           prev=$(git describe --tags --abbrev=0 --match 'v*' "$SHA^" 2>/dev/null) || { echo "No earlier release"; exit 0; }
           ./scripts/check-migrations.sh --against "$prev"
+
+  desktop:
+    name: Desktop
+    needs: validate
+    uses: ./.github/workflows/desktop-build.yml
+    secrets: inherit
+    with:
+      tag: ${{ needs.validate.outputs.version }}
 
   # The Go build cross-compiles and the web build is architecture independent,
   # so one runner builds both platforms without QEMU.
@@ -72,6 +101,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ needs.validate.outputs.sha }}
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -82,10 +112,11 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE_PREFIX }}/opendesk
+          labels: org.opencontainers.image.revision=${{ needs.validate.outputs.sha }}
           tags: |
-            type=semver,pattern=v{{version}}
-            type=semver,pattern=v{{major}}.{{minor}},enable=${{ needs.validate.outputs.prerelease == 'false' }}
-            type=semver,pattern=v{{major}},enable=${{ needs.validate.outputs.prerelease == 'false' }}
+            type=semver,value=${{ needs.validate.outputs.version }},pattern=v{{version}}
+            type=semver,value=${{ needs.validate.outputs.version }},pattern=v{{major}}.{{minor}},enable=${{ needs.validate.outputs.prerelease == 'false' }}
+            type=semver,value=${{ needs.validate.outputs.version }},pattern=v{{major}},enable=${{ needs.validate.outputs.prerelease == 'false' }}
             type=raw,value=latest,enable=${{ needs.validate.outputs.prerelease == 'false' }}
       - id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -98,7 +129,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ needs.validate.outputs.version }}
-            COMMIT=${{ github.sha }}
+            COMMIT=${{ needs.validate.outputs.sha }}
           provenance: mode=max
           sbom: true
           cache-from: type=gha,scope=release-opendesk
@@ -130,6 +161,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ needs.validate.outputs.sha }}
       - id: pair
         env:
           PLATFORM: ${{ matrix.platform }}
@@ -148,7 +180,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             VERSION=${{ needs.validate.outputs.version }}
-            COMMIT=${{ github.sha }}
+            COMMIT=${{ needs.validate.outputs.sha }}
           outputs: type=image,name=${{ env.IMAGE_PREFIX }}/realtime,push-by-digest=true,name-canonical=true,push=true
           provenance: mode=max
           sbom: true
@@ -191,10 +223,11 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE_PREFIX }}/realtime
+          labels: org.opencontainers.image.revision=${{ needs.validate.outputs.sha }}
           tags: |
-            type=semver,pattern=v{{version}}
-            type=semver,pattern=v{{major}}.{{minor}},enable=${{ needs.validate.outputs.prerelease == 'false' }}
-            type=semver,pattern=v{{major}},enable=${{ needs.validate.outputs.prerelease == 'false' }}
+            type=semver,value=${{ needs.validate.outputs.version }},pattern=v{{version}}
+            type=semver,value=${{ needs.validate.outputs.version }},pattern=v{{major}}.{{minor}},enable=${{ needs.validate.outputs.prerelease == 'false' }}
+            type=semver,value=${{ needs.validate.outputs.version }},pattern=v{{major}},enable=${{ needs.validate.outputs.prerelease == 'false' }}
             type=raw,value=latest,enable=${{ needs.validate.outputs.prerelease == 'false' }}
       - name: Create the multi-arch manifest
         working-directory: /tmp/digests
@@ -234,6 +267,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ needs.validate.outputs.sha }}
       - uses: ./.github/actions/trivy-db
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -250,16 +284,20 @@ jobs:
 
   github-release:
     name: GitHub release
-    needs: [validate, opendesk, realtime]
+    needs: [validate, opendesk, realtime, desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      # To refresh opendesk.sh/install.sh from this release (deploy.yml).
-      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ needs.validate.outputs.sha }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: desktop-*
+          path: dist
+          merge-multiple: true
       - name: Stage installer and self-host files
         env:
           TAG: ${{ needs.validate.outputs.version }}
@@ -269,7 +307,13 @@ jobs:
           sh deploy/install/stage-assets.sh dist
           printf '{\n  "version": "%s",\n  "opendesk": "%s",\n  "realtime": "%s"\n}\n' \
             "$TAG" "$OPENDESK_DIGEST" "$REALTIME_DIGEST" > dist/images.json
-          (cd dist && sha256sum images.json >> SHA256SUMS && sha256sum -c SHA256SUMS)
+          (
+            cd dist
+            rm SHA256SUMS
+            sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS"
+            mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
       # SHA256SUMS lists every file and images.json: signing it signs the release.
       # Installers and opendesk-ctl refuse a release after v0.2.0 without a signature
       # that holds against deploy/install/release-signing.pub.
@@ -305,11 +349,22 @@ jobs:
           Upgrade an existing install: \`/opt/opendesk/opendesk-ctl upgrade $TAG\`
 
           Images: \`ghcr.io/useopendesk/opendesk:$TAG\`, \`ghcr.io/useopendesk/realtime:$TAG\` (digests in images.json).
+
+          Desktop installers for this version are attached below. Installed desktop apps update automatically; downloads are also at https://opendesk.sh/download.
           EOF
           # shellcheck disable=SC2086
           gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --notes-file notes.md $flags
-      - name: Publish this installer on opendesk.sh
-        if: needs.validate.outputs.prerelease == 'false'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run deploy.yml --repo "$GITHUB_REPOSITORY" --ref main -f target=site
+
+  desktop-publish:
+    name: Desktop update feed
+    needs: [validate, github-release]
+    uses: ./.github/workflows/desktop-publish.yml
+    permissions:
+      contents: write
+      actions: write
+    secrets: inherit
+    with:
+      tag: ${{ needs.validate.outputs.version }}
+      version: ${{ needs.validate.outputs.semver }}
+      prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
+      create_release: false

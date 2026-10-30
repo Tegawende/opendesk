@@ -280,6 +280,16 @@ func (l *Limiter) Allow(key string, limit int, period time.Duration) bool {
 	return w.count <= limit
 }
 
+// Over reports whether key already used up limit in its current window, without
+// recording a hit: for a route that counts only some requests (failures) but refuses every
+// request once they are over.
+func (l *Limiter) Over(key string, limit int, period time.Duration) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	w, ok := l.windows[key]
+	return ok && time.Since(w.start) <= period && w.count >= limit
+}
+
 // Take records a hit like Allow and also reports what is left of the window and when it
 // ends, for the RateLimit headers.
 func (l *Limiter) Take(key string, limit int, period time.Duration) (ok bool, remaining int, reset time.Duration) {
@@ -295,7 +305,7 @@ func (l *Limiter) Take(key string, limit int, period time.Duration) (ok bool, re
 }
 
 // Per-credential request limits (ASVS 11.1.4): every request an API key, a person or a
-// widget visitor makes counts, and writes also count on their own.
+// widget visitor or customer makes counts, and writes also count on their own.
 const (
 	credentialRequestsPerMinute = 1200
 	credentialWritesPerMinute   = 600
@@ -326,6 +336,8 @@ func CredentialLimit(l *Limiter, clientIP func(*http.Request) string) func(http.
 				id = "key:" + p.APIKeyID.String()
 			case auth.KindVisitor:
 				id = "visitor:" + p.VisitorID.String()
+			case auth.KindCustomer:
+				id = "customer:" + p.SessionID.String()
 			default:
 				id = "user:" + p.UserID.String()
 			}

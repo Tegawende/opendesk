@@ -10,6 +10,11 @@ Two native clients sit on the same public API as the web app (`contracts/api.md`
 Both work against opendesk Cloud and any self-hosted instance. The instance is chosen at
 runtime, never at build time.
 
+A `v*` release builds and publishes the server and desktop apps together. iOS
+Debug and Release simulator builds are part of required CI. Device distribution
+is separate; iOS release builds use production push and App Attest entitlements.
+Build instructions are in `ios/README.md`.
+
 ## Finding an instance
 
 The user types an address (`opendesk.sh` means Cloud). The client normalizes it to an
@@ -322,12 +327,13 @@ type UpdateState =
   background behind the sidebar; Windows 11 `backgroundMaterial: "mica"`; Linux opaque.
 - Deep links: `opendesk://auth/callback?…` (OAuth), `opendesk://open?path=/inbox/mine/<ticket_id>`.
 - Updates: `electron-updater` from GitHub Releases, checked at launch and every 6 hours,
-  downloaded in the background. A `desktop-v*` tag publishes a release that is never marked
-  Latest (that belongs to the server's `v*` releases) and refreshes the rolling
-  `desktop-latest` release, which is the feed installed apps read (generic provider):
+  downloaded in the background. A `v*` tag builds the server and desktop from the same
+  commit, publishes their files together with signed checksums, then refreshes the rolling
+  `desktop-latest` release, which is the feed installed apps read (generic provider).
+  A `desktop-v*` tag also supports a desktop-only release, never marked Latest:
   - Channels: stable reads `latest.yml`, `latest-mac.yml`, `latest-linux.yml`,
     `latest-linux-arm64.yml`; beta reads the same names with `beta`. Every prerelease
-    (`desktop-v1.2.3-beta.1`) publishes only the beta files and their installers. A stable
+    (`v1.2.3-beta.1` or `desktop-v1.2.3-beta.1`) publishes only the beta files and their installers. A stable
     version publishes both, so beta users get any stable version newer than their beta
     (unless a newer beta is out, which then keeps the beta files).
   - Downgrades are never allowed. Someone who turns beta off keeps their beta version until
@@ -342,7 +348,7 @@ type UpdateState =
     `opendesk.sh/download`): `opendesk-mac.dmg` (universal), `opendesk-windows.exe` (x64 and
     arm64), `opendesk-linux-x64.AppImage`, `opendesk-linux-arm64.AppImage`,
     `opendesk-linux-amd64.deb`, `opendesk-linux-arm64.deb`, and `version.json`:
-    `{ "version": "1.3.0", "date": "<ISO 8601>", "notes_url": "<the desktop-v1.3.0 release>" }`.
+    `{ "version": "1.3.0", "date": "<ISO 8601>", "notes_url": "<the versioned release>" }`.
 
 ## Configuration
 

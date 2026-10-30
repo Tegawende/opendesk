@@ -39,6 +39,11 @@ import {
   aiActions,
   aiFields,
   brandFields,
+  callDirections,
+  callFields,
+  callOutcomes,
+  callReasons,
+  callTimes,
   fieldLabel,
   isPhraseOp,
   mergeWindows,
@@ -101,15 +106,19 @@ const blank: Draft = {
 const allFields = Object.keys(fieldLabel) as ConditionField[];
 const allActions = Object.keys(actionLabel) as ActionType[];
 
-/** Builder lists; AI fields and actions only when the instance has AI, unless already in use. */
-function useFieldItems(current: string) {
+/** Builder lists; AI fields and actions only when the instance has AI, call fields only for call_ended, unless already in use. */
+function useFieldItems(current: string, trigger: AutomationTrigger) {
   const { enabled } = useAI();
   const { t } = useTranslation("settingsInbox");
   const custom = useFieldConditionItems(current);
   const { teams } = useTeams();
   const { multi } = useBrands();
   const builtIn = offered(allFields, aiFields, enabled, isFieldRef(current) ? undefined : (current as ConditionField))
-    .filter((f) => f === current || ((teams.length > 0 || !teamFields.has(f)) && (multi || !brandFields.has(f))))
+    .filter(
+      (f) =>
+        f === current ||
+        ((teams.length > 0 || !teamFields.has(f)) && (multi || !brandFields.has(f)) && (trigger === "call_ended" || !callFields.has(f))),
+    )
     .map((f) => ({
     value: f as string,
     label: fieldLabel[f],
@@ -155,6 +164,9 @@ export default function AutomationEdit() {
   const confirm = useConfirm();
   const { t } = useTranslation("settingsInbox");
   const reduce = useReducedMotion();
+  // The call trigger is offered once a phone system is connected (contracts/phone.md).
+  const { data: phones } = useQuery(q.phoneConnections());
+  const hasPhone = (phones?.length ?? 0) > 0;
   // Stable keys for builder rows, so a removed row folds away instead of its neighbour.
   const seq = useRef(0);
   const [condKeys, setCondKeys] = useState<number[]>([]);
@@ -284,6 +296,7 @@ export default function AutomationEdit() {
   if (draft.conditions.some(overPhrases)) problems.push(t("edit.problems.phrases"));
   if (draft.actions.some((a) => actInvalid(a) && !offTrigger(a))) problems.push(t("edit.problems.actionValue"));
   if (draft.actions.some(offTrigger)) problems.push(t("edit.problems.mergeTrigger"));
+  if (draft.trigger !== "call_ended" && draft.conditions.some((c) => callFields.has(c.field as ConditionField))) problems.push(t("edit.problems.callTrigger"));
 
   const rowMotion = {
     layout: reduce ? false : ("position" as const),
@@ -392,8 +405,15 @@ export default function AutomationEdit() {
             <Select
               size="sm"
               value={draft.trigger}
-              onChange={(trigger) => set({ trigger })}
-              options={triggerItems()}
+              onChange={(trigger) =>
+                // A new automation's blank first condition becomes a call one when it is about calls.
+                set(
+                  trigger === "call_ended" && draft.conditions.length === 1 && !isFieldRule(draft.conditions[0]) && draft.conditions[0].field === "subject" && !draft.conditions[0].value
+                    ? { trigger, conditions: [{ field: "call_outcome", op: "equals", value: "missed" }] }
+                    : { trigger },
+                )
+              }
+              options={triggerItems().filter((x) => x.value !== "call_ended" || hasPhone || draft.trigger === "call_ended")}
               className="w-[240px]"
               aria-label={t("edit.trigger")}
             />
@@ -412,6 +432,7 @@ export default function AutomationEdit() {
                 <ConditionRow
                   c={c}
                   first={i === 0}
+                  trigger={draft.trigger}
                   invalid={showErrors && condInvalid(c)}
                   onChange={(nc) =>
                     set({
@@ -512,17 +533,19 @@ function ConditionRow({
   c,
   first,
   invalid,
+  trigger,
   onChange,
   onRemove,
 }: {
   c: Rule;
   first: boolean;
   invalid: boolean;
+  trigger: AutomationTrigger;
   onChange: (c: Rule) => void;
   onRemove: () => void;
 }) {
   const { t } = useTranslation("settingsInbox");
-  const fieldItems = useFieldItems(c.field);
+  const fieldItems = useFieldItems(c.field, trigger);
   const { find } = useAutomationFields();
   const opLabelFor = useFieldOpLabel();
   const custom = isFieldRule(c) ? find(c.field as FieldRef) : undefined;
@@ -733,6 +756,28 @@ function ConditionValue({ c, invalid, onChange }: { c: Condition; invalid: boole
       );
     case "tag":
       return <TagPick value={c.value} onChange={onChange} placeholder={ts("edit.chooseTag")} invalid={invalid} onCreate={onChange} className="w-full" />;
+    case "call_outcome":
+    case "call_direction":
+    case "call_time":
+    case "call_missed_reason": {
+      const values: readonly string[] = { call_outcome: callOutcomes, call_direction: callDirections, call_time: callTimes, call_missed_reason: callReasons }[c.field];
+      return (
+        <SinglePick
+          items={values.map((v) => ({ value: v, label: ts(`callValues.${c.field}.${v}` as never) }))}
+          value={c.value}
+          onChange={onChange}
+          placeholder={ts("edit.chooseValue")}
+          invalid={invalid}
+          width={280}
+          className="w-full"
+        />
+      );
+    }
+    case "call_line":
+      if (c.op === "equals" || c.op === "not_equals") return <LinePick value={c.value} invalid={invalid} onChange={onChange} />;
+      return (
+        <TextInput inputSize="sm" value={c.value} invalid={invalid} aria-label={ts("edit.valueLabel", { field: fieldLabel[c.field] })} placeholder="B2B" onChange={(e) => onChange(e.target.value)} />
+      );
     case "sentiment":
       return (
         <SinglePick
@@ -757,6 +802,25 @@ function ConditionValue({ c, invalid, onChange }: { c: Condition; invalid: boole
         />
       );
   }
+}
+
+/** call_line equals: a provider number, kept by its id and shown by its name (an id no longer listed shows as is). */
+function LinePick({ value, invalid, onChange }: { value: string; invalid: boolean; onChange: (v: string) => void }) {
+  const { t } = useTranslation("settingsInbox");
+  const { data: lines } = useQuery(q.phoneLines());
+  const items = (lines ?? []).map((l) => ({ value: l.id, label: l.name }));
+  if (value && !items.some((i) => i.value === value)) items.push({ value, label: value });
+  return (
+    <SinglePick
+      items={items}
+      value={value}
+      onChange={onChange}
+      placeholder={t("edit.chooseLine")}
+      invalid={invalid}
+      width={280}
+      className="w-full"
+    />
+  );
 }
 
 function ActionRow({

@@ -25,7 +25,7 @@ import { contactRef, db, userRef, type WsData } from "./db";
 import { publish } from "./gateway";
 import { canSeeTicket, defaultBrand, teamRole } from "./teams";
 import { applyLabels, checkRequiredOnSolve, fieldDefs, fieldFiltersFromQuery, fieldsText, fieldSortValue, matchFields, mergeFields, type FieldFilterIn } from "./labels";
-import { MIN, nowIso, preview, stripHtml, uuid } from "./util";
+import { MIN, nowIso, parseUUID, preview, stripHtml, uuid } from "./util";
 import { botForTicket, botRefFor } from "./bots";
 
 export const OPENISH: TicketStatus[] = ["open", "pending", "on_hold"];
@@ -172,7 +172,7 @@ export function matches(ws: WsData, t: Ticket, raw: ListFilters, meId: string): 
   if (!matchFields(ws, "ticket", t.fields, [...(f.fields ?? []), ...(f.fieldFilters ?? [])])) return false;
   if (f.q) {
     const q = f.q.toLowerCase().trim().replace(/^#/, "");
-    const hay = [t.subject, t.last_message_preview, t.contact?.name ?? "", t.contact?.email ?? "", String(t.number), fieldsText(t.fields)].join(" ").toLowerCase();
+    const hay = [t.subject, t.last_message_preview, t.contact?.name ?? "", t.contact?.email ?? "", String(t.number), t.alias ?? "", fieldsText(t.fields)].join(" ").toLowerCase();
     if (!hay.includes(q)) return false;
   }
   return true;
@@ -283,7 +283,10 @@ export function sortTickets(list: Ticket[], sort: string, order: string | null, 
 
 export function findTicket(ws: WsData, idOrNumber: string): Ticket | undefined {
   const raw = decodeURIComponent(idOrNumber).replace(/^#/, "");
-  const t = /^\d+$/.test(raw) ? ws.tickets.find((x) => x.number === Number(raw)) : ws.tickets.find((x) => x.id === raw);
+  const id = parseUUID(raw);
+  const t = id ? ws.tickets.find((x) => x.id === id) : /^\d+$/.test(raw)
+    ? ws.tickets.find((x) => x.number === Number(raw))
+    : ws.tickets.find((x) => x.id === raw) ?? ws.tickets.find((x) => x.alias?.toLowerCase() === raw.toLowerCase());
   return t && !ws.deletedTickets.has(t.id) ? t : undefined;
 }
 
@@ -345,6 +348,12 @@ export function applyPatch(ws: WsData, t: Ticket, patch: TicketPatch, actor: Use
   if (patch.subject !== undefined && patch.subject !== t.subject) {
     t.subject = patch.subject;
     changes.push("subject");
+  }
+  if (patch.alias !== undefined && (patch.alias ?? null) !== (t.alias ?? null)) {
+    const from = t.alias ?? null;
+    t.alias = patch.alias ?? null;
+    changes.push("alias");
+    act("alias_changed", { from, to: t.alias });
   }
   if (patch.status && patch.status !== t.status) {
     const from = t.status;
@@ -654,6 +663,7 @@ export function newTicket(
     page_url: init.page_url ?? "",
     routed: init.routed ?? null,
     tags: init.tags ?? [],
+    required_skills: [],
     sla: null,
     first_responded_at: null,
     solved_at: null,

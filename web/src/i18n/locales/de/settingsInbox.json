@@ -343,23 +343,28 @@
       "condition": "Jede Bedingung braucht einen Wert, oder entferne sie.",
       "actionValue": "Jede Aktion braucht einen Wert.",
       "phrases": "Eine Liste enthält 1 bis 100 Begriffe, einen pro Zeile, mit je höchstens 500 Zeichen.",
-      "mergeTrigger": "Das Zusammenführen mit dem offenen Ticket des Kontakts läuft nur, wenn ein Ticket erstellt wird."
+      "mergeTrigger": "Das Zusammenführen mit dem offenen Ticket des Kontakts läuft nur, wenn ein Ticket erstellt wird.",
+      "callTrigger": "Anrufbedingungen brauchen den Auslöser Ein Anruf endet."
     },
     "chooseSeverity": "Schweregrad wählen",
     "noSeverity": "Kein Schweregrad",
-    "replyVariablesHint": "Absender-Variablen wie der Name des Agenten sind in automatischen Antworten leer."
+    "replyVariablesHint": "Absender-Variablen wie der Name des Agenten sind in automatischen Antworten leer.",
+    "chooseValue": "Wert wählen",
+    "chooseLine": "Leitung wählen"
   },
   "triggers": {
     "ticket_created": "Ein Ticket wird erstellt",
     "customer_replied": "Der Kunde antwortet",
     "agent_replied": "Ein Agent antwortet",
-    "ticket_updated": "Ein Ticket wird aktualisiert"
+    "ticket_updated": "Ein Ticket wird aktualisiert",
+    "call_ended": "Ein Anruf endet"
   },
   "triggersShort": {
     "ticket_created": "Ticket erstellt",
     "customer_replied": "Kunde hat geantwortet",
     "agent_replied": "Agent hat geantwortet",
-    "ticket_updated": "Ticket aktualisiert"
+    "ticket_updated": "Ticket aktualisiert",
+    "call_ended": "Anruf beendet"
   },
   "fields": {
     "subject": "Betreff",
@@ -375,7 +380,13 @@
     "team_id": "Team",
     "brand_id": "Marke",
     "widget_id": "Chat-Widget",
-    "assignee_id": "Zuständig"
+    "assignee_id": "Zuständig",
+    "call_outcome": "Ergebnis des Anrufs",
+    "call_direction": "Richtung des Anrufs",
+    "call_time": "Zeit des Anrufs",
+    "call_missed_reason": "Grund des verpassten Anrufs",
+    "call_line": "Leitung des Anrufs",
+    "call_tag": "Label des Anrufs"
   },
   "ops": {
     "contains": "enthält",
@@ -576,6 +587,27 @@
       "tickets": "Tickets",
       "saveCap": "Speichern",
       "saveFailed": "Teammitglied konnte nicht aktualisiert werden"
+    },
+    "skills": {
+      "title": "Routing-Fähigkeiten",
+      "hint": "Lege fest, welches Fachwissen Tickets benötigen, und weise Fähigkeiten Teammitgliedern zu.",
+      "add": "Fähigkeit hinzufügen",
+      "namePlaceholder": "Name der Fähigkeit",
+      "createHint": "Gib einen Namen ein, um diese Fähigkeit zu erstellen.",
+      "create": "Fähigkeit erstellen",
+      "created": "{{name}} erstellt",
+      "saveFailed": "Fähigkeit konnte nicht gespeichert werden",
+      "emptyTitle": "Noch keine Fähigkeiten",
+      "emptyHint": "Füge Fähigkeiten wie Abrechnung oder technischen Support hinzu.",
+      "memberCount_one": "{{count}} Teammitglied",
+      "memberCount_other": "{{count}} Teammitglieder",
+      "members": "Teammitglieder zuweisen",
+      "archived": "Archiviert",
+      "archive": "Fähigkeit archivieren",
+      "restore": "Fähigkeit wiederherstellen",
+      "archiveNamed": "{{name}} archivieren",
+      "restoreNamed": "{{name}} wiederherstellen",
+      "note": "Passende Routing-Regeln verlangen diese Fähigkeiten vor der automatischen Zuweisung."
     }
   },
   "triage": {
@@ -735,6 +767,29 @@
         "closed": "An einem Feiertag ist den ganzen Tag geschlossen",
         "sla": "Nur Richtlinien, die Geschäftszeiten zählen, pausieren"
       }
+    }
+  },
+  "callValues": {
+    "call_outcome": {
+      "missed": "Verpasst",
+      "voicemail": "Mailbox",
+      "answered": "Angenommen"
+    },
+    "call_direction": {
+      "inbound": "Eingehend",
+      "outbound": "Ausgehend"
+    },
+    "call_time": {
+      "outside_business_hours": "Außerhalb der Geschäftszeiten",
+      "business_hours": "Während der Geschäftszeiten"
+    },
+    "call_missed_reason": {
+      "out_of_opening_hours": "Außerhalb der Öffnungszeiten",
+      "short_abandoned": "Schnell aufgelegt",
+      "abandoned_in_ivr": "Im Menü aufgelegt",
+      "abandoned_in_classic": "In der Warteschleife aufgelegt",
+      "no_available_agent": "Niemand verfügbar",
+      "agents_did_not_answer": "Niemand hat abgenommen"
     }
   }
 }

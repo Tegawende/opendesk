@@ -79,7 +79,8 @@
     "changelogEntry": "Mise à jour",
     "newUpdate": "Nouvelle mise à jour",
     "myTeams": "Mes équipes",
-    "newTicket": "Nouveau ticket"
+    "newTicket": "Nouveau ticket",
+    "phone": "Téléphone"
   },
   "folders": {
     "unassigned": "Non attribués",
@@ -137,7 +138,8 @@
     "apiKeys": "Clés API",
     "aiClients": "Clients IA",
     "webhooks": "Webhooks",
-    "auditLog": "Journal d’audit"
+    "auditLog": "Journal d’audit",
+    "phone": "Téléphone"
   },
   "settingsPage": "Page des paramètres",
   "command": {
@@ -161,6 +163,7 @@
     "switchWorkspace": "Passer à {{workspace}}",
     "move": "pour naviguer",
     "open": "pour ouvrir",
+    "newTab": "dans un nouvel onglet",
     "workspaceSettings": "Paramètres de l’espace de travail",
     "aiSettings": "Paramètres de l’IA",
     "aiOverview": "Vue d’ensemble de l’agent IA",

@@ -23,6 +23,8 @@ Figma source: https://www.figma.com/design/JfEIfmFuwLsDJCSRXOUQGH/Branding
 
 Regenerate the SVGs and PNGs with `node scripts/build-brand.mjs` (after `pnpm install` in `site/`), then the social card and profile pictures with `pnpm og` in `site/`.
 
+App icons use the ink mark on paper in light and dark appearances. `node scripts/build-brand.mjs` also writes the installed web app icons and the iOS icon. Run `pnpm icons` in `desktop/` to regenerate the desktop icons.
+
 ## Rules
 
 - **Colour:** ink `#0A0A0A` on paper `#FFFFFF`, or the reverse. Steel `#737373` only where the background is unknown, such as an email signature. No gradients, tints, outlines or shadows.

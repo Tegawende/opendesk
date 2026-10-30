@@ -105,6 +105,8 @@ const (
 	ChannelChat   = "chat"
 	ChannelAPI    = "api"
 	ChannelPortal = "portal"
+	// ChannelPhone: a ticket a call opened (contracts/phone.md).
+	ChannelPhone = "phone"
 )
 
 var (
@@ -112,17 +114,18 @@ var (
 	Priorities = []string{"low", "normal", "high", "urgent"}
 	// Severities are ordered most severe first; a ticket may have none (nil).
 	Severities = []string{"sev1", "sev2", "sev3", "sev4"}
-	Channels   = []string{ChannelEmail, ChannelChat, ChannelAPI, ChannelPortal}
+	Channels   = []string{ChannelEmail, ChannelChat, ChannelAPI, ChannelPortal, ChannelPhone}
 )
 
 type Ticket struct {
 	ID        uuid.UUID   `json:"id"`
 	Number    int64       `json:"number"`
+	Alias     *string     `json:"alias" nullable:"true"`
 	Subject   string      `json:"subject"`
 	Status    string      `json:"status" enum:"open,pending,on_hold,solved,closed"`
 	Priority  string      `json:"priority" enum:"low,normal,high,urgent"`
 	Severity  *string     `json:"severity" enum:"sev1,sev2,sev3,sev4" nullable:"true"`
-	Channel   string      `json:"channel" enum:"email,chat,api,portal"`
+	Channel   string      `json:"channel" enum:"email,chat,api,portal,phone"`
 	MailboxID *uuid.UUID  `json:"mailbox_id"`
 	Contact   *ContactRef `json:"contact"`
 	Assignee  *UserRef    `json:"assignee"`
@@ -137,6 +140,7 @@ type Ticket struct {
 	PageURL               string         `json:"page_url"`
 	Routed                *TicketRouted  `json:"routed"`
 	Tags                  []TagRef       `json:"tags"`
+	RequiredSkills        []TicketSkill  `json:"required_skills"`
 	Fields                map[string]any `json:"fields"`
 	SLA                   *TicketSLA     `json:"sla"`
 	FirstRespondedAt      *time.Time     `json:"first_responded_at"`
@@ -155,6 +159,12 @@ type Ticket struct {
 	Custom             map[string]any `json:"custom"`
 	CreatedAt          time.Time      `json:"created_at"`
 	UpdatedAt          time.Time      `json:"updated_at"`
+}
+
+// TicketSkill is a required skill resolved from the workspace catalog.
+type TicketSkill struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
 }
 
 // TicketRouted records why a ticket is in its team (contracts/teams.md "Routing").

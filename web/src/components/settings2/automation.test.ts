@@ -4,6 +4,7 @@ import {
   actionLabel,
   actionNeedsValue,
   aiActions,
+  callFields,
   fieldLabel,
   isPhraseOp,
   mergeWindows,
@@ -17,6 +18,17 @@ import {
   validMergeWindow,
   validPhrases,
 } from "./automation";
+
+describe("call conditions", () => {
+  it("labels the call trigger and fields, with is / is not, and contains for lines and labels", () => {
+    expect(triggerLabel.call_ended).toBe("A call ends");
+    expect(fieldLabel.call_time).toBe("Call time");
+    expect(callFields.has("call_outcome")).toBe(true);
+    expect(callFields.has("subject")).toBe(false);
+    expect(opsFor("call_outcome")).toEqual(["equals", "not_equals"]);
+    expect(opsFor("call_line")).toEqual(["equals", "not_equals", "contains", "not_contains"]);
+  });
+});
 
 describe("automation AI helpers", () => {
   it("offers AI actions only when AI is on, but keeps one in use", () => {

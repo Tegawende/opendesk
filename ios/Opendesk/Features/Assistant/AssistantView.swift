@@ -55,8 +55,10 @@ private struct AssistantScreen: View {
         .tint(Theme.fg)
         .environment(\.openURL, OpenURLAction { links.handle($0) })
         .task { await tips.refresh() }
+        #if DEBUG
         .onAppear { runDemoAction() }
         .onChange(of: env.router.demoAction) { runDemoAction() }
+        #endif
         .onChange(of: chat.finishedRuns) { finished() }
         .onChange(of: chat.approval?.actionID) { _, id in
             if id != nil { Haptics.warning() }

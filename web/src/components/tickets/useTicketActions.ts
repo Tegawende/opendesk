@@ -34,6 +34,7 @@ function settle(qc: QueryClient, t: Ticket, me: string) {
 export function applyPatch(qc: QueryClient, t: Ticket, p: TicketPatch): Ticket {
   const next: Ticket = { ...t, updated_at: new Date().toISOString() };
   if (p.subject !== undefined) next.subject = p.subject;
+  if (p.alias !== undefined) next.alias = p.alias;
   if (p.status !== undefined) {
     next.status = p.status;
     if (p.status === "solved" && !t.solved_at) next.solved_at = new Date().toISOString();

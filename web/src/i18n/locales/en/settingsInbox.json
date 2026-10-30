@@ -359,23 +359,28 @@
       "condition": "Every condition needs a value, or remove it.",
       "actionValue": "Every action needs a value.",
       "phrases": "A phrase list takes 1 to 100 phrases, one per line, of up to 500 characters each.",
-      "mergeTrigger": "Merge into the contact's open ticket runs only when a ticket is created."
+      "mergeTrigger": "Merge into the contact's open ticket runs only when a ticket is created.",
+      "callTrigger": "Call conditions need the trigger A call ends."
     },
     "chooseSeverity": "Choose a severity",
     "noSeverity": "No severity",
-    "replyVariablesHint": "Sender variables, like the agent's name, are empty in automated replies."
+    "replyVariablesHint": "Sender variables, like the agent's name, are empty in automated replies.",
+    "chooseValue": "Choose a value",
+    "chooseLine": "Choose a line"
   },
   "triggers": {
     "ticket_created": "A ticket is created",
     "customer_replied": "The customer replies",
     "agent_replied": "An agent replies",
-    "ticket_updated": "A ticket is updated"
+    "ticket_updated": "A ticket is updated",
+    "call_ended": "A call ends"
   },
   "triggersShort": {
     "ticket_created": "Ticket created",
     "customer_replied": "Customer replied",
     "agent_replied": "Agent replied",
-    "ticket_updated": "Ticket updated"
+    "ticket_updated": "Ticket updated",
+    "call_ended": "Call ended"
   },
   "fields": {
     "subject": "Subject",
@@ -391,7 +396,13 @@
     "team_id": "Team",
     "brand_id": "Brand",
     "widget_id": "Chat widget",
-    "assignee_id": "Assignee"
+    "assignee_id": "Assignee",
+    "call_outcome": "Call outcome",
+    "call_direction": "Call direction",
+    "call_time": "Call time",
+    "call_missed_reason": "Missed call reason",
+    "call_line": "Call line",
+    "call_tag": "Call label"
   },
   "ops": {
     "contains": "contains",
@@ -592,6 +603,27 @@
       "tickets": "tickets",
       "saveCap": "Save",
       "saveFailed": "Couldn't update this teammate"
+    },
+    "skills": {
+      "title": "Routing skills",
+      "hint": "Describe the expertise needed for tickets and assign each skill to teammates.",
+      "add": "Add skill",
+      "namePlaceholder": "Skill name",
+      "createHint": "Enter a name to create this skill.",
+      "create": "Create skill",
+      "created": "Created {{name}}",
+      "saveFailed": "Couldn't save skill",
+      "emptyTitle": "No skills yet",
+      "emptyHint": "Add skills such as Billing or Technical support.",
+      "memberCount_one": "{{count}} teammate",
+      "memberCount_other": "{{count}} teammates",
+      "members": "Assign teammates",
+      "archived": "Archived",
+      "archive": "Archive skill",
+      "restore": "Restore skill",
+      "archiveNamed": "Archive {{name}}",
+      "restoreNamed": "Restore {{name}}",
+      "note": "Skills are required by matching routing rules before automatic assignment."
     }
   },
   "triage": {
@@ -751,6 +783,29 @@
         "closed": "A holiday is closed for the whole day",
         "sla": "Only policies that count business hours pause"
       }
+    }
+  },
+  "callValues": {
+    "call_outcome": {
+      "missed": "Missed",
+      "voicemail": "Voicemail",
+      "answered": "Answered"
+    },
+    "call_direction": {
+      "inbound": "Inbound",
+      "outbound": "Outbound"
+    },
+    "call_time": {
+      "outside_business_hours": "Outside business hours",
+      "business_hours": "Within business hours"
+    },
+    "call_missed_reason": {
+      "out_of_opening_hours": "Outside opening hours",
+      "short_abandoned": "Hung up quickly",
+      "abandoned_in_ivr": "Hung up in the menu",
+      "abandoned_in_classic": "Hung up while waiting",
+      "no_available_agent": "No teammate available",
+      "agents_did_not_answer": "Nobody answered"
     }
   }
 }

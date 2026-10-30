@@ -365,23 +365,28 @@
       "condition": "Renseignez une valeur pour chaque condition, ou supprimez-la.",
       "actionValue": "Chaque action doit avoir une valeur.",
       "phrases": "Une liste compte de 1 à 100 expressions, une par ligne, de 500 caractères au plus chacune.",
-      "mergeTrigger": "La fusion dans le ticket ouvert du contact ne s’exécute qu’à la création d’un ticket."
+      "mergeTrigger": "La fusion dans le ticket ouvert du contact ne s’exécute qu’à la création d’un ticket.",
+      "callTrigger": "Les conditions d'appel demandent le déclencheur Un appel se termine."
     },
     "chooseSeverity": "Choisir une gravité",
     "noSeverity": "Aucune gravité",
-    "replyVariablesHint": "Les variables d’expéditeur, comme le nom de l’agent, sont vides dans les réponses automatiques."
+    "replyVariablesHint": "Les variables d’expéditeur, comme le nom de l’agent, sont vides dans les réponses automatiques.",
+    "chooseValue": "Choisir une valeur",
+    "chooseLine": "Choisir une ligne"
   },
   "triggers": {
     "ticket_created": "Un ticket est créé",
     "customer_replied": "Le client répond",
     "agent_replied": "Un agent répond",
-    "ticket_updated": "Un ticket est mis à jour"
+    "ticket_updated": "Un ticket est mis à jour",
+    "call_ended": "Un appel se termine"
   },
   "triggersShort": {
     "ticket_created": "Ticket créé",
     "customer_replied": "Réponse du client",
     "agent_replied": "Réponse d’un agent",
-    "ticket_updated": "Ticket mis à jour"
+    "ticket_updated": "Ticket mis à jour",
+    "call_ended": "Appel terminé"
   },
   "fields": {
     "subject": "Objet",
@@ -397,6 +402,12 @@
     "team_id": "Équipe",
     "brand_id": "Marque",
     "widget_id": "Widget de chat",
+    "call_outcome": "Issue de l'appel",
+    "call_direction": "Sens de l'appel",
+    "call_time": "Heure de l'appel",
+    "call_missed_reason": "Raison de l'appel manqué",
+    "call_line": "Ligne de l'appel",
+    "call_tag": "Étiquette de l'appel",
     "assignee_id": "Responsable"
   },
   "ops": {
@@ -601,6 +612,28 @@
       "tickets": "tickets",
       "saveCap": "Enregistrer",
       "saveFailed": "Impossible de mettre à jour ce collègue"
+    },
+    "skills": {
+      "title": "Compétences de routage",
+      "hint": "Définissez l’expertise nécessaire pour les tickets et attribuez chaque compétence aux membres de l’équipe.",
+      "add": "Ajouter une compétence",
+      "namePlaceholder": "Nom de la compétence",
+      "createHint": "Saisissez un nom pour créer cette compétence.",
+      "create": "Créer la compétence",
+      "created": "{{name}} créée",
+      "saveFailed": "Impossible d’enregistrer la compétence",
+      "emptyTitle": "Aucune compétence",
+      "emptyHint": "Ajoutez des compétences comme Facturation ou Assistance technique.",
+      "memberCount_one": "{{count}} membre",
+      "memberCount_many": "{{count}} membres",
+      "memberCount_other": "{{count}} membres",
+      "members": "Attribuer aux membres",
+      "archived": "Archivée",
+      "archive": "Archiver la compétence",
+      "restore": "Restaurer la compétence",
+      "archiveNamed": "Archiver {{name}}",
+      "restoreNamed": "Restaurer {{name}}",
+      "note": "Les règles de routage correspondantes exigent ces compétences avant l’attribution automatique."
     }
   },
   "triage": {
@@ -762,6 +795,29 @@
         "closed": "Un jour de fermeture couvre toute la journée",
         "sla": "Seules les politiques en heures ouvrées sont suspendues"
       }
+    }
+  },
+  "callValues": {
+    "call_outcome": {
+      "missed": "Manqué",
+      "voicemail": "Messagerie vocale",
+      "answered": "Répondu"
+    },
+    "call_direction": {
+      "inbound": "Entrant",
+      "outbound": "Sortant"
+    },
+    "call_time": {
+      "outside_business_hours": "En dehors des horaires d'ouverture",
+      "business_hours": "Pendant les horaires d'ouverture"
+    },
+    "call_missed_reason": {
+      "out_of_opening_hours": "En dehors des horaires d'ouverture",
+      "short_abandoned": "Raccroché rapidement",
+      "abandoned_in_ivr": "Raccroché dans le menu",
+      "abandoned_in_classic": "Raccroché pendant l'attente",
+      "no_available_agent": "Aucun collègue disponible",
+      "agents_did_not_answer": "Personne n'a répondu"
     }
   }
 }

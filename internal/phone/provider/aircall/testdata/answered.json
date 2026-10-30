@@ -1,0 +1,218 @@
+[
+  {
+    "resource": "call",
+    "event": "call.created",
+    "timestamp": 1793095200,
+    "token": "hook-token-1",
+    "data": {
+      "id": 1290001,
+      "direct_link": "https://api.aircall.io/v1/calls/1290001",
+      "direction": "inbound",
+      "status": "initial",
+      "missed_call_reason": null,
+      "started_at": 1793095200,
+      "answered_at": null,
+      "ended_at": null,
+      "duration": 0,
+      "voicemail": null,
+      "voicemail_short_url": null,
+      "recording": null,
+      "recording_short_url": null,
+      "asset": null,
+      "raw_digits": "+32 470 12 34 56",
+      "user": null,
+      "contact": null,
+      "archived": false,
+      "assigned_to": null,
+      "tags": [],
+      "comments": [],
+      "teams": [],
+      "cost": "0.0",
+      "country_code_a2": "BE",
+      "pricing_type": "regular",
+      "sid": "CA0001",
+      "transferred_by": null,
+      "transferred_to": null,
+      "number": {
+        "id": 501,
+        "direct_link": "https://api.aircall.io/v1/numbers/501",
+        "name": "FR - Support",
+        "digits": "+32 2 588 00 00",
+        "country": "BE",
+        "time_zone": "Europe/Brussels",
+        "open": true
+      }
+    }
+  },
+  {
+    "resource": "call",
+    "event": "call.ringing_on_agent",
+    "timestamp": 1793095202,
+    "token": "hook-token-1",
+    "data": {
+      "id": 1290001,
+      "direct_link": "https://api.aircall.io/v1/calls/1290001",
+      "direction": "inbound",
+      "status": "initial",
+      "missed_call_reason": null,
+      "started_at": 1793095200,
+      "answered_at": null,
+      "ended_at": null,
+      "duration": 0,
+      "voicemail": null,
+      "voicemail_short_url": null,
+      "recording": null,
+      "recording_short_url": null,
+      "asset": null,
+      "raw_digits": "+32 470 12 34 56",
+      "user": {
+        "id": 9001,
+        "direct_link": "https://api.aircall.io/v1/users/9001",
+        "name": "Anna Agent",
+        "email": "anna@example.com",
+        "available": true
+      },
+      "contact": null,
+      "archived": false,
+      "assigned_to": null,
+      "tags": [],
+      "comments": [],
+      "teams": [],
+      "cost": "0.0",
+      "country_code_a2": "BE",
+      "pricing_type": "regular",
+      "sid": "CA0001",
+      "transferred_by": null,
+      "transferred_to": null,
+      "number": {
+        "id": 501,
+        "direct_link": "https://api.aircall.io/v1/numbers/501",
+        "name": "FR - Support",
+        "digits": "+32 2 588 00 00",
+        "country": "BE",
+        "time_zone": "Europe/Brussels",
+        "open": true
+      }
+    }
+  },
+  {
+    "resource": "call",
+    "event": "call.answered",
+    "timestamp": 1793095210,
+    "token": "hook-token-1",
+    "data": {
+      "id": 1290001,
+      "direct_link": "https://api.aircall.io/v1/calls/1290001",
+      "direction": "inbound",
+      "status": "answered",
+      "missed_call_reason": null,
+      "started_at": 1793095200,
+      "answered_at": 1793095210,
+      "ended_at": null,
+      "duration": 0,
+      "voicemail": null,
+      "voicemail_short_url": null,
+      "recording": null,
+      "recording_short_url": null,
+      "asset": null,
+      "raw_digits": "+32 470 12 34 56",
+      "user": {
+        "id": 9001,
+        "direct_link": "https://api.aircall.io/v1/users/9001",
+        "name": "Anna Agent",
+        "email": "anna@example.com",
+        "available": true
+      },
+      "contact": null,
+      "archived": false,
+      "assigned_to": null,
+      "tags": [],
+      "comments": [],
+      "teams": [],
+      "cost": "0.0",
+      "country_code_a2": "BE",
+      "pricing_type": "regular",
+      "sid": "CA0001",
+      "transferred_by": null,
+      "transferred_to": null,
+      "number": {
+        "id": 501,
+        "direct_link": "https://api.aircall.io/v1/numbers/501",
+        "name": "FR - Support",
+        "digits": "+32 2 588 00 00",
+        "country": "BE",
+        "time_zone": "Europe/Brussels",
+        "open": true
+      }
+    }
+  },
+  {
+    "resource": "call",
+    "event": "call.ended",
+    "timestamp": 1793095420,
+    "token": "hook-token-1",
+    "data": {
+      "id": 1290001,
+      "direct_link": "https://api.aircall.io/v1/calls/1290001",
+      "direction": "inbound",
+      "status": "done",
+      "missed_call_reason": null,
+      "started_at": 1793095200,
+      "answered_at": 1793095210,
+      "ended_at": 1793095390,
+      "duration": 190,
+      "voicemail": null,
+      "voicemail_short_url": null,
+      "recording": "https://aircall-recordings.example.com/r/1290001.mp3?sig=x",
+      "recording_short_url": "https://short.aircall.io/r/AbC",
+      "asset": "https://assets.aircall.io/calls/1290001/recording",
+      "raw_digits": "+32 470 12 34 56",
+      "user": {
+        "id": 9001,
+        "direct_link": "https://api.aircall.io/v1/users/9001",
+        "name": "Anna Agent",
+        "email": "anna@example.com",
+        "available": true
+      },
+      "contact": null,
+      "archived": false,
+      "assigned_to": null,
+      "tags": [
+        {
+          "id": 1,
+          "name": "Order"
+        }
+      ],
+      "comments": [
+        {
+          "id": 77,
+          "content": "Wants a replacement bulb",
+          "posted_at": 1793095400,
+          "posted_by": {
+            "id": 9001,
+            "direct_link": "https://api.aircall.io/v1/users/9001",
+            "name": "Anna Agent",
+            "email": "anna@example.com",
+            "available": true
+          }
+        }
+      ],
+      "teams": [],
+      "cost": "0.0",
+      "country_code_a2": "BE",
+      "pricing_type": "regular",
+      "sid": "CA0001",
+      "transferred_by": null,
+      "transferred_to": null,
+      "number": {
+        "id": 501,
+        "direct_link": "https://api.aircall.io/v1/numbers/501",
+        "name": "FR - Support",
+        "digits": "+32 2 588 00 00",
+        "country": "BE",
+        "time_zone": "Europe/Brussels",
+        "open": true
+      }
+    }
+  }
+]

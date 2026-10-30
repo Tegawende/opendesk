@@ -26,6 +26,7 @@ Messages are on their own page: [Messages and attachments](/api/resources/messag
 type Ticket = {
   id: string;
   number: number;
+  alias: string | null; // optional workspace-unique reference; not an authorization token
   subject: string;
   status: "open" | "pending" | "on_hold" | "solved" | "closed";
   priority: "low" | "normal" | "high" | "urgent";
@@ -78,12 +79,14 @@ curl "https://api.opendesk.sh/v1/tickets?status=open,pending&assignee=none&sort=
 | `field.<key>`, `field.<key>[<op>]` | a [custom field filter](/api/resources/labels-fields/#filter-and-sort) |
 | `channel` | `email`, `chat`, `api`, `portal` |
 | `channel_not` | comma-separated channels: tickets on none of them |
-| `q` | text search |
+| `q` | full-text search, an exact ticket alias, or a ticket number |
 | `spam` | `true` or `false` |
 | `sort` | `last_message_at`, `created_at`, `priority`, `severity` (sev1 first, none last), `due`, `field.<key>` |
 | `order` | `asc` or `desc` |
 
 Plus [`limit` and `cursor`](/api/pagination/).
+
+`GET /v1/tickets/{id}` also accepts an alias, case-insensitively. Aliases follow the same workspace and private-team visibility rules as UUID and number lookups. Agents can set or clear an alias with `PATCH /v1/tickets/{id}`; use 2 to 40 letters, numbers or hyphens, including at least one letter. UUID forms, including compact hexadecimal and wrapped forms, are reserved for ticket IDs. An alias is a lookup convenience, not proof of identity or permission.
 
 ## Counts
 

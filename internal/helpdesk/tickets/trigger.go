@@ -37,9 +37,20 @@ func (w *TriggerWorker) Work(ctx context.Context, job *river.Job[jobs.TicketTrig
 	return RunTrigger(ctx, w.D, job.Args)
 }
 
+var errCallTicketMoved = errors.New("call ticket moved during trigger")
+
 // RunTrigger applies SLA policies, automations, auto-assignment and the new ticket and
 // reply notifications for one ticket change, in one transaction.
 func RunTrigger(ctx context.Context, d *deps.Deps, a jobs.TicketTriggerArgs) error {
+	for {
+		err := runTrigger(ctx, d, a)
+		if !errors.Is(err, errCallTicketMoved) {
+			return err
+		}
+	}
+}
+
+func runTrigger(ctx context.Context, d *deps.Deps, a jobs.TicketTriggerArgs) error {
 	// A suspended workspace runs no automations (contracts/admin.md).
 	if suspended, err := domain.WorkspaceSuspended(ctx, d.DB.Pool, a.WorkspaceID); err != nil || suspended {
 		return err
@@ -52,6 +63,17 @@ func RunTrigger(ctx context.Context, d *deps.Deps, a jobs.TicketTriggerArgs) err
 		}
 	}
 	return d.DB.Tx(ctx, func(tx pgx.Tx) error {
+		if a.Trigger == jobs.TriggerCallEnded && a.CallID != nil {
+			var current *uuid.UUID
+			err := tx.QueryRow(ctx, `SELECT ticket_id FROM phone_calls WHERE workspace_id = $1 AND id = $2`, a.WorkspaceID, *a.CallID).Scan(&current)
+			if db.IsNotFound(err) || err == nil && current == nil {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			a.TicketID = *current
+		}
 		// Runs for one ticket share an advisory lock, so each sees the previous run's writes
 		// while agents can keep editing during a model call.
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('ticket_trigger:' || $1::text, 0))`, a.TicketID); err != nil {
@@ -64,7 +86,7 @@ func RunTrigger(ctx context.Context, d *deps.Deps, a jobs.TicketTriggerArgs) err
 		if err != nil {
 			return err
 		}
-		run := &triggerRun{d: d, tx: tx, wid: a.WorkspaceID, tid: a.TicketID, fired: map[uuid.UUID]bool{}, messageID: a.MessageID}
+		run := &triggerRun{d: d, tx: tx, wid: a.WorkspaceID, tid: a.TicketID, fired: map[uuid.UUID]bool{}, messageID: a.MessageID, callID: a.CallID}
 
 		updated := func(field string) bool {
 			return a.Trigger == jobs.TriggerTicketUpdated && slices.Contains(a.Changes, field)
@@ -177,6 +199,10 @@ type triggerRun struct {
 	teamMoved bool
 	// messageID is the message the run is about, if any.
 	messageID *uuid.UUID
+	// callID is the phone call a call_ended run is about (contracts/phone.md), and call
+	// its facts once read.
+	callID *uuid.UUID
+	call   *callFacts
 	// gone is set when an automation deleted the ticket or merged it into another: nothing
 	// else runs on it.
 	gone bool
@@ -207,6 +233,18 @@ func (r *triggerRun) automations(ctx context.Context, trigger string, messageID 
 	}
 	if err := r.decide(ctx, list); err != nil {
 		return err
+	}
+	if r.callID != nil {
+		if _, err := lockTicket(ctx, r.tx, r.wid, r.tid); err != nil {
+			return err
+		}
+		var current *uuid.UUID
+		if err := r.tx.QueryRow(ctx, `SELECT ticket_id FROM phone_calls WHERE workspace_id = $1 AND id = $2`, r.wid, *r.callID).Scan(&current); err != nil {
+			return err
+		}
+		if current == nil || *current != r.tid {
+			return errCallTicketMoved
+		}
 	}
 	var changed []string
 	for _, a := range list {
@@ -259,6 +297,17 @@ type facts struct {
 	contactEmail                                                   *string
 	fields, contactFields                                          map[string]any
 	defs                                                           map[string]domain.FieldDefs // by entity
+	// call is the call of a call_ended run; nil otherwise, and then call conditions fail.
+	call *callFacts
+}
+
+// callFacts are what call conditions read (contracts/phone.md "Automations").
+type callFacts struct {
+	outcome, direction, missedReason, time string
+	// lineID is the provider's id of the line, which equals and not_equals compare;
+	// line is its name, which contains and not_contains read.
+	lineID, line string
+	tags         []string
 }
 
 func (r *triggerRun) facts(ctx context.Context, messageID *uuid.UUID) (facts, error) {
@@ -304,6 +353,24 @@ func (r *triggerRun) facts(ctx context.Context, messageID *uuid.UUID) (facts, er
 	if f.fromEmail == "" && f.contactEmail != nil {
 		f.fromEmail = *f.contactEmail
 	}
+	if r.callID != nil && r.call != nil {
+		f.call = r.call
+	} else if r.callID != nil {
+		var c callFacts
+		var outside bool
+		err := r.tx.QueryRow(ctx, `SELECT outcome, direction, missed_reason, outside_hours, line_id, line_name, tags FROM phone_calls
+			WHERE workspace_id = $1 AND id = $2`, r.wid, *r.callID).Scan(&c.outcome, &c.direction, &c.missedReason, &outside, &c.lineID, &c.line, &c.tags)
+		if err != nil && !db.IsNotFound(err) {
+			return f, err
+		}
+		if err == nil {
+			c.time = "business_hours"
+			if outside {
+				c.time = "outside_business_hours"
+			}
+			f.call, r.call = &c, &c // the call does not change during the run
+		}
+	}
 	return f, nil
 }
 
@@ -339,22 +406,11 @@ func match(c hd.Condition, f facts) bool {
 		}
 		return p > c.DecideThreshold()
 	}
+	if slices.Contains(hd.CallFields, c.Field) {
+		return matchCall(c, f.call)
+	}
 	if c.Field == "tag" {
-		if c.Op == "not_contains" || c.Op == "not_equals" || c.Op == "none" {
-			// "tag not_equals x" holds when no tag equals x; "tag none" when no tag contains a phrase.
-			for _, t := range f.tags {
-				if !compare(c.Op, t, c.Value) {
-					return false
-				}
-			}
-			return true
-		}
-		for _, t := range f.tags {
-			if compare(c.Op, t, c.Value) {
-				return true
-			}
-		}
-		return false
+		return matchTags(c, f.tags)
 	}
 	var v string
 	switch c.Field {
@@ -390,6 +446,52 @@ func match(c hd.Condition, f facts) bool {
 		return false
 	}
 	return compare(c.Op, v, c.Value)
+}
+
+// matchTags holds a condition against a list of labels: "not_equals x" holds when no label
+// equals x, "none" when no label contains a phrase; the others when one label does.
+func matchTags(c hd.Condition, tags []string) bool {
+	if c.Op == "not_contains" || c.Op == "not_equals" || c.Op == "none" {
+		for _, t := range tags {
+			if !compare(c.Op, t, c.Value) {
+				return false
+			}
+		}
+		return true
+	}
+	for _, t := range tags {
+		if compare(c.Op, t, c.Value) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchCall holds a call condition; without a call (another trigger) none holds.
+func matchCall(c hd.Condition, call *callFacts) bool {
+	if call == nil {
+		return false
+	}
+	switch c.Field {
+	case "call_outcome":
+		return compare(c.Op, call.outcome, c.Value)
+	case "call_direction":
+		return compare(c.Op, call.direction, c.Value)
+	case "call_missed_reason":
+		return compare(c.Op, call.missedReason, c.Value)
+	case "call_time":
+		return compare(c.Op, call.time, c.Value)
+	case "call_line":
+		// A line is picked by its id, which stays when the line is renamed; its name is
+		// for contains and not_contains.
+		if c.Op == "equals" || c.Op == "not_equals" {
+			return compare(c.Op, call.lineID, c.Value)
+		}
+		return compare(c.Op, call.line, c.Value)
+	case "call_tag":
+		return matchTags(c, call.tags)
+	}
+	return false
 }
 
 func compare(op, have, want string) bool {
@@ -676,12 +778,15 @@ func autoAssign(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID
 		return err
 	}
 	var assignee, team, mailbox *uuid.UUID
+	var requiredSkillIDs []uuid.UUID
 	var status string
 	var spam bool
 	var custom map[string]any
-	if err := tx.QueryRow(ctx, `SELECT assignee_id, team_id, mailbox_id, status, spam, custom FROM tickets
+	if err := tx.QueryRow(ctx, `SELECT assignee_id, team_id, mailbox_id, status, spam, custom,
+		COALESCE((SELECT array_agg(skill_id ORDER BY skill_id) FROM ticket_skills WHERE workspace_id = tickets.workspace_id AND ticket_id = tickets.id), '{}')
+		FROM tickets
 		WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`, wid, tid).
-		Scan(&assignee, &team, &mailbox, &status, &spam, &custom); err != nil {
+		Scan(&assignee, &team, &mailbox, &status, &spam, &custom, &requiredSkillIDs); err != nil {
 		if db.IsNotFound(err) {
 			return nil
 		}
@@ -714,7 +819,7 @@ func autoAssign(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID
 		}
 		pool = mbTeam
 	}
-	next, err := PickAssignee(ctx, tx, wid, pool, mode)
+	next, err := PickAssignee(ctx, tx, wid, pool, mode, requiredSkillIDs)
 	if err != nil || next == nil {
 		return err
 	}
@@ -729,8 +834,19 @@ type candidate struct {
 
 // PickAssignee chooses the next agent of a pool (a team, or the whole workspace) and
 // moves the pool's cursor. Eligible: owners, admins and agents whose presence is
-// online and who are under their open ticket cap. nil when nobody is eligible.
-func PickAssignee(ctx context.Context, tx pgx.Tx, wid uuid.UUID, team *uuid.UUID, mode string) (*uuid.UUID, error) {
+// online, who are under their open ticket cap, and who hold every required skill. The
+// qualifying member-skill rows stay key-shared through the caller's assignee write.
+// nil means nobody is eligible.
+func PickAssignee(ctx context.Context, tx pgx.Tx, wid uuid.UUID, team *uuid.UUID, mode string, requiredSkillIDs []uuid.UUID) (*uuid.UUID, error) {
+	// Member-skill replacement takes the workspace lock before locking a skill and
+	// replacing its relations. Take that same first lock before any eligibility or
+	// cursor lock so replacement cannot form a cycle with the assignment event write.
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM workspaces WHERE id = $1 FOR NO KEY UPDATE`, wid); err != nil {
+		return nil, err
+	}
+	requiredSkillIDs = slices.Clone(requiredSkillIDs)
+	slices.SortFunc(requiredSkillIDs, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	requiredSkillIDs = slices.Compact(requiredSkillIDs)
 	key := "workspace"
 	q := `SELECT m.user_id, ` + domain.OpenTicketsSQL + ` FROM members m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id
 		WHERE m.workspace_id = $1 AND m.role IN ('owner','admin','agent') AND ` + domain.PresenceSQL + ` = 'online'
@@ -743,6 +859,13 @@ func PickAssignee(ctx context.Context, tx pgx.Tx, wid uuid.UUID, team *uuid.UUID
 			WHERE tm.user_id = m.user_id AND tm.team_id = $2 AND tt.workspace_id = $1 AND tm.role IN ('lead', 'member'))`
 		args = append(args, *team)
 	}
+	if len(requiredSkillIDs) > 0 {
+		skillArg := "$" + fmt.Sprint(len(args)+1)
+		countArg := "$" + fmt.Sprint(len(args)+2)
+		q += ` AND (SELECT count(*) FROM member_skills ms WHERE ms.workspace_id = m.workspace_id
+			AND ms.user_id = m.user_id AND ms.skill_id = ANY(` + skillArg + `::uuid[])) = ` + countArg
+		args = append(args, requiredSkillIDs, len(requiredSkillIDs))
+	}
 	rows, err := tx.Query(ctx, q+` ORDER BY m.user_id`, args...)
 	if err != nil {
 		return nil, err
@@ -753,6 +876,29 @@ func PickAssignee(ctx context.Context, tx pgx.Tx, wid uuid.UUID, team *uuid.UUID
 	})
 	if err != nil || len(cands) == 0 {
 		return nil, err
+	}
+	if len(requiredSkillIDs) > 0 {
+		// A member deletion can hold a relation before publishing its workspace event.
+		// Skip busy relations so assignment never waits in the reverse order.
+		eligible := make([]candidate, 0, len(cands))
+		for _, c := range cands {
+			rows, err := tx.Query(ctx, `SELECT skill_id FROM member_skills
+				WHERE workspace_id = $1 AND user_id = $2 AND skill_id = ANY($3::uuid[]) FOR KEY SHARE SKIP LOCKED`, wid, c.ID, requiredSkillIDs)
+			if err != nil {
+				return nil, err
+			}
+			locked, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+			if err != nil {
+				return nil, err
+			}
+			if len(locked) == len(requiredSkillIDs) {
+				eligible = append(eligible, c)
+			}
+		}
+		cands = eligible
+		if len(cands) == 0 {
+			return nil, nil
+		}
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO round_robin_cursors (workspace_id, pool) VALUES ($1, $2) ON CONFLICT DO NOTHING`, wid, key); err != nil {
 		return nil, err

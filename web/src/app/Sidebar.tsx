@@ -3,11 +3,11 @@
 // icon-only rail (`b` or the Collapse row) that keeps every row reachable.
 
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, Copy, EyeOff, Inbox, Keyboard, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Fragment, lazy, Suspense, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Fragment, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ChecklistMini, ProgressRing, stepsLeft } from "@/components/onboarding/Checklist";
 import { useUrgentChats, useWaitingFor } from "@/components/tickets/useUrgentChats";
@@ -33,7 +33,8 @@ import { q } from "@/lib/queries";
 import { atLeast, loadAccounts, useRole, useSession, useWorkspace } from "@/lib/session";
 import { useTheme, type ThemePref } from "@/lib/theme";
 import { desktop } from "@/lib/desktop";
-import { groupViews, readFolded, writeFolded } from "@/lib/viewSections";
+import { groupViews } from "@/lib/viewSections";
+import { useFoldedSections, useOpenView, ViewSectionGroup } from "./ViewSectionGroup";
 import { shell, toggleNav, useNav } from "./shellStore";
 import { quickEntries, quickSwitchKeys, useAccountActions, useQuickSwitch, useSwitcherEntries } from "./useAccounts";
 import { Count, Label, NavTip, PillCtx, rowActive, rowBase, rowIdle, rowShape, Section, WaitDot, WaitingBadge, withPill } from "./sidebarParts";
@@ -299,11 +300,10 @@ function TeamsSection({ rail, drawer, first, counts, hidden = NONE, rp }: { rail
 }
 
 /**
- * The views, those of a section under a row that folds them (lib/viewSections). The fold is
- * the member's, kept in this browser per workspace; folded, the row shows what its views
- * would. The rail shows every view, a hairline above each section.
+ * The views, those of a section under a row that folds them (ViewSectionGroup). The fold is
+ * the member's, kept in this browser per workspace; a section's menu pins it to Favorites.
  */
-function ViewList({ views, rail, row, count, waiting }: {
+function ViewList({ views, rail, row, count, waiting, prefs }: {
   views: View[];
   rail: boolean;
   row: (v: View, nested: boolean) => ReactNode;
@@ -311,58 +311,31 @@ function ViewList({ views, rail, row, count, waiting }: {
   count: (v: View) => number | undefined;
   /** Visitors waiting in chat on a view's tickets. */
   waiting: (v: View) => number;
+  prefs: SidebarPrefs;
 }) {
-  const { t } = useTranslation("shell");
-  const wid = useSession((s) => s.workspaceId) ?? "";
-  const uid = useSession((s) => s.user?.id) ?? "";
-  const owner = `${wid}:${uid}`;
-  const [folded, setFolded] = useState(() => readFolded(wid, uid));
-  const [foldedFor, setFoldedFor] = useState(owner);
-  if (foldedFor !== owner) {
-    setFoldedFor(owner);
-    setFolded(readFolded(wid, uid));
-  }
-  // The open view, so a folded section that holds it reads as current.
-  const openView = useRouterState({ select: (s) => { const p = s.location.pathname.split("/").filter(Boolean); return p[0] === "views" ? p[1] : undefined; } });
-  const idBase = useId();
-  const toggle = (key: string) => {
-    const next = new Set(folded);
-    if (!next.delete(key)) next.add(key);
-    setFolded(next);
-    writeFolded(wid, uid, next);
-  };
+  const [folded, toggle] = useFoldedSections("views");
+  const openView = useOpenView();
   return groupViews(views).map((e, i) => {
     if (e.kind === "view") return <Fragment key={e.view.id}>{row(e.view, false)}</Fragment>;
-    const shut = folded.has(e.key) && !rail;
-    const nums = e.views.map(count).filter((n): n is number => n !== undefined);
-    const sum = nums.length ? nums.reduce((a, b) => a + b, 0) : undefined;
-    const current = shut && e.views.some((v) => v.id === openView);
-    const listId = `${idBase}-section-${i}`;
     return (
-      <div key={`section:${e.key}`} role="group" aria-label={t("nav.viewSection", { name: e.name })} className="flex flex-col gap-px">
-        {rail ? (
-          i > 0 && <div aria-hidden className="mx-4 my-1 h-px bg-chrome-line" />
-        ) : (
-          <button
-            type="button"
-            aria-expanded={!shut}
-            aria-controls={listId}
-            onClick={() => toggle(e.key)}
-            title={e.name}
-            className={cn(rowBase, rowShape(rail), rowIdle, current && "font-medium text-fg")}
-          >
-            <ChevronRight className={cn("transition-transform duration-150 motion-reduce:transition-none", !shut && "rotate-90")} />
-            <Label rail={rail}>{e.name}</Label>
-            {current && <span className="sr-only">{t("nav.viewSectionCurrent")}</span>}
-            {/* Folded away: what its views would show, here. */}
-            {shut && <WaitingBadge n={e.views.reduce((a, v) => a + waiting(v), 0)} rail={rail} />}
-            {shut && <Count n={sum} rail={rail} />}
-          </button>
+      <ViewSectionGroup
+        key={`section:${e.key}`}
+        name={e.name}
+        views={e.views}
+        rail={rail}
+        folded={folded.has(e.key)}
+        onToggle={() => toggle(e.key)}
+        divider={i > 0}
+        openView={openView}
+        row={(v) => row(v, !rail)}
+        count={count}
+        waiting={waiting}
+        menu={(header) => (
+          <RowMenu enabled prefs={prefs} pin={{ kind: "view_section", id: e.key }} rail={rail} label={e.name}>
+            {header}
+          </RowMenu>
         )}
-        <div id={listId} className="flex flex-col gap-px">
-          {!shut && e.views.map((v) => <Fragment key={v.id}>{row(v, !rail)}</Fragment>)}
-        </div>
-      </div>
+      />
     );
   });
 }
@@ -456,6 +429,7 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
               rail={rail}
               count={(v) => shown(hid.view(v.id), "views", ticketRowNumbers(counts, hid.view(v.id)))}
               waiting={(v) => waitingFor({ kind: "view", id: v.id })}
+              prefs={prefs}
               row={(v, nested) => {
                 const nums = ticketRowNumbers(counts, hid.view(v.id));
                 return (

@@ -376,6 +376,14 @@
     "details": "Détails",
     "ticket": "Ticket",
     "copyLink": "Copier le lien",
+    "reference": "Référence",
+    "referenceHint": "Ajoutez une référence facultative pour permettre aux clients ou à l’équipe de retrouver ce ticket. Utilisez de 2 à 40 lettres, chiffres ou tirets, avec au moins une lettre. Les formats UUID sont réservés aux identifiants de ticket.",
+    "referencePlaceholder": "COMMANDE-42",
+    "noReference": "Aucune",
+    "copyReference": "Copier la référence",
+    "editReference": "Modifier la référence",
+    "addReference": "Ajouter une référence",
+    "saveReference": "Enregistrer la référence",
     "channel": "Canal",
     "mailbox": "Boîte mail",
     "created": "Création",
@@ -387,7 +395,8 @@
     "receivedAt": "Reçu à",
     "aliasOf": "Un alias de {{address}}",
     "startedOn": "Démarré sur",
-    "importedFrom": "Importé depuis"
+    "importedFrom": "Importé depuis",
+    "requiredSkills": "Compétences requises"
   },
   "sla": {
     "title": "SLA",
@@ -440,6 +449,7 @@
     "slaFirst": "L’objectif de première réponse n’a pas été respecté",
     "slaResolution": "L’objectif de résolution n’a pas été respecté",
     "subject": "<b>{{who}}</b> a modifié l’objet",
+    "alias": "<b>{{who}}</b> a modifié la référence du ticket",
     "snoozed": "<b>{{who}}</b> a mis ce ticket en attente",
     "snoozedUntil": "<b>{{who}}</b> a mis ce ticket en attente jusqu’à <m>{{when}}</m>",
     "unsnoozed": "Mise en attente terminée",
@@ -849,6 +859,35 @@
     "nothingElse": "Rien d’autre ne change.",
     "back": "Retour aux équipes",
     "move": "Déplacer"
+  },
+  "call": {
+    "withheld": "un numéro masqué",
+    "inProgress": "En cours",
+    "ringing": "Sonne",
+    "voicemail": "Messagerie vocale",
+    "missed": "Manqué",
+    "noAnswer": "Sans réponse",
+    "answered": "Répondu",
+    "outboundBy": "{{who}} a appelé {{caller}}",
+    "outbound": "Appel vers {{caller}}",
+    "inboundAnsweredBy": "{{caller}} a appelé, {{who}} a répondu",
+    "inbound": "Appel de {{caller}}",
+    "outsideHours": "En dehors des horaires d'ouverture",
+    "line": "Ligne {{line}}",
+    "playRecording": "Écouter l'enregistrement",
+    "playVoicemail": "Écouter le message vocal",
+    "openIn": "Ouvrir dans {{provider}}",
+    "summary": "Résumé",
+    "showTranscript": "Afficher la transcription",
+    "hideTranscript": "Masquer la transcription",
+    "reason": {
+      "out_of_opening_hours": "En dehors des horaires d'ouverture",
+      "short_abandoned": "Raccroché rapidement",
+      "abandoned_in_ivr": "Raccroché dans le menu",
+      "abandoned_in_classic": "Raccroché pendant l'attente",
+      "no_available_agent": "Aucun collègue disponible",
+      "agents_did_not_answer": "Personne n'a répondu"
+    }
   },
   "panels": {
     "refresh": "Actualiser {{name}}",

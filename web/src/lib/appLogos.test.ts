@@ -4,7 +4,7 @@ import { appForUrl, appLogo } from "./appLogos";
 describe("app logos", () => {
   it("ships a logo for every catalog provider and import source", () => {
     const keys = ["linear", "github", "atlassian", "sentry", "notion", "asana", "monday", "slack", "intercom", "close", "stripe", "paypal", "square", "box", "zapier"];
-    for (const k of [...keys, "zendesk", "helpscout", "freshdesk", "discord", "telegram"]) expect(appLogo(k), k).toBe(`/logos/apps/${k}.svg`);
+    for (const k of [...keys, "zendesk", "helpscout", "freshdesk", "discord", "telegram", "aircall", "shopify", "odoo"]) expect(appLogo(k), k).toBe(`/logos/apps/${k}.svg`);
     for (const k of ["custom", "link", "csv", "", null, undefined]) expect(appLogo(k)).toBeNull();
   });
 
@@ -12,6 +12,8 @@ describe("app logos", () => {
     expect(appForUrl("https://github.com/acme/app/issues/12")).toBe("github");
     expect(appForUrl("https://acme.atlassian.net/browse/OPS-4")).toBe("atlassian");
     expect(appForUrl("https://app.asana.com/0/1/2")).toBe("asana");
+    expect(appForUrl("https://acme.odoo.com/odoo/sales/42")).toBe("odoo");
+    expect(appForUrl("https://www.odoo.com/documentation")).toBe("odoo");
     expect(appForUrl("https://notgithub.com/x")).toBeNull();
     expect(appForUrl("https://github.com.evil.io/x")).toBeNull();
     expect(appForUrl("not a url")).toBeNull();

@@ -43,6 +43,7 @@ const ticket = (patch: Partial<Ticket> = {}): Ticket =>
     received_at: "support@margin.test",
     page_url: "",
     routed: null,
+    required_skills: [],
     tags: [{ id: "tag1", name: "Refund", color: null }],
     fields: {},
     sla: null,
@@ -152,6 +153,12 @@ describe("ticket properties in a bar above the conversation", () => {
 });
 
 describe("the details column", () => {
+  it("keeps required skill labels in the details column when the bar is on", async () => {
+    await render(<TicketProperties t={ticket({ required_skills: [{ id: "skill-billing", name: "Billing" }] })} picker={null} onPicker={() => {}} bar />);
+    expect(host.textContent).toContain("Required skills");
+    expect(host.textContent).toContain("Billing");
+  });
+
   it("starts with the properties, the customer further down, by default", async () => {
     await render(<TicketProperties t={ticket()} picker={null} onPicker={() => {}} />);
     const column = host.firstElementChild!;

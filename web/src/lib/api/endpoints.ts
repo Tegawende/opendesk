@@ -3,6 +3,7 @@
 import { http, stream, streamEvents, type StreamHandlers } from "./client";
 import type * as T from "./types";
 import { creatingTicket } from "../ownTickets";
+import { uiLanguage } from "@/i18n";
 
 type ListQuery = { limit?: number; cursor?: string | null };
 
@@ -179,7 +180,7 @@ export type BrandBody = Partial<Pick<T.Brand, "name" | "slug" | "color" | "local
   help_center?: Partial<Pick<T.Brand["help_center"], "enabled" | "title">>;
 };
 export type WidgetBody = { brand_id?: string; name?: string; team_id?: string | null; bot_id?: string | null; settings?: Partial<T.WidgetSettings> };
-export type RoutingRuleBody = Partial<Pick<T.RoutingRule, "name" | "enabled" | "match" | "conditions" | "team_id">>;
+export type RoutingRuleBody = Partial<Pick<T.RoutingRule, "name" | "enabled" | "match" | "conditions" | "team_id" | "skill_ids">>;
 export type RoutingTestBody = {
   channel: "email" | "chat";
   to?: string;
@@ -379,6 +380,12 @@ export const api = {
     uploadImage: (id: string, file: File | Blob) => http.put<T.Bot>(`/v1/bots/${id}/image`, imageForm(file)),
     removeImage: (id: string) => http.del<T.Bot>(`/v1/bots/${id}/image`),
   },
+  skills: {
+    list: () => http.get<T.Page<T.Skill>>("/v1/skills"),
+    create: (b: { name: string }) => http.create<T.Skill>("/v1/skills", b),
+    update: (id: string, b: Partial<Pick<T.Skill, "name" | "archived">>) => http.patch<T.Skill>(`/v1/skills/${id}`, b),
+    replaceMembers: (id: string, member_ids: string[]) => http.put<T.Skill>(`/v1/skills/${id}/members`, { member_ids }),
+  },
   routingRules: {
     ...crud<T.RoutingRule, RoutingRuleBody>("/v1/routing-rules"),
     reorder: (ids: string[]) => http.post<void>("/v1/routing-rules/reorder", { ids }),
@@ -424,6 +431,16 @@ export const api = {
     update: (id: string, b: { name?: string; enabled?: boolean; disabled_tools?: string[]; ask_tools?: string[]; auto_tools?: string[]; token?: string }) =>
       http.patch<T.Integration>(`/v1/integrations/${id}`, b),
     remove: (id: string) => http.del(`/v1/integrations/${id}`),
+  },
+  phone: {
+    providers: () => http.get<{ data: T.PhoneProvider[] }>("/v1/phone/providers"),
+    connections: () => http.get<{ data: T.PhoneConnection[] }>("/v1/phone/connections"),
+    connect: (b: { provider: string; name?: string; credentials: Record<string, string> }) => http.create<T.PhoneConnection>("/v1/phone/connections", b),
+    update: (id: string, b: { name?: string; reuse_days?: number; assign_answered?: boolean; insight_cards?: boolean; credentials?: Record<string, string> }) =>
+      http.patch<T.PhoneConnection>(`/v1/phone/connections/${id}`, b),
+    test: (id: string) => http.post<T.PhoneConnection>(`/v1/phone/connections/${id}/test`),
+    disconnect: (id: string) => http.del(`/v1/phone/connections/${id}`),
+    lines: () => http.get<{ data: T.PhoneLine[] }>("/v1/phone/lines"),
   },
   ticketPanels: {
     list: () => http.get<{ data: T.TicketPanel[] }>("/v1/ticket-panels"),
@@ -479,7 +496,11 @@ export const api = {
     retryDelivery: (eventSeq: number) => http.post<{ event_seq: number; status: "queued" }>(`/v1/support-channels/deliveries/${eventSeq}/retry`),
     addDestination: (b: { connection_id: string; team_id?: string; priority?: "low" | "normal" | "high" | "urgent"; external_channel_id: string; external_channel_name?: string; include_notes?: boolean; message_limit?: number }) =>
       http.create<T.SupportChannelDestination>("/v1/support-channels/destinations", b),
+    updateDestination: (id: string, b: T.SupportChannelOllieUpdate) =>
+      http.patch<T.SupportChannelDestination>(`/v1/support-channels/destinations/${id}`, b),
     removeDestination: (id: string) => http.del(`/v1/support-channels/destinations/${id}`),
+    ollie: () => http.get<T.SupportChannelOllie>("/v1/support-channels/ollie"),
+    setOllie: (b: T.SupportChannelOllie) => http.put<T.SupportChannelOllie>("/v1/support-channels/ollie", b),
     linkCode: () => http.create<{ code: string; expires_at: string }>("/v1/me/support-channel-link-code", {}),
   },
   imports: {
@@ -570,9 +591,12 @@ export const api = {
     render: (id: string, body_html: string, thread?: boolean) =>
       http.post<{ body_html: string }>(`/v1/tickets/${id}/render`, { body_html, thread: thread || undefined }),
     links: (id: string) => http.get<{ data: T.TicketLink[] }>(`/v1/tickets/${id}/links`),
-    /** What a ticket panel's product knows about the ticket's contact; `refresh` asks it again. */
+    /**
+     * What a ticket panel's product knows about the ticket's contact; `refresh` asks it again. An
+     * http panel's URL is told the app's language, so it can answer in it.
+     */
     panel: (id: string, panelId: string, refresh = false) =>
-      http.get<T.TicketPanelData>(`/v1/tickets/${id}/panels/${panelId}${refresh ? "?refresh=true" : ""}`),
+      http.get<T.TicketPanelData>(`/v1/tickets/${id}/panels/${panelId}`, { query: { refresh: refresh || undefined, locale: uiLanguage() } }),
     addLink: (id: string, b: { url: string; title?: string; integration_id?: string }) => http.create<T.TicketLink>(`/v1/tickets/${id}/links`, b),
     removeLink: (id: string, linkId: string) => http.del(`/v1/tickets/${id}/links/${linkId}`),
   },

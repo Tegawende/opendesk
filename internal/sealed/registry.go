@@ -34,6 +34,8 @@ var Columns = []Column{
 	{"imports", "id", "credentials_enc"},                     // import source credentials
 	{"support_channel_connections", "id", "credentials_enc"}, // Slack, Discord and Telegram credentials
 	{"collab_accounts", "id", "credentials_enc"},             // Collab mail account credentials
+	{"phone_connections", "id", "credentials_enc"},           // phone provider API credentials
+	{"phone_connections", "id", "webhook_secret_enc"},        // phone provider webhook tokens
 	{"ticket_panels", "id", "secret_enc"},                    // ticket panel Shopify tokens and signing secrets
 }
 
@@ -48,6 +50,8 @@ var NotSealed = []string{
 	"app_attest_challenges.challenge_hash",
 	"app_attest_keys.public_key",
 	"auth_throttle.key",
+	"customer_password_resets.token_hash",
+	"customer_sessions.refresh_hash",
 	"idempotency_keys.request_hash",
 	"invitations.token_hash",
 	"oauth_authorizations.code_hash",

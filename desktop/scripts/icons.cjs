@@ -14,11 +14,11 @@ const mark = readFileSync(join(brand, "logo", "mark.svg"), "utf8").match(/d="([^
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
     <filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.28"/></filter>
-    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c1c1c"/><stop offset="1" stop-color="#0a0a0a"/></linearGradient>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#f4f4f4"/></linearGradient>
   </defs>
   <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#g)" filter="url(#s)"/>
-  <rect x="100.5" y="100.5" width="823" height="823" rx="184.5" fill="none" stroke="#fff" stroke-opacity="0.08"/>
-  <path transform="translate(296 296) scale(6.75)" fill="#fff" fill-rule="evenodd" d="${mark}"/>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="184.5" fill="none" stroke="#0a0a0a" stroke-opacity="0.08"/>
+  <path transform="translate(296 296) scale(6.75)" fill="#0a0a0a" fill-rule="evenodd" d="${mark}"/>
 </svg>`;
 
 app.whenReady().then(async () => {

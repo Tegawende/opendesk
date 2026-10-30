@@ -19,6 +19,8 @@ it exists, and this file is the contract the parts are built against.
 - Workspace-scoped routes need `OD-Workspace: <id>` (agents) or an API key. An `OD-Workspace` the caller is not a member of (or that no longer exists) is treated as absent: `400 workspace_required`, the same answer either way.
 - PATCH bodies: an omitted or `null` member is left unchanged. Clear an optional reference with `""`
   (mailbox `team_id`, KB article `collection_id`) unless the route documents `null` (ticket PATCH, contact `company_id`).
+  A relationship list is similarly preserved when omitted; routes that support clearing it document an
+  explicit empty array (for example, routing-rule `skill_ids`).
 - Idempotency: `Idempotency-Key` header (1..255 printable ASCII) on authenticated POST routes, kept 24h per
   workspace and principal. A retry with the same key, route and body replays the stored response with
   `Idempotent-Replayed: true`; a different body or route is `422 idempotency_key_reused`, a retry while the first
@@ -55,6 +57,7 @@ type WorkspaceSettings = { brand_color?: string; timezone?: string; help_center_
   undo_send_seconds?: 0 | 5 | 10 | 20 | 30 /* default 5: the app holds an agent's reply on an email (or any other non-chat) ticket this long before it POSTs it, with Undo (back into the composer) and Turn into internal note; nothing reaches the server until then, so the API itself never delays; 0 sends at once */;
   undo_send_chat_seconds?: 0 | 5 | 10 | 20 | 30 /* default 0: the same for replies on chat tickets, which go at once unless set */;
   send_and_finish_button?: boolean /* default false: the app's composer shows "Send and solve" (or "Send and close" when solved is labelled Closed; a custom finish label) as a segment before Send rather than only in its menu, in the same words as the ticket header's finish button; display only */;
+  agent_online_time?: boolean /* default true: heartbeats count toward each member's online time and the agents report shows it ("Agents report"); false records none, deletes the online time recorded so far (agent_presence), and the report answers online_time "off" */;
   status_labels?: Partial<Record<TicketStatus, DisplayOverride>>; priority_labels?: Partial<Record<Priority, DisplayOverride>> /* display only; the API values never change */ };
 type DisplayOverride = { label?: string /* 1..40, no < > */; color?: LabelColor; hidden?: boolean /* status_labels only: left out of the menus agents pick a status from (a ticket in it keeps it; the API, automations and snooze still set it); never open or solved; finishing always sets solved, including when its display label is Closed */ };
 type Membership = { workspace: Workspace; role: Role; suspended: boolean /* an instance admin suspended it: its routes answer 403 workspace_suspended (contracts/admin.md) */ };
@@ -77,11 +80,12 @@ type CompanyRef = { id: string; name: string; domain: string; avatar_url: string
 type TicketStatus = "open" | "pending" | "on_hold" | "solved" | "closed";
 type Priority = "low" | "normal" | "high" | "urgent";
 type Severity = "sev1" | "sev2" | "sev3" | "sev4"; // business impact, sev1 the most severe; a ticket may have none
-type Channel = "email" | "chat" | "api" | "portal";
+type Channel = "email" | "chat" | "api" | "portal" | "phone"; // phone: a ticket a call opened (contracts/phone.md)
+type TicketSkill = { id: string; name: string }; // a workspace skill required by this ticket's matched route
 type Ticket = {
-  id: string; number: number; subject: string; status: TicketStatus; priority: Priority; severity: Severity | null; channel: Channel;
+  id: string; number: number; alias: string | null /* optional, workspace-unique reference; not an authorization token */; subject: string; status: TicketStatus; priority: Priority; severity: Severity | null; channel: Channel;
   mailbox_id: string | null; contact: ContactRef | null; assignee: UserRef | null; team_id: string | null;
-  tags: TagRef[]; fields: FieldValues; sla: { policy_id: string; first_response_due_at: string | null; resolution_due_at: string | null; breached: boolean } | null;
+  tags: TagRef[]; required_skills: TicketSkill[] /* fixed when the ticket is created; automatic assignment requires every one, while manual assignment remains available */; fields: FieldValues; sla: { policy_id: string; first_response_due_at: string | null; resolution_due_at: string | null; breached: boolean } | null;
   first_responded_at: string | null; solved_at: string | null; snoozed_until: string | null;
   last_message_at: string; last_customer_message_at: string | null; waiting_since: string | null /* the customer's first unanswered public message; null once anyone (or the AI agent) replied */; unanswered_count: number /* the customer's public messages since the last outbound public reply; 0 once replied */; last_message_preview: string; message_count: number;
   spam: boolean; csat: { score: number; comment: string } | null; custom: Record<string, unknown>;
@@ -110,9 +114,10 @@ type Message = {
 };
 type Attachment = { id: string; filename: string; content_type: string; size_bytes: number; inline: boolean; url: string };
 type Activity = { id: string; ticket_id: string; actor: { type: string; user: UserRef | null }; type: string; data: Record<string, unknown>; created_at: string };
-// activity types: status_changed{from,to, reason?: "sender_unverified" | "thread_replied", message_id?} (with "sender_unverified", from equals to: a reply that failed sender checks left the status where it was, actor "system"; "thread_replied": an answer in a third-party thread opened a pending or on-hold ticket, actor "system") priority_changed{from,to} severity_changed{from: Severity | null, to: Severity | null} assigned{from,to,via?: "round_robin"|"load_balanced"|"triage"} (actor "system", or "ai" for via "triage") team_changed{from,to,via: "agent"|"automation"|"api"|"triage"|..., mailbox_from?, mailbox_to? /* the reply address switched with the team */} brand_changed{from,to} mailbox_changed{from,to} /* the reply address */ tagged{tag} untagged{tag} sla_breached{kind} merged{into, into_number /* null when the target is in another, private team */} csat_received{score} linked{link_id,url,title,provider} unlinked{url,title,provider} contact_changed{from,to} /* each {id, name} (the name, else the email) or null */
+// activity types: status_changed{from,to, reason?: "sender_unverified" | "thread_replied", message_id?} (with "sender_unverified", from equals to: a reply that failed sender checks left the status where it was, actor "system"; "thread_replied": an answer in a third-party thread opened a pending or on-hold ticket, actor "system") priority_changed{from,to} severity_changed{from: Severity | null, to: Severity | null} alias_changed{from: string | null, to: string | null} assigned{from,to,via?: "round_robin"|"load_balanced"|"triage"} (actor "system", or "ai" for via "triage") team_changed{from,to,via: "agent"|"automation"|"api"|"triage"|..., mailbox_from?, mailbox_to? /* the reply address switched with the team */} brand_changed{from,to} mailbox_changed{from,to} /* the reply address */ tagged{tag} untagged{tag} sla_breached{kind} merged{into, into_number /* null when the target is in another, private team */, via?: "import" /* actor "system": an import's sync followed the source's merge */} csat_received{score} linked{link_id,url,title,provider} unlinked{url,title,provider} contact_changed{from,to} /* each {id, name} (the name, else the email) or null */
 // thread_started{thread_id, subject, to} thread_closed{thread_id, subject} thread_reopened{thread_id, subject} ("Threads"); note_edited{message_id} and note_deleted{message_id} record internal note changes without the note text; reply_retracted{message_id} records a chat reply taken back from the customer; message_deleted{message_id}, message_restored{message_id} and message_purged{message_id} record deletions of messages other than notes; note_sent_as_reply{message_id, reply_id} records a note sent as the reply written from it
 // field_changed{key, name, from, to} (one per custom field; from/to are FieldValue | null)
+// call{CallData} (actor "system", contracts/phone.md "Timeline"): one per phone call, updated in place as the call moves on (activity.updated)
 // AI (actor.type "ai", contracts/ai.md): ai_triaged{category,sentiment,language,priority,severity,via,model?,engine?}; AI changes carry {via, model?: "jev", confidence?: number} ai_answered{message_id,sources,tools} ai_action{action_id,tool,status} ai_handoff (actor "ai" or "contact")
 
 // Labels ("tags" in the API). See "Labels and custom fields" below.
@@ -170,9 +175,10 @@ type OAuthRequest = { id: string; client: OAuthClientInfo; scopes: string[]; exp
   workspaces: { id: string; name: string; role: Role; scopes: string[] /* requested ∩ role */ }[] };
 type AIClientConnection = { id: string; client: OAuthClientInfo; user: UserRef; mine: boolean; scopes: string[];
   created_at: string; last_used_at: string | null };
-type Automation = { id: string; name: string; trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated"; conditions: Condition[]; actions: Action[]; enabled: boolean; position: number; run_count: number };
+type Automation = { id: string; name: string; trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated" | "call_ended" /* contracts/phone.md "Automations" */; conditions: Condition[]; actions: Action[]; enabled: boolean; position: number; run_count: number };
 type Condition = {
-  field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "severity" | "status" | "tag" | "sentiment" | "ai_decide" | "assignee_id" | "team_id" | "brand_id" | "widget_id" | "received_at" | `field.${string}` | `contact.field.${string}`;
+  field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "severity" | "status" | "tag" | "sentiment" | "ai_decide" | "assignee_id" | "team_id" | "brand_id" | "widget_id" | "received_at" | `field.${string}` | `contact.field.${string}`
+    | "call_outcome" | "call_direction" | "call_missed_reason" | "call_time" | "call_line" | "call_tag"; // call_ended only (contracts/phone.md)
   op: "contains" | "not_contains" | "equals" | "not_equals" | "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "any" | "all" | "none" | "set" | "not_set";
   value: string; // up to 500 characters; any/none on a text field: a phrase list (below)
   question?: string; // ai_decide only: a yes/no question, 3..300 characters of plain text
@@ -280,7 +286,7 @@ type NotificationPreferences = {
 | PATCH | `/v1/me` | `{name?, avatar_url?, time_format?}` → `User`. `time_format` is account-wide, across workspaces; another value is `422`. `avatar_url` is a picture to copy: an https URL fetched and processed server-side (asynchronously; `member.updated` follows), `""` removes the picture |
 | PUT | `/v1/me/avatar` | multipart `file` (PNG, JPEG, GIF or WebP, at most 5 MB) → `User` with `avatar_source: "upload"`. Audit `user.avatar_updated` |
 | DELETE | `/v1/me/avatar` | → `User` with no picture; the next Google or GitHub sign-in brings the provider picture back. Audit `user.avatar_removed` |
-| POST | `/v1/me/heartbeat` | → 204. Marks the user seen (auto-away). The web app sends it every 2 minutes while a tab is visible, the iPhone app every 5 while open. With `OD-Workspace` it also counts toward the member's online time there ("Agents report") |
+| POST | `/v1/me/heartbeat` | → 204. Marks the user seen (auto-away). The web app sends it every 2 minutes while a tab is visible, the iPhone app every 5 while open. With `OD-Workspace` it also counts toward the member's online time there ("Agents report"), unless the workspace's `settings.agent_online_time` is false |
 | POST | `/v1/me/password` | `{current_password, new_password}` → 204 |
 | GET | `/v1/me/sessions` / DELETE `/v1/me/sessions/{id}` | paginated `[{id, user_agent, ip, created_at, last_used_at, current, client: "web"\|"desktop"\|"ios"}]` / revoke (deletes the session's push devices) |
 | POST | `/v1/me/devices` | `{platform: "ios", token?, relay_token?, environment: "production"\|"sandbox", app_version, name}` → `Device`. Exactly one of `token` (hex APNs token, `push: "direct"`) or `relay_token` (`push: "relay"`); the other mode answers `422 push_unavailable`. Upserts by token and binds the device to the calling session, which keeps one device (a new token replaces the old). Audit `push_device.registered` |
@@ -501,12 +507,12 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 ### Helpdesk (owner: backend-helpdesk)
 | method | path | notes |
 | --- | --- | --- |
-| GET | `/v1/tickets` | filters: `status` (csv), `priority` (csv), `severity` (csv of `sev1`..`sev4` and `none`), `assignee` (`me`/`none`/uuid), `team_id` (csv of uuids, `mine` for the caller's teams, `none`: tickets of any of them), `team_not` (same values: tickets of none of them), `brand_id`, `widget_id`, `mailbox_id`, `mailbox_not` (csv of uuids), `received_at` (the address a ticket was first written to: a mailbox's address or an alias, case-insensitive), `tag` (csv of label names: any of them), `tag_not` (csv of label names: none of them), `untagged` (`true`: no label), `channel`, `channel_not` (csv), `contact_id`, `contact_not` (csv of contact ids: tickets whose contact is none of them), `company_not` (csv of company ids: tickets whose contact belongs to none of them), `view_id` (an explicit filter replaces the view's own for the same key; `field.*` filters and `untagged=true` add to it), `q`, `spam`, `field.<key>` / `field.<key>[<op>]` (custom fields, below), `sort` (`last_message_at`/`created_at`/`priority`/`severity` (sev1 first, none last)/`due`/`field.<key>`), `order` |
+| GET | `/v1/tickets` | filters: `status` (csv), `priority` (csv), `severity` (csv of `sev1`..`sev4` and `none`), `assignee` (`me`/`none`/uuid), `team_id` (csv of uuids, `mine` for the caller's teams, `none`: tickets of any of them), `team_not` (same values: tickets of none of them), `brand_id`, `widget_id`, `mailbox_id`, `mailbox_not` (csv of uuids), `received_at` (the address a ticket was first written to: a mailbox's address or an alias, case-insensitive), `tag` (csv of label names: any of them), `tag_not` (csv of label names: none of them), `untagged` (`true`: no label), `channel`, `channel_not` (csv), `contact_id`, `contact_not` (csv of contact ids: tickets whose contact is none of them), `company_not` (csv of company ids: tickets whose contact belongs to none of them), `view_id` (an explicit filter replaces the view's own for the same key; `field.*` filters and `untagged=true` add to it), `q` (full text or exact ticket alias), `spam`, `field.<key>` / `field.<key>[<op>]` (custom fields, below), `sort` (`last_message_at`/`created_at`/`priority`/`severity` (sev1 first, none last)/`due`/`field.<key>`), `order` |
 | GET | `/v1/tickets/counts` | → `{ unassigned, mine, open, pending, on_hold, solved, spam, views: {<view_id>: n}, teams: {<team_id>: {open, unassigned}}, my_teams: {open, unassigned}, stats: {<row id>: {awaiting, urgent, overdue}} }`. `teams` lists every team the caller can see (open and pending, spam excluded); `my_teams` sums the caller's teams; Every count, the folders and `views` included, covers only tickets the caller can see (contracts/teams.md "Visibility"): a private team's tickets count for its members and for their assignee. `stats` breaks a sidebar row's tickets down, over the same tickets as its count: `ticket_folder:unassigned`, `ticket_folder:mine`, `ticket_folder:open`, `ticket_folder:pending` (pending and on hold), `team:<id>` for each team in `teams`, `team:mine` (as `my_teams`) and `view:<id>` for each view in `views`. `awaiting`: open or pending, and the customer's last message is the last message (within a second); `urgent`: urgent priority; `overdue`: not solved or closed, and the due time that applies has passed (first response while unanswered, else resolution) or an SLA breach is recorded |
 | GET | `/v1/tickets/summary` | the list `GET /v1/tickets` pages through, counted whole for the same filters (`view_id`, `q` and the rest; `sort`, `order`, `limit` and `cursor` are ignored) and the same visibility → `{ complete, total, awaiting, urgent, overdue, due_soon }`. `awaiting`, `urgent` and `overdue` follow `stats` in `/v1/tickets/counts`; `due_soon`: not solved, closed or overdue, and the due time that applies is within the hour. The tickets are read through the list's own filter, at most 10 000 of them: past that, or for a full-text search (`q`), nothing is counted and `complete` is `false` with every count 0. The inbox's summary strip shows these numbers, and the loaded rows' (labelled as the first ones shown) while they load or when `complete` is `false` |
 | POST | `/v1/tickets` | `{subject, contact_id? , contact?: {email,name}, channel?: "email"\|"api", mailbox_id?, brand_id?, body_html, kind?: "reply"\|"note", priority?, severity?, assignee_id?, team_id?, tags?: string[], fields?: FieldValues, status?}`; an email ticket with a reply is sent to the contact (`422 mailbox_cannot_send` when its mailbox has `sending: "system_off"`; nothing is created). Without `team_id` the team comes from routing (contracts/teams.md "Routing"); `brand_id` defaults to the mailbox's brand, else the default brand (`mailbox_id` of another brand: `422`; an address the caller may not send from: `403 forbidden`). An assignee who is not on a private team is `422 not_on_team` |
-| GET | `/v1/tickets/{id}` | id is uuid, or `#<number>` / numeric number |
-| PATCH | `/v1/tickets/{id}` | `{subject?, status?, priority?, severity? /* null clears */, contact_id? /* a contact in this workspace */, assignee_id?, team_id?, mailbox_id? /* the reply address */, brand_id?, snoozed_until?, spam?, tags?: string[] /* replaces */, add_tags?: string[], remove_tags?: string[], custom?, fields?: Record<string, FieldValue \| null> /* merged; null clears */}`. Changing `contact_id` changes the recipient of future replies; existing messages stay as sent. It logs `contact_changed` and publishes `ticket.updated` with `contact_id` in `changes`. A live chat stays with the visitor who started it (the widget lists their chats by contact): changing its contact is `422`, and so is `contact_id` in a bulk patch. A status of `solved` or `closed` with an empty `required_on_solve` field is `422 field_required`. Setting `snoozed_until` without a `status` moves the ticket to `on_hold`; a status change that is not `on_hold` clears the snooze. Changing `priority`, `severity`, `team_id`, `spam` or labels removes Ollie's pending suggestion for that field (`custom.ai_suggestions`, contracts/ai.md). `team_id`, `mailbox_id` and `brand_id` follow contracts/teams.md "Reply address": an address of another brand is `422`, one the caller may not send from `403 forbidden`, an assignee not on the ticket's private team `422 not_on_team` (a team change alone unassigns them) |
+| GET | `/v1/tickets/{id}` | id is uuid, alias, `#<number>` or numeric number; aliases are case-insensitive and follow the same workspace and private-team visibility rules |
+| PATCH | `/v1/tickets/{id}` | `{subject?, alias? /* 2..40 letters, digits or hyphens, at least one letter; distinct from every reference accepted as a UUID; unique in this workspace; null or empty clears */, status?, priority?, severity? /* null clears */, contact_id? /* a contact in this workspace */, assignee_id?, team_id?, mailbox_id? /* the reply address */, brand_id?, snoozed_until?, spam?, tags?: string[] /* replaces */, add_tags?: string[], remove_tags?: string[], custom?, fields?: Record<string, FieldValue \| null> /* merged; null clears */}`. Changing `alias` logs `alias_changed` and publishes `ticket.updated` with `alias` in `changes`. Changing `contact_id` changes the recipient of future replies; existing messages stay as sent. It logs `contact_changed` and publishes `ticket.updated` with `contact_id` in `changes`. A live chat stays with the visitor who started it (the widget lists their chats by contact): changing its contact is `422`, and so is `contact_id` in a bulk patch. A status of `solved` or `closed` with an empty `required_on_solve` field is `422 field_required`. Setting `snoozed_until` without a `status` moves the ticket to `on_hold`; a status change that is not `on_hold` clears the snooze. Changing `priority`, `severity`, `team_id`, `spam` or labels removes Ollie's pending suggestion for that field (`custom.ai_suggestions`, contracts/ai.md). `team_id`, `mailbox_id` and `brand_id` follow contracts/teams.md "Reply address": an address of another brand is `422`, one the caller may not send from `403 forbidden`, an assignee not on the ticket's private team `422 not_on_team` (a team change alone unassigns them) |
 | DELETE | `/v1/tickets/{id}` | soft delete |
 | POST | `/v1/tickets/bulk` | `{ids /* 1..100 */, patch: {...PATCH body except contact_id}}` or `{ids, delete: true}`; alternatively `{query, patch}` or `{query, delete: true}`, where `query` is the ticket-list filters (without pagination or sorting). Exactly one of `ids` and `query` is required. A query applies only to tickets the caller can see, including the private-team visibility rule, and returns `{data, updated, deleted}` (`data` is returned for an explicit ID selection only). |
 | POST | `/v1/tickets/{id}/merge` | `{into_id}` |
@@ -571,7 +577,7 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 | GET | `/v1/wiki/search?q=&limit=` | viewer (`wiki:read`) → `{data: WikiSearchHit[]}` (default 20, at most 50) |
 | GET | `/v1/search?q=&brand_id=` | → `{tickets: Ticket[], contacts: Contact[], articles: KbArticle[], wiki_pages: WikiSearchHit[]}` (5 each; each kind only with its read scope). `brand_id` (optional) narrows the articles to what that brand shows: its own and those of every brand |
 | GET | `/v1/reports/overview?from=&to=&team_id=&brand_id=` | → `{created, solved, open_now, first_response_p50_minutes, resolution_p50_minutes, csat_avg, csat_count, sla_breached, by_day: [{date, created, solved}], by_channel: {...}, by_severity: Record<Severity \| "none", number> /* tickets created in the range */, by_agent: [{user, solved, first_response_p50_minutes}], by_team: [{team_id: string \| null, created, solved, open_now, first_response_p50_minutes}], by_brand: [{brand_id, created, solved, open_now, first_response_p50_minutes}]}`. `team_id` (a team, or `none`) and `brand_id` narrow every figure. Private teams' tickets are counted, with no subjects or contacts |
-| GET | `/v1/reports/agents?from=&to=&team_id=&brand_id=` | → `{data: ReportAgent[], online_time: "all" \| "self" \| "none"}`, one row per member, most solved first; a member who is not an admin gets their own row only ("Agents report"). Same range, roles, scope and filters as the overview |
+| GET | `/v1/reports/agents?from=&to=&team_id=&brand_id=` | → `{data: ReportAgent[], online_time: "all" \| "self" \| "none" \| "off"}`, one row per member, most solved first; a member who is not an admin gets their own row only ("Agents report"). Same range, roles, scope and filters as the overview |
 | POST | `/v1/attachments` | multipart `file` → `Attachment` (unattached, linked when sent). Only whoever uploaded it (that user, or that API key) may send it in `attachment_ids` (`422` otherwise) |
 | GET | `/v1/attachments/{id}` | → 302 to signed URL or streamed. For img tags, the links messages carry are signed (`?exp=&sig=`) and work for one to two hours. A file on a ticket the caller may not see is `404` (contracts/teams.md "Visibility"); an upload not sent yet is its uploader's alone (`404` for anyone else) |
 
@@ -591,7 +597,7 @@ type ReportAgent = { user: UserRef;
   replies_per_solved: number | null;          // their public replies on the tickets of `solved` since each was created (also before the range), divided by solved; null when 0
   first_response_p50_minutes: number | null;  // the overview's by_agent figure: their tickets created in the range
   handle_p50_minutes: number | null;          // over `solved`: from the last assigned activity to them before the solve (else the ticket's creation) to solved_at
-  online_minutes: number | null;              // time in the app with availability online, inside the range; null when online_time is none
+  online_minutes: number | null;              // time in the app with availability online, inside the range; null when online_time is none or off
 };
 ```
 
@@ -599,9 +605,13 @@ A member's work and online time are personal, and `online_time` says what the ca
 for owners and admins (and API keys with `settings:read`), every row with online time; `self` for
 other members, their own row alone, with its online time (an empty `data` when they have no row,
 as a viewer or off the filtered team); `none` for other API keys, every row without online time
-(`online_minutes` null), as `tickets:read` already reads every ticket. Online time comes from
+(`online_minutes` null), as `tickets:read` already reads every ticket. A workspace can turn online
+time off (`settings.agent_online_time: false`, for instance where recording it needs the team's
+consent or a works council's agreement): turning it off deletes the workspace's stretches, nothing
+is recorded while it is off, and the report answers `off` to everyone, with each caller's rows as
+above and `online_minutes` null. Online time comes from
 `agent_presence`: each `POST /v1/me/heartbeat` with `OD-Workspace` from an owner, admin or agent
-whose `availability` is `online` extends their open stretch, or closes it at its last heartbeat
+whose `availability` is `online`, in a workspace with online time on, extends their open stretch, or closes it at its last heartbeat
 and starts a new one when the last came more than 10 minutes ago.
 Setting your own availability to `online` starts a stretch; leaving `online` ends it (now when
 you change it yourself, at the last heartbeat when someone else does). Stretches are kept 400 days
@@ -829,6 +839,47 @@ Product updates a workspace publishes on its help centers (contracts/teams.md "S
 - A brand's entries go with it when it is deleted (`changelog_entry.deleted` each); null is every brand.
 - The slug is taken from the title unless given; a slug in use is `409 conflict`. Entries and articles have
   separate slugs.
+
+### Customer portal authentication (owner: backend-helpdesk)
+
+The portal uses a separate customer identity for existing contacts; see [Customer portal](customer-portal.md).
+The public routes below are rate limited and use Turnstile. They set `Cache-Control: no-store`.
+
+| method | path | notes |
+| --- | --- | --- |
+| GET | `/v1/public/help/{workspace_slug}/portal/config` | Public brand config: `{title, logo_url, color, locale, locale_fixed, help_url}`. `help_url` is the active verified help-center host, or the configured default URL |
+| POST | `/v1/public/help/{workspace_slug}/portal/auth/login` | `{email, password, turnstile_token}` → `{access_token, expires_at}` and sets the customer refresh cookie. Unknown contacts and invalid passwords receive the same invalid-credentials response. A legacy password that no longer meets policy returns `{change_password: true}` with no token or session |
+| POST | `/v1/public/help/{workspace_slug}/portal/auth/forgot` | `{email, turnstile_token}` → `204`. The response does not reveal whether an eligible contact exists; email lookup and delivery are queued |
+| POST | `/v1/public/help/{workspace_slug}/portal/auth/reset` | `{token, password, turnstile_token}` → `204`. The one-time link is scoped to its workspace, contact and email snapshot; success consumes it and revokes the contact's other customer sessions |
+| POST | `/v1/customer/portal/auth/refresh` | `{workspace_slug}` plus the customer refresh cookie → `{access_token, expires_at}` and rotates the cookie. The slug must resolve to the session's enabled help center |
+| POST | `/v1/customer/portal/auth/logout` | Customer access token → `204`, revokes that session and clears its refresh cookie |
+
+HTTPS uses the host-only HttpOnly `__Host-od_customer_refresh` cookie with SameSite=Lax and Path `/`; HTTP development uses `od_customer_refresh`. The cookie is accepted only without Origin or from the configured app origin, and is never returned in a body.
+
+### Customer portal tickets (owner: backend-helpdesk)
+
+These routes require a customer access token. The live customer session supplies both workspace
+and contact identity. Member tokens, API keys and widget visitor tokens do not grant access.
+A contact can read and reply to their own tickets, including tickets assigned to private teams.
+Tickets belonging to another contact or workspace, spam tickets and deleted tickets return `404`.
+Responses are `Cache-Control: no-store`.
+
+```ts
+type CustomerTicket = { id: string; number: number; subject: string; status: TicketStatus; created_at: string; updated_at: string };
+type CustomerMessage = { id: string; direction: "inbound" | "outbound"; body_text: string; created_at: string };
+```
+
+| method | path | notes |
+| --- | --- | --- |
+| GET | `/v1/customer/portal/tickets` | `{data: CustomerTicket[], next_cursor: string \| null}`; `limit` defaults to 50, range 1..100. Ordered by `updated_at DESC, id DESC`; pass `next_cursor` as `cursor` for the next page |
+| GET | `/v1/customer/portal/tickets/{id}` | `CustomerTicket` |
+| GET | `/v1/customer/portal/tickets/{id}/messages` | `{data: CustomerMessage[], next_cursor: string \| null}`; same bounded `limit` and `cursor`, ordered chronologically by `created_at ASC, id ASC`. Only public replies, with text only; notes, side threads, removed/purged/retracted messages and failed sender-check messages are omitted |
+| POST | `/v1/customer/portal/tickets/{id}/messages` | `{body: string}` (1..10000 characters; whitespace-only refused) → `201 CustomerMessage`. Plain text is trimmed and safely converted to HTML for storage. Written as an inbound contact reply through the normal message transaction, ticket events and `customer_replied` trigger. Pending, on-hold and solved tickets reopen; closed tickets stay closed |
+
+The customer shapes expose no internal ticket fields, agent identities, HTML, email headers,
+attachments or internal activities. Replies accept only plain text; ticket creation, uploads, CCs,
+status changes and side threads are outside these routes. Cursors are opaque, bounded to 512
+characters and validated; malformed or incomplete cursors return `400`.
 
 ### Public, no auth (owner: backend-helpdesk)
 | method | path | notes |

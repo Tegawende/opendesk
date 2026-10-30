@@ -22,7 +22,7 @@ The version is in the path. `/v1` changes only in backward-compatible ways: new 
 
 - Requests and responses are JSON, with `snake_case` keys.
 - Timestamps are RFC 3339 in UTC, such as `2026-10-11T09:00:00Z`.
-- Ids are UUID strings. Tickets can also be addressed by number: `/v1/tickets/1042` or `/v1/tickets/%231042`.
+- Ids are UUID strings. Tickets can also be addressed by alias or number: `/v1/tickets/ORDER-42`, `/v1/tickets/1042` or `/v1/tickets/%231042`.
 - Errors are [problem details](/api/errors/) with a stable `code`.
 - Lists are [cursor paginated](/api/pagination/).
 - Create routes accept an [`Idempotency-Key`](/api/idempotency/).

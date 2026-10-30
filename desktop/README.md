@@ -70,9 +70,24 @@ App id `sh.opendesk.desktop`, product name `opendesk`, URL scheme `opendesk://`.
 
 ## Release
 
-Push a tag `desktop-v<semver>`: `desktop-v0.2.0` for a stable version,
-`desktop-v0.2.0-beta.1` (or any other prerelease, such as `-rc.1`) for a beta.
-`.github/workflows/desktop.yml` builds on macOS, Windows and Linux, then:
+Push one version tag, such as `v0.4.5` or `v0.4.6-beta.1`, to release the server
+and desktop together. `.github/workflows/release.yml` builds the server images
+and desktop installers from that tag, then publishes one GitHub release. Its
+signed `SHA256SUMS` covers the server files, desktop installers, and update
+metadata. Desktop packaging must succeed before the release is published.
+
+To retry an unpublished release after fixing its workflow, run **Release** from
+`main` with `tag=v0.4.5`. Source files, image versions, and desktop installers come
+from that existing tag. The tag stays at its original commit. For a published
+release, rerun the failed jobs of its original workflow instead.
+
+Both full releases and desktop-only releases use `desktop-build.yml` to build
+and sign the apps, then `desktop-publish.yml` to refresh the update feed and
+redeploy the download page. The desktop feed is published after the versioned
+release exists.
+
+For a desktop-only release, push `desktop-v<semver>`, such as
+`desktop-v0.4.5` or `desktop-v0.4.6-beta.1`. `desktop.yml` then:
 
 1. creates the GitHub release `desktop-v<version>` with every installer, the
    update metadata (`latest*.yml`, `beta*.yml`, blockmaps) and `SHA256SUMS`. Its
@@ -108,7 +123,7 @@ publishes nothing. Pull requests touching `desktop/` typecheck and build.
 ### Signing
 
 Signing and notarization use these secrets (repository Settings > Secrets and
-variables > Actions). A `desktop-v*` tag refuses to package macOS or Windows
+variables > Actions). A release tag refuses to package macOS or Windows
 without them and checks the signatures before publishing. Pull requests and
 manual runs build unsigned when they are missing: macOS Gatekeeper and Windows
 SmartScreen warn on first launch, and macOS won't install updates into an

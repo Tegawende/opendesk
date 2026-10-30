@@ -70,10 +70,12 @@ const simpleLists: Record<string, { key: () => readonly unknown[]; field: string
   brand: { key: () => qk.brands, field: "brand" },
   widget: { key: () => qk.widgets, field: "widget" },
   routing_rule: { key: () => qk.routingRules, field: "routing_rule" },
+  skill: { key: () => qk.skills, field: "skill" },
   webhook: { key: () => qk.webhooks, field: "webhook" },
   integration: { key: () => qk.integrations, field: "integration" },
   ticket_panel: { key: () => qk.ticketPanels, field: "panel" },
   support_channel_connection: { key: () => qk.supportChannelConnections, field: "support_channel_connection" },
+  phone_connection: { key: () => qk.phoneConnections, field: "phone_connection" },
   support_channel_destination: { key: () => qk.supportChannelDestinations, field: "support_channel_destination" },
 };
 
@@ -306,6 +308,13 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
       if (a && tid) appendUnique(qc, qk.activities(tid), a);
       return;
     }
+    case "activity.updated": {
+      // A call entry follows its call (contracts/phone.md).
+      const a = d.activity as Activity;
+      const tid = (d.ticket_id as string) ?? a?.ticket_id;
+      if (a && tid) upsertInList(qc, qk.activities(tid), a);
+      return;
+    }
     case "tag.merged": {
       removeFromList(qc, qk.tags, d.tag_id as string);
       if (d.into) upsertInList(qc, qk.tags, d.into as { id: string });
@@ -489,6 +498,12 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
   // refetches so an admin's copy keeps it.
   if (resource === "mailbox") {
     void qc.invalidateQueries({ queryKey: qk.mailboxes });
+    return;
+  }
+
+  // What Ollie may do in support channels is one record per workspace.
+  if (resource === "support_channel_ollie") {
+    if (d.support_channel_ollie) qc.setQueryData(qk.supportChannelOllie, d.support_channel_ollie);
     return;
   }
 
