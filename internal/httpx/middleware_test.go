@@ -138,6 +138,16 @@ func TestCredentialLimit(t *testing.T) {
 	if w := call("POST", nil); w.Code != 204 || w.Header().Get("RateLimit-Limit") != "" {
 		t.Fatalf("anonymous: %d %v", w.Code, w.Header())
 	}
+	customer := &auth.Principal{Kind: auth.KindCustomer, SessionID: uuid.New(), ContactID: uuid.New()}
+	for range credentialWritesPerMinute {
+		call("POST", customer)
+	}
+	if w := call("POST", customer); w.Code != 429 {
+		t.Fatalf("customer exceeded the write limit: %d", w.Code)
+	}
+	if w := call("POST", &auth.Principal{Kind: auth.KindCustomer, SessionID: uuid.New(), ContactID: uuid.New()}); w.Code != 204 {
+		t.Fatalf("another customer shares the window: %d", w.Code)
+	}
 	// Credentials that do not resolve are limited per address.
 	bad := func() int {
 		r := httptest.NewRequest("GET", "/v1/tickets", nil)

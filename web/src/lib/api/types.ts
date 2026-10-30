@@ -57,6 +57,8 @@ export type WorkspaceSettings = {
   message_delete?: "off" | "own" | "all";
   /** The composer shows "Send and solve" (or close, when solved is labelled Closed) as a button next to Send, not only in its menu. Default false. */
   send_and_finish_button?: boolean;
+  /** Heartbeats count toward each member's online time, shown in the agents report. Default true; false records and shows none. */
+  agent_online_time?: boolean;
   /** Display-only names and colours for the fixed statuses and priorities. */
   status_labels?: Partial<Record<TicketStatus, DisplayOverride>>;
   priority_labels?: Partial<Record<Priority, DisplayOverride>>;
@@ -222,6 +224,10 @@ export type RoutingField =
   | `contact.field.${string}`;
 export type RoutingOp = "equals" | "not_equals" | "contains" | "not_contains" | "starts_with" | "gt" | "lt";
 export type RoutingCondition = { field: RoutingField; op: RoutingOp; value: string; question?: string };
+/** A workspace expertise label. Archived skills remain on existing tickets. */
+export type Skill = { id: string; name: string; archived: boolean; member_ids: string[] };
+/** The resolved label a route fixed on a ticket at creation time. */
+export type TicketSkill = Pick<Skill, "id" | "name">;
 export type RoutingRule = {
   id: string;
   name: string;
@@ -231,6 +237,7 @@ export type RoutingRule = {
   match: "all" | "any";
   conditions: RoutingCondition[];
   team_id: string;
+  skill_ids: string[];
   created_at: string;
   updated_at: string;
 };
@@ -240,6 +247,7 @@ export type RoutingTest = {
   mailbox_id: string | null;
   routed: TicketRouted | null;
   steps: { rule_id: string; name: string; matched: boolean | "unknown" }[];
+  required_skills: TicketSkill[];
   assign_mode: AssignMode;
 };
 
@@ -398,6 +406,7 @@ export type Ticket = {
   page_url: string;
   routed: TicketRouted | null;
   tags: TagRef[];
+  required_skills: TicketSkill[];
   fields: FieldValues;
   sla: TicketSla | null;
   first_responded_at: string | null;
@@ -1134,8 +1143,20 @@ export type SupportChannelDestination = {
   include_notes: boolean;
   /** Maximum characters before the provider message links back to opendesk. */
   message_limit: number;
+  /** Ollie posts a summary when a ticket's thread opens. */
+  ollie_summary: boolean;
+  /** Ollie posts SLA and sentiment warnings in ticket threads. */
+  ollie_warnings: boolean;
+  /** How Ollie sounds in this channel's threads; empty for the default. */
+  ollie_personality: string;
+  ollie_length: SupportChannelOllieLength;
   created_at: string;
 };
+export type SupportChannelOllieLength = "brief" | "standard" | "detailed";
+/** Ticket changes Ollie may choose in support channel threads. */
+export type SupportChannelOllieAction = "reply" | "note" | "assign_self" | "status" | "priority" | "create_ticket";
+export type SupportChannelOllie = { actions: SupportChannelOllieAction[] };
+export type SupportChannelOllieUpdate = Partial<Pick<SupportChannelDestination, "ollie_summary" | "ollie_warnings" | "ollie_personality" | "ollie_length">>;
 export type SupportChannelDelivery = {
   event_seq: number;
   event_type: string;
@@ -1549,11 +1570,14 @@ export type ReportsAgentRow = {
   first_response_p50_minutes: number | null;
   /** Median time from the last assignment to them until solved. */
   handle_p50_minutes: number | null;
-  /** Time in the app with availability online; null when `online_time` is none. */
+  /** Time in the app with availability online; null when `online_time` is none or off. */
   online_minutes: number | null;
 };
-/** Whose rows and online time the caller sees: everyone's (admins), their own row only, or every row without online time (API keys). */
-export type ReportsOnlineTime = "all" | "self" | "none";
+/**
+ * Whose rows and online time the caller sees: everyone's (admins), their own row only, or every row without online time (API keys).
+ * off: the workspace turned online time off (settings.agent_online_time), so no row has any; the rows are still the caller's.
+ */
+export type ReportsOnlineTime = "all" | "self" | "none" | "off";
 export type ReportsAgents = { data: ReportsAgentRow[]; online_time: ReportsOnlineTime };
 
 export type MailboxTestLeg = { ok: boolean; error: string; /** The server's reply, scrubbed. */ detail?: string };
@@ -2532,6 +2556,8 @@ export type MailCategorySettings = {
   /** Admins: every team with its own; others: their own teams'. The first in position order the owner is in decides. */
   teams: (MailCategorySet & { team_id: string; team_name: string; position: number })[];
   presets: MailCategory[];
+  /** The fixed categories available when syncing a Google account. */
+  gmail_categories: MailCategory[];
   /** ai: Ollie sorts new mail; rules: sender rules and headers only. */
   sorting: "ai" | "rules";
   /** Ollie can suggest categories. */
@@ -2545,7 +2571,10 @@ export type MailAccountCategories = {
   source: "account" | "team" | "workspace" | "none";
   team: { id: string; name: string } | null;
   /** The account's own choice. */
-  mode: "follow" | "custom" | "off";
+  mode: "follow" | "custom" | "off" | "gmail";
+  /** The effective category authority after workspace policy. */
+  engine: "off" | "local" | "gmail";
+  sync_status?: "refreshing" | "pending" | "failed" | "ready";
   /** Its own categories, kept while it follows. */
   own: MailCategory[];
   /** Ollie may sort its new mail. */
