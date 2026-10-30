@@ -603,6 +603,27 @@
       "tickets": "tickets",
       "saveCap": "Save",
       "saveFailed": "Couldn't update this teammate"
+    },
+    "skills": {
+      "title": "Routing skills",
+      "hint": "Describe the expertise needed for tickets and assign each skill to teammates.",
+      "add": "Add skill",
+      "namePlaceholder": "Skill name",
+      "createHint": "Enter a name to create this skill.",
+      "create": "Create skill",
+      "created": "Created {{name}}",
+      "saveFailed": "Couldn't save skill",
+      "emptyTitle": "No skills yet",
+      "emptyHint": "Add skills such as Billing or Technical support.",
+      "memberCount_one": "{{count}} teammate",
+      "memberCount_other": "{{count}} teammates",
+      "members": "Assign teammates",
+      "archived": "Archived",
+      "archive": "Archive skill",
+      "restore": "Restore skill",
+      "archiveNamed": "Archive {{name}}",
+      "restoreNamed": "Restore {{name}}",
+      "note": "Skills are required by matching routing rules before automatic assignment."
     }
   },
   "triage": {

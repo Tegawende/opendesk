@@ -163,6 +163,7 @@
     "switchWorkspace": "Passer à {{workspace}}",
     "move": "pour naviguer",
     "open": "pour ouvrir",
+    "newTab": "dans un nouvel onglet",
     "workspaceSettings": "Paramètres de l’espace de travail",
     "aiSettings": "Paramètres de l’IA",
     "aiOverview": "Vue d’ensemble de l’agent IA",

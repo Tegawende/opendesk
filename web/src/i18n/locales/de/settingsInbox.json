@@ -587,6 +587,27 @@
       "tickets": "Tickets",
       "saveCap": "Speichern",
       "saveFailed": "Teammitglied konnte nicht aktualisiert werden"
+    },
+    "skills": {
+      "title": "Routing-Fähigkeiten",
+      "hint": "Lege fest, welches Fachwissen Tickets benötigen, und weise Fähigkeiten Teammitgliedern zu.",
+      "add": "Fähigkeit hinzufügen",
+      "namePlaceholder": "Name der Fähigkeit",
+      "createHint": "Gib einen Namen ein, um diese Fähigkeit zu erstellen.",
+      "create": "Fähigkeit erstellen",
+      "created": "{{name}} erstellt",
+      "saveFailed": "Fähigkeit konnte nicht gespeichert werden",
+      "emptyTitle": "Noch keine Fähigkeiten",
+      "emptyHint": "Füge Fähigkeiten wie Abrechnung oder technischen Support hinzu.",
+      "memberCount_one": "{{count}} Teammitglied",
+      "memberCount_other": "{{count}} Teammitglieder",
+      "members": "Teammitglieder zuweisen",
+      "archived": "Archiviert",
+      "archive": "Fähigkeit archivieren",
+      "restore": "Fähigkeit wiederherstellen",
+      "archiveNamed": "{{name}} archivieren",
+      "restoreNamed": "{{name}} wiederherstellen",
+      "note": "Passende Routing-Regeln verlangen diese Fähigkeiten vor der automatischen Zuweisung."
     }
   },
   "triage": {

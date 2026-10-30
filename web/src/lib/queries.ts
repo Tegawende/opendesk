@@ -39,7 +39,7 @@ export function keyBody(key: readonly unknown[]): readonly unknown[] {
 }
 
 /** The roots a user-level key may start with (src/lib/queryKeys.test.ts holds every literal key to it). */
-export const USER_ROOTS = new Set(["auth-config", "me", "public", "invitation-lookup", "oauth", "totp-setup"]);
+export const USER_ROOTS = new Set(["auth-config", "me", "public", "invitation-lookup", "oauth", "totp-setup", "customerPortal"]);
 
 export const qk = {
   /** Every key of one workspace (default: the one in scope). */
@@ -139,6 +139,9 @@ export const qk = {
   get bots() {
     return w(["bots"] as const);
   },
+  get skills() {
+    return w(["skills"] as const);
+  },
   get routingRules() {
     return w(["routing-rules"] as const);
   },
@@ -183,6 +186,9 @@ export const qk = {
   },
   get supportChannelOperations() {
     return w(["support-channels", "operations"] as const);
+  },
+  get supportChannelOllie() {
+    return w(["support-channels", "ollie"] as const);
   },
   supportChannelAvailableDestinations: (id: string) => w(["support-channels", "connections", id, "destinations"] as const),
   get imports() {
@@ -419,6 +425,7 @@ export const q = {
   brands: () => list(qk.brands, () => api.brands.list({ limit: 100 })),
   widgets: () => list(qk.widgets, () => api.widgets.list({ limit: 100 })),
   bots: () => list(qk.bots, () => api.bots.list()),
+  skills: () => list(qk.skills, () => api.skills.list()),
   routingRules: () => list(qk.routingRules, () => api.routingRules.list({ limit: 200 })),
   apiKeys: () => list(qk.apiKeys, () => api.apiKeys.list({ limit: 100 })),
   webhooks: () => list(qk.webhooks, () => api.webhooks.list({ limit: 100 })),
@@ -439,6 +446,7 @@ export const q = {
       getNextPageParam: (page) => page.next_cursor,
     }),
   supportChannelOperations: () => queryOptions({ queryKey: qk.supportChannelOperations, queryFn: api.supportChannels.operations }),
+  supportChannelOllie: () => queryOptions({ queryKey: qk.supportChannelOllie, queryFn: api.supportChannels.ollie }),
   supportChannelAvailableDestinations: (id: string) =>
     list(qk.supportChannelAvailableDestinations(id), () => api.supportChannels.availableDestinations(id), { staleTime: 30_000 }),
   imports: () => list(qk.imports, () => api.imports.list()),

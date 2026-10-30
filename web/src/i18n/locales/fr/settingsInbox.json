@@ -612,6 +612,28 @@
       "tickets": "tickets",
       "saveCap": "Enregistrer",
       "saveFailed": "Impossible de mettre à jour ce collègue"
+    },
+    "skills": {
+      "title": "Compétences de routage",
+      "hint": "Définissez l’expertise nécessaire pour les tickets et attribuez chaque compétence aux membres de l’équipe.",
+      "add": "Ajouter une compétence",
+      "namePlaceholder": "Nom de la compétence",
+      "createHint": "Saisissez un nom pour créer cette compétence.",
+      "create": "Créer la compétence",
+      "created": "{{name}} créée",
+      "saveFailed": "Impossible d’enregistrer la compétence",
+      "emptyTitle": "Aucune compétence",
+      "emptyHint": "Ajoutez des compétences comme Facturation ou Assistance technique.",
+      "memberCount_one": "{{count}} membre",
+      "memberCount_many": "{{count}} membres",
+      "memberCount_other": "{{count}} membres",
+      "members": "Attribuer aux membres",
+      "archived": "Archivée",
+      "archive": "Archiver la compétence",
+      "restore": "Restaurer la compétence",
+      "archiveNamed": "Archiver {{name}}",
+      "restoreNamed": "Restaurer {{name}}",
+      "note": "Les règles de routage correspondantes exigent ces compétences avant l’attribution automatique."
     }
   },
   "triage": {
