@@ -464,6 +464,13 @@ export function TicketProperties({
             )
           }
         />
+        {t.required_skills.length > 0 && (
+          <Prop label={tr("props.requiredSkills")}>
+            <div className="flex min-w-0 flex-wrap gap-1 py-1">
+              {t.required_skills.map((skill) => <TagChip key={skill.id} name={skill.name} color="violet" />)}
+            </div>
+          </Prop>
+        )}
       </section>
 
       <FieldsSection

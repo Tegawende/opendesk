@@ -372,7 +372,8 @@
     "receivedAt": "Empfangen an",
     "aliasOf": "Ein Alias von {{address}}",
     "startedOn": "Gestartet auf",
-    "importedFrom": "Importiert aus"
+    "importedFrom": "Importiert aus",
+    "requiredSkills": "Erforderliche Fähigkeiten"
   },
   "sla": {
     "title": "SLA",

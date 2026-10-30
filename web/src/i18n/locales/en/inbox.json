@@ -376,7 +376,8 @@
     "receivedAt": "Received at",
     "aliasOf": "An alias of {{address}}",
     "startedOn": "Started on",
-    "importedFrom": "Imported from"
+    "importedFrom": "Imported from",
+    "requiredSkills": "Required skills"
   },
   "sla": {
     "title": "SLA",
