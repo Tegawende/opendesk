@@ -346,6 +346,7 @@
     "teamCleared_many": "Équipe retirée de {{count}} tickets"
   },
   "props": {
+    "bar": "Propriétés du ticket",
     "contact": "Contact",
     "changeContact": "Changer de contact",
     "searchContacts": "Rechercher des contacts",

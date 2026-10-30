@@ -324,6 +324,7 @@
     "teamCleared_other": "Team von {{count}} Tickets entfernt"
   },
   "props": {
+    "bar": "Ticket-Eigenschaften",
     "contact": "Kontakt",
     "changeContact": "Kontakt ändern",
     "searchContacts": "Kontakte suchen",
