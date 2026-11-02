@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { EyeOff, KeyRound, MoreHorizontal, Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { CircleDot, CircleOff, EyeOff, KeyRound, ListTree, MoreHorizontal, Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NoAccess, Section, SettingsPage } from "@/components/layout";
@@ -27,6 +27,7 @@ import { fullDate, relLong, shortDate } from "@/lib/format";
 import { q, qk, upsertInList } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { cn } from "@/lib/cn";
+import { ApiKeyRequestsDrawer } from "./ApiKeyRequests";
 
 const scopeGroups: { resource: string; label: string; scopes: { id: string; label: string }[] }[] = [
   { resource: "tickets", label: "Tickets", scopes: [{ id: "tickets:read", label: "Read" }, { id: "tickets:write", label: "Write" }] },
@@ -55,6 +56,7 @@ export default function ApiKeys() {
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<(ApiKey & { secret: string }) | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [logging, setLogging] = useState<ApiKey | null>(null);
 
   const revoke = useListMutation<ApiKey, string>(qk.apiKeys, (id) => api.apiKeys.remove(id), (rows, id) => rows.filter((k) => k.id !== id), {
     errorText: t("apiKeys.revokeError"),
@@ -64,6 +66,13 @@ export default function ApiKeys() {
     (v) => api.apiKeys.update(v.id, { name: v.name }),
     (rows, v) => rows.map((k) => (k.id === v.id ? { ...k, name: v.name } : k)),
     { errorText: t("apiKeys.renameError") },
+  );
+
+  const recordRequests = useListMutation<ApiKey, { id: string; on: boolean }>(
+    qk.apiKeys,
+    (v) => api.apiKeys.update(v.id, { record_requests: v.on }),
+    (rows, v) => rows.map((k) => (k.id === v.id ? { ...k, record_requests: v.on } : k)),
+    { errorText: t("apiKeys.requests.recordError") },
   );
 
   if (!admin)
@@ -171,6 +180,11 @@ export default function ApiKeys() {
                           <div className="mt-1 flex flex-wrap items-center gap-1">
                             <span className="mono mr-1 text-[11px] text-fg-4">{k.prefix.slice(0, 12)}…</span>
                             <ScopeChips scopes={k.scopes} />
+                            {k.record_requests && (
+                              <Tooltip content={t("apiKeys.requests.recordingHint")}>
+                                <MonoChip className="border-tone-violet-line text-tone-violet">{t("apiKeys.requests.recording")}</MonoChip>
+                              </Tooltip>
+                            )}
                           </div>
                           <GrantedTeams grants={k.private_teams} className="mt-1.5" />
                         </div>
@@ -208,6 +222,15 @@ export default function ApiKeys() {
                           <MenuItem icon={<Pencil />} onSelect={() => setRenaming(k.id)}>
                             {t("apiKeys.rename")}
                           </MenuItem>
+                          <MenuItem icon={<ListTree />} onSelect={() => setLogging(k)}>
+                            {t("apiKeys.requests.menu")}
+                          </MenuItem>
+                          <MenuItem
+                            icon={k.record_requests ? <CircleOff /> : <CircleDot />}
+                            onSelect={() => recordRequests.mutate({ id: k.id, on: !k.record_requests })}
+                          >
+                            {k.record_requests ? t("apiKeys.requests.recordOff") : t("apiKeys.requests.recordOn")}
+                          </MenuItem>
                           <MenuSeparator />
                           <MenuItem
                             danger
@@ -235,6 +258,7 @@ export default function ApiKeys() {
         )}
       </Section>
 
+      {logging && <ApiKeyRequestsDrawer apiKey={sorted.find((k) => k.id === logging.id) ?? logging} onClose={() => setLogging(null)} />}
       {creating && (
         <CreateKeyDialog
           onClose={() => setCreating(false)}

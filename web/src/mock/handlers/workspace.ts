@@ -1,7 +1,7 @@
 // Workspaces, members, invitations, teams, API keys, webhooks, audit log,
 // events, realtime tokens and notifications. Widget settings: handlers/widget.ts.
 
-import type { ApiKey, Member, Role, Webhook, WebhookDelivery, WorkspaceSettings } from "@/lib/api/types";
+import type { ApiKey, ApiKeyRequestDetail, Member, Role, Webhook, WebhookDelivery, WorkspaceSettings } from "@/lib/api/types";
 import { profileOf } from "../profiles";
 import { db, me, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
@@ -246,9 +246,34 @@ export function registerWorkspace() {
     if (!key) throw notFound("API key");
     assign(key, ctx.body, ["name", "scopes"]);
     if ("private_team_ids" in ctx.body) setGrants(ctx.ws, key, privateTeams(ctx, key.private_team_ids ?? []));
+    if (typeof ctx.body.record_requests === "boolean") key.record_requests = ctx.body.record_requests;
     audit(ctx.ws, "api_key.updated", "api_key", key.id, { fields: Object.keys(ctx.body) });
     return key;
   });
+  // A recording key's requests: made-up ones, newest first, shaped like the API's.
+  const keyRequests = (ctx: Ctx): ApiKeyRequestDetail[] => {
+    const key = ctx.ws.apiKeys.find((k) => k.id === ctx.params.id);
+    if (!key) throw notFound("API key");
+    if (!key.record_requests) return [];
+    const ticket = ctx.ws.tickets[0];
+    const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+    const base = { query: "", idempotency_key: "", replayed: false, message_id: null, contact_id: null, request_id: "req_mock", ip: "203.0.113.7",
+      user_agent: "returns-portal/1.4", content_type: "application/json", request_size: 0, request_body: null, request_truncated: false,
+      response_body: null, response_truncated: false, ticket: ticket ? { id: ticket.id, number: ticket.number } : null, ticket_ref: "" };
+    return [
+      { ...base, id: `${key.id}-r1`, created_at: at(2), method: "POST", path: `/v1/tickets/${ticket?.number ?? 1}/messages`, status: 201, duration_ms: 84,
+        ticket_ref: String(ticket?.number ?? 1), message_id: uuid(), request_body: JSON.stringify({ kind: "note", body_html: "<p>Return R-1042 received</p>" }) },
+      { ...base, id: `${key.id}-r2`, created_at: at(9), method: "POST", path: "/v1/tickets/999999/messages", status: 404, duration_ms: 12, ticket: null,
+        ticket_ref: "999999", request_body: JSON.stringify({ kind: "note", body_html: "<p>Linked to return R-1041</p>" }),
+        response_body: JSON.stringify({ status: 404, code: "not_found", detail: "Ticket not found" }) },
+      { ...base, id: `${key.id}-r3`, created_at: at(31), method: "GET", path: `/v1/tickets/${ticket?.number ?? 1}`, status: 200, duration_ms: 23, content_type: "", ticket_ref: String(ticket?.number ?? 1) },
+    ];
+  };
+  get("/v1/api-keys/:id/requests", (ctx) => {
+    const status = ctx.query.get("status");
+    return paginate(ctx, keyRequests(ctx).filter((r) => !status || String(r.status)[0] === status[0]).map(({ request_body: _b, response_body: _r, ...row }) => row));
+  });
+  get("/v1/api-keys/:id/requests/:requestId", (ctx) => keyRequests(ctx).find((r) => r.id === ctx.params.requestId) ?? (() => { throw notFound("Request"); })());
   del("/v1/api-keys/:id", (ctx) => {
     requireAdmin(ctx.ws);
     ctx.ws.apiKeys = ctx.ws.apiKeys.filter((k) => k.id !== ctx.params.id);

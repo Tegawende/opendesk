@@ -1011,7 +1011,43 @@ export type ApiKey = {
   created_by: UserRef | null;
   private_team_ids?: string[];
   private_teams?: PrivateTeamGrant[];
+  /** Every request the key makes is recorded, kept 90 days (GET /v1/api-keys/{id}/requests). */
+  record_requests?: boolean;
 };
+/** A request an API key made while "Record requests" was on. */
+export type ApiKeyRequest = {
+  id: string;
+  created_at: string;
+  method: string;
+  path: string;
+  /** Secret-looking parameters masked. */
+  query: string;
+  status: number;
+  duration_ms: number;
+  idempotency_key: string;
+  /** The answer was an idempotent replay of an earlier request. */
+  replayed: boolean;
+  /** The ticket the path or the answer named; number null once the ticket is gone. */
+  ticket: { id: string; number: number | null } | null;
+  /** The ticket as the path named it: an id or a number, as written. */
+  ticket_ref: string;
+  message_id: string | null;
+  contact_id: string | null;
+};
+export type ApiKeyRequestDetail = ApiKeyRequest & {
+  request_id: string;
+  ip: string;
+  user_agent: string;
+  content_type: string;
+  request_size: number;
+  /** The JSON a write sent, secret-looking fields masked, up to 64 KB; null for reads and other bodies. */
+  request_body: string | null;
+  request_truncated: boolean;
+  /** The answer to a failed request (400 and up), up to 8 KB. */
+  response_body: string | null;
+  response_truncated: boolean;
+};
+export type ApiKeyRequestFilter = { status?: "2xx" | "4xx" | "5xx"; method?: string; ticket?: string };
 export type Webhook = {
   id: string;
   url: string;

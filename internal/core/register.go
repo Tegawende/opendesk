@@ -36,6 +36,7 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	s.registerInvitations(api)
 	s.registerTeams(api)
 	s.registerAPIKeys(api)
+	s.registerAPIKeyRequests(api)
 	s.registerWebhooks(api)
 	s.registerPlatform(api)
 	s.registerAppAttest(api)

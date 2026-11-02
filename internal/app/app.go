@@ -29,6 +29,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/ai/knowledge"
 	"github.com/useopendesk/opendesk/internal/ai/mcp"
 	"github.com/useopendesk/opendesk/internal/analytics"
+	"github.com/useopendesk/opendesk/internal/apilog"
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/billing"
 	"github.com/useopendesk/opendesk/internal/captcha"
@@ -197,7 +198,8 @@ func Router(d *deps.Deps) http.Handler {
 	// sessions are read (contracts/teams.md "Help center addresses").
 	r.Use(helpsite.Middleware(d))
 	resolver := &auth.Resolver{Pool: d.DB.Pool, Tokens: d.Tokens, ClientIP: httpx.ClientIP(cfg.TrustProxy, cfg.ProxyHops)}
-	r.Use(resolver.Middleware, httpx.CredentialLimit(d.Limiter, httpx.ClientIP(cfg.TrustProxy, cfg.ProxyHops)), idempotency.New(d.DB.Pool, d.Box, cfg.AuthSecret, d.Log).Middleware)
+	// apilog right after the resolver: an API key's recorded requests include rate limits and replays.
+	r.Use(resolver.Middleware, apilog.Middleware(d.DB.Pool, d.Log), httpx.CredentialLimit(d.Limiter, httpx.ClientIP(cfg.TrustProxy, cfg.ProxyHops)), idempotency.New(d.DB.Pool, d.Box, cfg.AuthSecret, d.Log).Middleware)
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/problem+json")

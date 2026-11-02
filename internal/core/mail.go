@@ -205,6 +205,8 @@ func (w *cleanupWorker) Work(ctx context.Context, _ *river.Job[cleanupArgs]) err
 		`DELETE FROM sessions WHERE (revoked_at IS NOT NULL AND revoked_at < now() - interval '30 days') OR expires_at < now() - interval '30 days'`,
 		`DELETE FROM invitations WHERE expires_at < now() - interval '30 days'`,
 		`DELETE FROM webhook_deliveries WHERE created_at < now() - interval '30 days'`,
+		// What API keys with "Record requests" on asked (internal/apilog).
+		`DELETE FROM api_key_requests WHERE created_at < now() - interval '90 days'`,
 		`DELETE FROM idempotency_keys WHERE created_at < now() - interval '24 hours'`,
 		// Asks made to a member's Ollie by teammates' (contracts/ai.md "Asking a teammate").
 		`DELETE FROM assistant_peer_asks WHERE created_at < now() - interval '90 days'`,

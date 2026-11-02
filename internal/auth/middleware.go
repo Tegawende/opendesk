@@ -100,9 +100,9 @@ func (rv *Resolver) resolve(r *http.Request) *Principal {
 
 func (rv *Resolver) resolveAPIKey(ctx context.Context, key string, p *Principal) bool {
 	var expires *time.Time
-	err := rv.Pool.QueryRow(ctx, `SELECT k.id, k.workspace_id, k.scopes, k.expires_at, w.suspended_at IS NOT NULL FROM api_keys k
+	err := rv.Pool.QueryRow(ctx, `SELECT k.id, k.workspace_id, k.scopes, k.expires_at, w.suspended_at IS NOT NULL, k.record_requests FROM api_keys k
 		JOIN workspaces w ON w.id = k.workspace_id
-		WHERE k.key_hash = $1 AND k.revoked_at IS NULL`, crypto.HashToken(key)).Scan(&p.APIKeyID, &p.WorkspaceID, &p.Scopes, &expires, &p.WorkspaceSuspended)
+		WHERE k.key_hash = $1 AND k.revoked_at IS NULL`, crypto.HashToken(key)).Scan(&p.APIKeyID, &p.WorkspaceID, &p.Scopes, &expires, &p.WorkspaceSuspended, &p.RecordRequests)
 	if err != nil || (expires != nil && time.Now().After(*expires)) {
 		return false
 	}

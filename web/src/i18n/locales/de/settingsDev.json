@@ -66,7 +66,55 @@
       "never": "Nie"
     },
     "scopeFull": "Vollzugriff",
-    "scopeRead": "nur lesen"
+    "scopeRead": "nur lesen",
+    "requests": {
+      "menu": "Anfrageprotokoll",
+      "title": "Anfrageprotokoll von {{name}}",
+      "hint": "Jede Anfrage dieses Schlüssels, während die Aufzeichnung an war, 90 Tage aufbewahrt: was er gesendet hat, die Antwort bei einem Fehler und das betroffene Ticket. Felder, die wie Geheimnisse aussehen, werden maskiert.",
+      "recording": "Protokoll aktiv",
+      "recordingHint": "Jede Anfrage dieses Schlüssels wird 90 Tage aufbewahrt. Zu sehen im Menü des Schlüssels, Anfrageprotokoll.",
+      "recordOn": "Anfragen aufzeichnen",
+      "recordOff": "Aufzeichnung beenden",
+      "recordError": "Aufzeichnung konnte nicht geändert werden",
+      "off": "Die Aufzeichnung ist aus: Anfragen dieses Schlüssels werden nicht aufbewahrt.",
+      "turnOn": "Aufzeichnung einschalten",
+      "filterAll": "Alle",
+      "ticketPlaceholder": "Ticket: Nummer oder ID",
+      "ticketLabel": "Nach Ticket filtern",
+      "refresh": "Aktualisieren",
+      "empty": "Noch keine Anfragen",
+      "emptyHint": "Anfragen erscheinen hier, sobald der Schlüssel welche stellt.",
+      "emptyFiltered": "Keine passende Anfrage",
+      "loadMore": "Ältere Anfragen laden",
+      "loadError": "Anfragen konnten nicht geladen werden",
+      "back": "Alle Anfragen",
+      "openTicket": "Ticket #{{number}} öffnen",
+      "col": {
+        "when": "Wann",
+        "request": "Anfrage",
+        "status": "Status",
+        "ticket": "Ticket"
+      },
+      "detail": {
+        "when": "Wann",
+        "duration": "Dauer",
+        "ticket": "Ticket",
+        "message": "Nachricht",
+        "contact": "Kontakt",
+        "idempotency": "Idempotenzschlüssel",
+        "replayed": "Wiederholt",
+        "replayedYes": "Ja: derselbe Idempotency-Key, beantwortet mit der Antwort der ersten Anfrage",
+        "requestId": "Anfrage-ID",
+        "ip": "IP-Adresse",
+        "userAgent": "User-Agent",
+        "content": "Inhalt",
+        "sent": "Gesendet",
+        "noBody": "Nichts aufbewahrt: ein Lesezugriff oder ein Inhalt, der kein JSON ist.",
+        "answer": "Antwort",
+        "answerNotKept": "Die Antwort auf eine erfolgreiche Anfrage wird nicht aufbewahrt: was sie betroffen hat, steht oben.",
+        "truncated": "Bei {{size}} abgeschnitten: der Rest wurde nicht aufbewahrt."
+      }
+    }
   },
   "webhooks": {
     "title": "Webhooks",

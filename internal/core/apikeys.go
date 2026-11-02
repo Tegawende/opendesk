@@ -37,6 +37,8 @@ type CoreAPIKey struct {
 	PrivateTeamIDs []uuid.UUID `json:"private_team_ids"`
 	// PrivateTeams are the same teams, by name, with who granted each.
 	PrivateTeams []PrivateTeamGrant `json:"private_teams"`
+	// RecordRequests: every request the key makes is kept 90 days (GET /v1/api-keys/{id}/requests).
+	RecordRequests bool `json:"record_requests" doc:"Every request the key makes is recorded and kept 90 days"`
 }
 
 type CoreAPIKeyWithSecret struct {
@@ -44,7 +46,7 @@ type CoreAPIKeyWithSecret struct {
 	Secret string `json:"secret" doc:"The full key. Shown once."`
 }
 
-var apiKeySelect = `SELECT k.id, k.name, k.prefix, k.scopes, k.last_used_at, k.expires_at, k.created_at,
+var apiKeySelect = `SELECT k.id, k.name, k.prefix, k.scopes, k.last_used_at, k.expires_at, k.created_at, k.record_requests,
 	u.id, u.name, u.email, u.avatar_url, ` + grantedTeamsSQL("k.private_team_ids", "k.workspace_id") + `,
 	` + teamGrantsSQL("k.private_team_ids", "k.workspace_id", grantAPIKey, "k.id") + `
 	FROM api_keys k LEFT JOIN users u ON u.id = k.created_by`
@@ -54,7 +56,7 @@ func scanAPIKey(r pgx.Row) (CoreAPIKey, error) {
 	var uid *uuid.UUID
 	var name, email, avatar *string
 	var grants []byte
-	if err := r.Scan(&k.ID, &k.Name, &k.Prefix, &k.Scopes, &k.LastUsedAt, &k.ExpiresAt, &k.CreatedAt, &uid, &name, &email, &avatar,
+	if err := r.Scan(&k.ID, &k.Name, &k.Prefix, &k.Scopes, &k.LastUsedAt, &k.ExpiresAt, &k.CreatedAt, &k.RecordRequests, &uid, &name, &email, &avatar,
 		&k.PrivateTeamIDs, &grants); err != nil {
 		return k, err
 	}
@@ -165,6 +167,8 @@ func (s *svc) registerAPIKeys(api huma.API) {
 				ExpiresAt *time.Time `json:"expires_at,omitempty"`
 				// PrivateTeamIDs: private teams whose tickets the key sees; only their members add them.
 				PrivateTeamIDs []string `json:"private_team_ids,omitempty" maxItems:"200"`
+				// RecordRequests: keep every request the key makes, 90 days.
+				RecordRequests bool `json:"record_requests,omitempty" doc:"Record every request the key makes, kept 90 days"`
 			}
 		}) (*struct {
 			CacheControl string `header:"Cache-Control"`
@@ -204,15 +208,15 @@ func (s *svc) registerAPIKeys(api huma.API) {
 					return err
 				}
 				id := ids.New()
-				if _, err := tx.Exec(ctx, `INSERT INTO api_keys (id, workspace_id, name, prefix, key_hash, scopes, created_by, expires_at, private_team_ids)
-					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, id, p.WorkspaceID, name, prefix, hash, scopes, p.UserID, in.Body.ExpiresAt, teams); err != nil {
+				if _, err := tx.Exec(ctx, `INSERT INTO api_keys (id, workspace_id, name, prefix, key_hash, scopes, created_by, expires_at, private_team_ids, record_requests)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, id, p.WorkspaceID, name, prefix, hash, scopes, p.UserID, in.Body.ExpiresAt, teams, in.Body.RecordRequests); err != nil {
 					return err
 				}
 				if err := saveGrants(ctx, tx, p, grantAPIKey, id, teams); err != nil {
 					return err
 				}
 				if err := audit.Log(ctx, tx, p, p.WorkspaceID, "api_key.created", "api_key", &id,
-					map[string]any{"name": name, "scopes": scopes, "prefix": prefix, "private_team_ids": uuidStrings(teams)}); err != nil {
+					map[string]any{"name": name, "scopes": scopes, "prefix": prefix, "private_team_ids": uuidStrings(teams), "record_requests": in.Body.RecordRequests}); err != nil {
 					return err
 				}
 				k, err = loadAPIKey(ctx, tx, p.WorkspaceID, id)
@@ -237,6 +241,8 @@ func (s *svc) registerAPIKeys(api huma.API) {
 				Name *string `json:"name,omitempty" maxLength:"200"`
 				// PrivateTeamIDs replaces the list. Only a team's members add it; admins may remove any.
 				PrivateTeamIDs *[]string `json:"private_team_ids,omitempty" maxItems:"200"`
+				// RecordRequests turns recording the key's requests on or off, from its next request.
+				RecordRequests *bool `json:"record_requests,omitempty" doc:"Record every request the key makes (kept 90 days), from its next request"`
 			}
 		}) (*struct{ Body CoreAPIKey }, error) {
 			p, err := requireUserWorkspace(ctx, auth.RoleAdmin)
@@ -274,8 +280,8 @@ func (s *svc) registerAPIKeys(api huma.API) {
 					}
 					teamsChanged = !sameIDs(current, teams)
 				}
-				if _, err := tx.Exec(ctx, `UPDATE api_keys SET name = COALESCE($3, name), private_team_ids = COALESCE($4, private_team_ids)
-					WHERE id = $1 AND workspace_id = $2`, id, p.WorkspaceID, name, teams); err != nil {
+				if _, err := tx.Exec(ctx, `UPDATE api_keys SET name = COALESCE($3, name), private_team_ids = COALESCE($4, private_team_ids),
+					record_requests = COALESCE($5, record_requests) WHERE id = $1 AND workspace_id = $2`, id, p.WorkspaceID, name, teams, in.Body.RecordRequests); err != nil {
 					return err
 				}
 				if in.Body.PrivateTeamIDs != nil {
@@ -287,7 +293,7 @@ func (s *svc) registerAPIKeys(api huma.API) {
 					return err
 				}
 				return audit.Log(ctx, tx, p, p.WorkspaceID, "api_key.updated", "api_key", &id,
-					map[string]any{"name": k.Name, "private_team_ids": uuidStrings(k.PrivateTeamIDs)})
+					map[string]any{"name": k.Name, "private_team_ids": uuidStrings(k.PrivateTeamIDs), "record_requests": k.RecordRequests})
 			})
 			if err != nil {
 				return nil, httpx.Wrap(err)

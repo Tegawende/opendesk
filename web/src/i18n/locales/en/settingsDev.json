@@ -66,7 +66,55 @@
       "never": "Never"
     },
     "scopeFull": "full access",
-    "scopeRead": "read only"
+    "scopeRead": "read only",
+    "requests": {
+      "menu": "Request log",
+      "title": "Request log of {{name}}",
+      "hint": "Every request this key made while recording was on, kept 90 days: what it sent, the answer to a failure and the ticket it touched. Secret-looking fields are masked.",
+      "recording": "Logging on",
+      "recordingHint": "Every request this key makes is kept 90 days. See them in the key's menu, Request log.",
+      "recordOn": "Record requests",
+      "recordOff": "Stop recording requests",
+      "recordError": "Couldn't change recording",
+      "off": "Recording is off: this key's requests are not kept.",
+      "turnOn": "Turn on recording",
+      "filterAll": "All",
+      "ticketPlaceholder": "Ticket: number or id",
+      "ticketLabel": "Filter by ticket",
+      "refresh": "Refresh",
+      "empty": "No requests yet",
+      "emptyHint": "Requests show here as soon as the key makes them.",
+      "emptyFiltered": "No request matches",
+      "loadMore": "Load older requests",
+      "loadError": "Couldn't load the requests",
+      "back": "All requests",
+      "openTicket": "Open ticket #{{number}}",
+      "col": {
+        "when": "When",
+        "request": "Request",
+        "status": "Status",
+        "ticket": "Ticket"
+      },
+      "detail": {
+        "when": "When",
+        "duration": "Duration",
+        "ticket": "Ticket",
+        "message": "Message",
+        "contact": "Contact",
+        "idempotency": "Idempotency key",
+        "replayed": "Replayed",
+        "replayedYes": "Yes: the same Idempotency-Key, answered with the first request's answer",
+        "requestId": "Request id",
+        "ip": "IP address",
+        "userAgent": "User agent",
+        "content": "Content",
+        "sent": "Sent",
+        "noBody": "Nothing kept: a read, or a body that is not JSON.",
+        "answer": "Answer",
+        "answerNotKept": "The answer to a successful request is not kept: the records it touched are above.",
+        "truncated": "Cut at {{size}}: the rest was not kept."
+      }
+    }
   },
   "webhooks": {
     "title": "Webhooks",

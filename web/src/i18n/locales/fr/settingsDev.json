@@ -67,7 +67,55 @@
       "never": "Jamais"
     },
     "scopeFull": "accès complet",
-    "scopeRead": "lecture seule"
+    "scopeRead": "lecture seule",
+    "requests": {
+      "menu": "Journal des requêtes",
+      "title": "Journal des requêtes de {{name}}",
+      "hint": "Chaque requête de cette clé faite pendant l'enregistrement, gardée 90 jours : ce qu'elle a envoyé, la réponse en cas d'échec et le ticket concerné. Les champs qui ressemblent à des secrets sont masqués.",
+      "recording": "Journal actif",
+      "recordingHint": "Chaque requête de cette clé est gardée 90 jours. À voir dans le menu de la clé, Journal des requêtes.",
+      "recordOn": "Enregistrer les requêtes",
+      "recordOff": "Arrêter d'enregistrer les requêtes",
+      "recordError": "Impossible de changer l'enregistrement",
+      "off": "L'enregistrement est coupé : les requêtes de cette clé ne sont pas gardées.",
+      "turnOn": "Activer l'enregistrement",
+      "filterAll": "Toutes",
+      "ticketPlaceholder": "Ticket : numéro ou id",
+      "ticketLabel": "Filtrer par ticket",
+      "refresh": "Actualiser",
+      "empty": "Aucune requête pour l'instant",
+      "emptyHint": "Les requêtes s'affichent ici dès que la clé en fait.",
+      "emptyFiltered": "Aucune requête ne correspond",
+      "loadMore": "Charger les requêtes plus anciennes",
+      "loadError": "Impossible de charger les requêtes",
+      "back": "Toutes les requêtes",
+      "openTicket": "Ouvrir le ticket n° {{number}}",
+      "col": {
+        "when": "Quand",
+        "request": "Requête",
+        "status": "Statut",
+        "ticket": "Ticket"
+      },
+      "detail": {
+        "when": "Quand",
+        "duration": "Durée",
+        "ticket": "Ticket",
+        "message": "Message",
+        "contact": "Contact",
+        "idempotency": "Clé d'idempotence",
+        "replayed": "Rejouée",
+        "replayedYes": "Oui : même Idempotency-Key, répondue avec la réponse de la première requête",
+        "requestId": "Id de requête",
+        "ip": "Adresse IP",
+        "userAgent": "User agent",
+        "content": "Contenu",
+        "sent": "Envoyé",
+        "noBody": "Rien de gardé : une lecture, ou un contenu qui n'est pas du JSON.",
+        "answer": "Réponse",
+        "answerNotKept": "La réponse d'une requête réussie n'est pas gardée : ce qu'elle a touché est indiqué ci-dessus.",
+        "truncated": "Coupé à {{size}} : la suite n'a pas été gardée."
+      }
+    }
   },
   "webhooks": {
     "title": "Webhooks",

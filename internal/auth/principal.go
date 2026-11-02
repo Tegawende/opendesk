@@ -95,6 +95,9 @@ type Principal struct {
 	// ResolvedAt is when the credential began to be resolved, before any lookup: what
 	// the request reads from here on is at least as recent as this.
 	ResolvedAt time.Time
+	// RecordRequests: an admin turned "Record requests" on for this API key, so its requests
+	// are kept (internal/apilog).
+	RecordRequests bool
 }
 
 func (p *Principal) HasScope(s string) bool { return slices.Contains(p.Scopes, s) }

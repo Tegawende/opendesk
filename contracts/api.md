@@ -228,7 +228,14 @@ type ChangelogEntry = { id: string; title: string /* 1..200 */; slug: string /* 
   published_at: string | null /* the date it carries: set when first published unless given. A published entry dated in the future is scheduled: public pages, feeds and lists show it from then */;
   author: UserRef | null /* public routes leave out the email */; brand_id: string | null /* the brand whose help center shows it; null = every brand */;
   created_at: string; updated_at: string };
-type ApiKey = { id: string; name: string; prefix: string; scopes: string[]; last_used_at: string | null; expires_at: string | null; created_at: string; created_by: UserRef | null };
+type ApiKey = { id: string; name: string; prefix: string; scopes: string[]; last_used_at: string | null; expires_at: string | null; created_at: string; created_by: UserRef | null;
+  record_requests: boolean /* every request the key makes is recorded, kept 90 days ("API keys" below) */ };
+type ApiKeyRequest = { id: string; created_at: string; method: string; path: string; query: string /* secret-looking parameters masked */; status: number; duration_ms: number;
+  idempotency_key: string; replayed: boolean /* an idempotent replay */; ticket: { id: string; number: number | null } | null /* the ticket the path or the answer named */;
+  ticket_ref: string /* the ticket as the path named it: an id or a number, as written */; message_id: string | null; contact_id: string | null };
+type ApiKeyRequestDetail = ApiKeyRequest & { request_id: string; ip: string; user_agent: string; content_type: string; request_size: number;
+  request_body: string | null /* the JSON a write sent, secret-looking fields masked, up to 64 KB */; request_truncated: boolean;
+  response_body: string | null /* the answer to a failed request (400 and up), up to 8 KB */; response_truncated: boolean };
 type Webhook = { id: string; url: string; description: string; events: string[]; header_names: string[]; enabled: boolean; created_at: string };
 type WebhookDelivery = { id: string; event_id: string; event_type: string; status: "pending" | "succeeded" | "failed"; attempts: number; response_code: number | null; duration_ms: number | null; created_at: string };
 type AuditLog = { id: string; actor: { type: "user" | "api_key" | "system"; user: UserRef | null; api_key_id: string | null }; action: string; entity_type: string; entity_id: string | null; data: Record<string, unknown>; ip: string; created_at: string };
@@ -363,7 +370,8 @@ A suspended workspace is listed with its name and nothing else.
 | POST | `/v1/invitations/accept` | `{token}` → `Membership` (no workspace header) |
 | POST | `/v1/invitations/lookup` | `{token}` → `{workspace_name, email, role}` public (the token never rides in a URL) |
 | CRUD | `/v1/teams`, `/v1/teams/{id}` | `{name, member_ids}`; the full team API, brands, widgets and routing rules are in contracts/teams.md |
-| CRUD | `/v1/api-keys`, `/v1/api-keys/{id}` | admin users only (not API keys). create `{name, scopes, expires_at?, private_team_ids?}` → `ApiKey & {secret}`, needing the second factor (when on) and a sign-in within 12 hours (`403 mfa_required` / `reauth_required`) (`secret` shown once; `prefix` is `od_live_` + 8 chars); PATCH `{name?, private_team_ids?}` (the list is replaced; contracts/teams.md "Visibility": `422` for an id that is not a private team of the workspace, `403 forbidden` for adding a team the caller is not on; removing is open to admins; a change closes the key's sockets). `private_teams` lists the same teams with `granted_by`: a team lasts while its granter is on it, and setting the list makes the caller the granter of the listed teams they are on; DELETE revokes |
+| CRUD | `/v1/api-keys`, `/v1/api-keys/{id}` | admin users only (not API keys). create `{name, scopes, expires_at?, private_team_ids?}` → `ApiKey & {secret}`, needing the second factor (when on) and a sign-in within 12 hours (`403 mfa_required` / `reauth_required`) (`secret` shown once; `prefix` is `od_live_` + 8 chars); PATCH `{name?, private_team_ids?}` (the list is replaced; contracts/teams.md "Visibility": `422` for an id that is not a private team of the workspace, `403 forbidden` for adding a team the caller is not on; removing is open to admins; a change closes the key's sockets). `private_teams` lists the same teams with `granted_by`: a team lasts while its granter is on it, and setting the list makes the caller the granter of the listed teams they are on; DELETE revokes. Create and PATCH take `record_requests` (below), audit `api_key.created` / `api_key.updated` carry it |
+| GET | `/v1/api-keys/{id}/requests`, `/v1/api-keys/{id}/requests/{requestId}` | admin users only (not API keys) → `Page<ApiKeyRequest>`, newest first; filters `status` (`2xx`, `3xx`, `4xx`, `5xx`), `method`, `since`, `until` (RFC 3339), `ticket` (an id, a number or the reference the path used). One request → `ApiKeyRequestDetail`. A revoked key's requests stay readable; `404` for a key of another workspace |
 | GET | `/v1/ai-clients/server` | members → `{url, resource_metadata, authorization_server, scopes, tools[]}`: the MCP server for AI client setup (`contracts/agent.md` "opendesk MCP server") |
 | GET · DELETE | `/v1/ai-clients/connections` · `/v1/ai-clients/connections/{id}` | members (users only) → `{data: AIClientConnection[]}`: AI clients connected with OAuth, your own (admins: everyone's); DELETE disconnects one (your own; admins any) → 204, audit `oauth.grant_revoked` |
 | GET · POST | `/v1/oauth/requests/{id}` · `/v1/oauth/requests/{id}/approve` · `/v1/oauth/requests/{id}/deny` | signed-in users (no workspace header, no API keys): the MCP OAuth consent page. GET → `OAuthRequest`; approve `{workspace_id}` → `{redirect_to}` (audit `oauth.grant_created`); deny → `{redirect_to}`. `410 request_expired` once decided or after 10 minutes |
@@ -427,6 +435,16 @@ Core notes:
   closed, and marks the address confirmed only when the link was never copied: after `link`, the new account confirms
   its address by email like any other.
 - Role and list endpoints for API keys: workspace/members/teams read `settings:read`; writes `settings:write`.
+- **Recording an API key's requests** (`ApiKey.record_requests`, off by default): an admin turns it on so a team can
+  check afterwards what an integration did. From the key's next request, every request it makes under `/v1` is kept
+  90 days (the `core.cleanup` job deletes older ones): time, method, path, query, status, duration, `Idempotency-Key`,
+  replay, IP, user agent and `X-Request-Id`; for a write, its JSON body up to 64 KB (`request_truncated` past it), other
+  bodies only by type and size; the answer when the status is 400 or more, up to 8 KB; and the records the request
+  touched (the ticket its path names or its answer is, the message, the contact). Members whose names look like
+  secrets (`secret`, `token`, `password`, `api_key`, `authorization`, `credential`, `signature`, in any case) are
+  masked as `***`, in the body and the query; the `Authorization` header is never kept. The record is written after
+  the answer, in the background: recording never slows a request down or fails it. Rate-limited and replayed
+  requests are recorded too.
 - MCP OAuth (outside `/v1`, `contracts/agent.md` "OAuth"): `/.well-known/oauth-protected-resource[/mcp]`,
   `/.well-known/oauth-authorization-server`, `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/token`,
   `POST /oauth/revoke`. A user acting through an OAuth grant is bound by the granted scopes like an API key, on top of
