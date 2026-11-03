@@ -97,6 +97,7 @@ const verbs: Record<string, string> = {
   "api_key.created": "created an API key",
   "api_key.revoked": "revoked an API key",
   "api_key.scopes_changed": "changed an API key's permissions",
+  "api_key.expiry_changed": "changed an API key's expiry",
   "api_key.deleted": "revoked an API key",
   "webhook.created": "created a webhook",
   "webhook.updated": "updated a webhook",

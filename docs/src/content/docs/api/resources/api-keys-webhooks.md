@@ -111,6 +111,21 @@ curl -X PATCH https://api.opendesk.sh/v1/api-keys/$KEY_ID   -H "Authorization: B
 
 In the app: **Settings → API keys**, the key's menu, **Edit permissions**.
 
+### Change a key's expiry
+
+Send `expires_at` with `PATCH /v1/api-keys/{id}`: a date in the future, or `null` for a key that never expires. The secret stays the same.
+
+```sh
+curl -X PATCH https://api.opendesk.sh/v1/api-keys/$KEY_ID   -H "Authorization: Bearer $ACCESS_TOKEN"   -H "OD-Workspace: $WORKSPACE_ID"   -H "Content-Type: application/json"   -d '{ "expires_at": null }'
+```
+
+- **An earlier date** applies at once.
+- **A later date, or none**, keeps a live credential working longer, so it asks for what creating a key asks for: a sign-in within the last 12 hours, and the second factor when it is on (`403 reauth_required` / `mfa_required`).
+- A date in the past is refused (`422`): to stop a key now, revoke it. An expired key can't be brought back (`422`): create a new one.
+- Each change is in the audit log as `api_key.expiry_changed`, with the date before and after (`null` for never).
+
+In the app: **Settings → API keys**, the key's menu, **Change expiry**, or the key's expiry date in the list.
+
 ## Webhooks
 
 ```ts

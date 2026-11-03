@@ -292,6 +292,9 @@ func (s *svc) registerAPIKeys(api huma.API) {
 				// Scopes replaces the key's scopes. Adding one asks for the same fresh sign-in as
 				// creating a key; removing is immediate.
 				Scopes *[]string `json:"scopes,omitempty" maxItems:"20" doc:"The key's scopes, replacing the current ones. Adding a scope needs a recent sign-in (and the second factor when on), as creating a key does"`
+				// ExpiresAt moves the key's expiry: a later date or null (never) asks for the same
+				// fresh sign-in as creating a key; an earlier one applies at once.
+				ExpiresAt expiryChange `json:"expires_at,omitempty" required:"false"`
 			}
 		}) (*struct{ Body CoreAPIKey }, error) {
 			p, err := requireUserWorkspace(ctx, auth.RoleAdmin)
@@ -316,18 +319,40 @@ func (s *svc) registerAPIKeys(api huma.API) {
 					return nil, err
 				}
 			}
+			if e := in.Body.ExpiresAt; e.Set && e.Value != nil && !e.Value.After(time.Now().Add(time.Minute)) {
+				return nil, httpx.Validation("expires_at must be in the future. To stop a key now, revoke it.")
+			}
 			var k CoreAPIKey
-			teamsChanged, scopesChanged := false, false
+			teamsChanged, scopesChanged, expiryChanged := false, false, false
 			err = s.tx(ctx, func(tx pgx.Tx) error {
 				var current, scopes []string
 				var bot, creator *uuid.UUID
-				err := tx.QueryRow(ctx, `SELECT private_team_ids::text[], scopes, bot_id, created_by FROM api_keys WHERE id = $1 AND workspace_id = $2 AND revoked_at IS NULL FOR UPDATE`,
-					id, p.WorkspaceID).Scan(&current, &scopes, &bot, &creator)
+				var expires *time.Time
+				err := tx.QueryRow(ctx, `SELECT private_team_ids::text[], scopes, bot_id, created_by, expires_at FROM api_keys WHERE id = $1 AND workspace_id = $2 AND revoked_at IS NULL FOR UPDATE`,
+					id, p.WorkspaceID).Scan(&current, &scopes, &bot, &creator, &expires)
 				if db.IsNotFound(err) {
 					return httpx.NotFound("API key")
 				}
 				if err != nil {
 					return err
+				}
+				expiresBefore := expires
+				if e := in.Body.ExpiresAt; e.Set && !sameExpiry(expires, e.Value) {
+					// An expired key stays expired: a new date would bring back a credential
+					// everyone takes for dead.
+					if expires != nil && !expires.After(time.Now()) {
+						return httpx.Validation("This key has expired and can't be brought back. Create a new key.")
+					}
+					if expiryWidens(expires, e.Value) {
+						// Working longer is more access for a live credential: the same checks as making a new key.
+						if err := s.requireMFA(ctx, p); err != nil {
+							return err
+						}
+						if err := requireRecentLogin(ctx, tx, p); err != nil {
+							return err
+						}
+					}
+					expires, expiryChanged = e.Value, true
 				}
 				before := scopes
 				var added, removed []string
@@ -360,8 +385,8 @@ func (s *svc) registerAPIKeys(api huma.API) {
 						return err
 					}
 				}
-				if _, err := tx.Exec(ctx, `UPDATE api_keys SET name = COALESCE($3, name), private_team_ids = COALESCE($4, private_team_ids), bot_id = $5, scopes = $6, record_requests = COALESCE($7, record_requests)
-					WHERE id = $1 AND workspace_id = $2`, id, p.WorkspaceID, name, teams, bot, scopes, in.Body.RecordRequests); err != nil {
+				if _, err := tx.Exec(ctx, `UPDATE api_keys SET name = COALESCE($3, name), private_team_ids = COALESCE($4, private_team_ids), bot_id = $5, scopes = $6, record_requests = COALESCE($7, record_requests),
+					expires_at = $8 WHERE id = $1 AND workspace_id = $2`, id, p.WorkspaceID, name, teams, bot, scopes, in.Body.RecordRequests, expires); err != nil {
 					return err
 				}
 				if in.Body.PrivateTeamIDs != nil {
@@ -375,6 +400,12 @@ func (s *svc) registerAPIKeys(api huma.API) {
 				if scopesChanged {
 					if err := audit.Log(ctx, tx, p, p.WorkspaceID, "api_key.scopes_changed", "api_key", &id,
 						map[string]any{"name": k.Name, "from": before, "to": k.Scopes, "added": added, "removed": removed}); err != nil {
+						return err
+					}
+				}
+				if expiryChanged {
+					if err := audit.Log(ctx, tx, p, p.WorkspaceID, "api_key.expiry_changed", "api_key", &id,
+						map[string]any{"name": k.Name, "from": expiresBefore, "to": k.ExpiresAt}); err != nil {
 						return err
 					}
 				}

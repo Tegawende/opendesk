@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot as BotIcon, ChevronRight, CircleDot, CircleOff, EyeOff, KeyRound, ListTree, MoreHorizontal, Pencil, Plus, ShieldCheck, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Bot as BotIcon, CalendarClock, ChevronRight, CircleDot, CircleOff, EyeOff, KeyRound, ListTree, MoreHorizontal, Pencil, Plus, ShieldCheck, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NoAccess, Section, SettingsPage } from "@/components/layout";
@@ -30,6 +30,7 @@ import { atLeast, useRole } from "@/lib/session";
 import { cn } from "@/lib/cn";
 import { ApiKeyRequestsDrawer } from "./ApiKeyRequests";
 import { LogCell, ScopeSummary, type LogView } from "./apiKeysList";
+import { ExpiryDialog } from "./apiKeyExpiry";
 
 const scopeGroups: { resource: string; label: string; scopes: { id: string; label: string }[] }[] = [
   { resource: "tickets", label: "Tickets", scopes: [{ id: "tickets:read", label: "Read" }, { id: "tickets:write", label: "Write" }] },
@@ -65,6 +66,7 @@ export default function ApiKeys() {
   const [speaking, setSpeaking] = useState<ApiKey | null>(null);
   const qc = useQueryClient();
   const [scoping, setScoping] = useState<ApiKey | null>(null);
+  const [expiring, setExpiring] = useState<ApiKey | null>(null);
   const [logView, setLogView] = useState<LogView>(undefined);
   const [showExpired, setShowExpired] = useState(false);
   const revoke = useListMutation<ApiKey, string>(qk.apiKeys, (id) => api.apiKeys.remove(id), (rows, id) => rows.filter((k) => k.id !== id), {
@@ -223,12 +225,29 @@ export default function ApiKeys() {
                         </span>
                       </Tooltip>
                       <Tooltip content={k.expires_at ? fullDate(k.expires_at) : t("apiKeys.noExpiry")}>
-                        <span
-                          aria-label={k.expires_at ? undefined : t("apiKeys.noExpiry")}
-                          className={cn("text-[12px] @max-[48rem]:pl-11", !k.expires_at || state === "expired" ? "text-fg-4" : state === "expiring" ? "font-medium text-tone-amber" : "text-fg-2")}
-                        >
-                          {k.expires_at ? shortDate(k.expires_at) : "—"}
-                        </span>
+                        {/* An admin changes a live key's expiry from the cell, as the rights cell opens its permissions. */}
+                        {(() => {
+                          const date = (
+                            <span
+                              aria-label={k.expires_at ? undefined : t("apiKeys.noExpiry")}
+                              className={cn("text-[12px]", !k.expires_at || state === "expired" ? "text-fg-4" : state === "expiring" ? "font-medium text-tone-amber" : "text-fg-2")}
+                            >
+                              {k.expires_at ? shortDate(k.expires_at) : "—"}
+                            </span>
+                          );
+                          return admin && state !== "expired" ? (
+                            <button
+                              type="button"
+                              aria-label={t("apiKeys.expiry.cell", { name: k.name })}
+                              onClick={() => setExpiring(k)}
+                              className="-mx-1.5 justify-self-start rounded px-1.5 py-0.5 text-left transition-colors hover:bg-hover focus-visible:outline-2 @max-[48rem]:ml-11"
+                            >
+                              {date}
+                            </button>
+                          ) : (
+                            <span className="@max-[48rem]:pl-11">{date}</span>
+                          );
+                        })()}
                       </Tooltip>
                       <Menu>
                         <MenuTrigger asChild>
@@ -252,6 +271,11 @@ export default function ApiKeys() {
                           <MenuItem icon={<SlidersHorizontal />} onSelect={() => setScoping(k)}>
                             {t("apiKeys.scopes.menu")}
                           </MenuItem>
+                          {state !== "expired" && (
+                            <MenuItem icon={<CalendarClock />} onSelect={() => setExpiring(k)}>
+                              {t("apiKeys.expiry.menu")}
+                            </MenuItem>
+                          )}
                           <MenuItem
                             icon={<ListTree />}
                             onSelect={() => {
@@ -316,6 +340,7 @@ export default function ApiKeys() {
           }}
         />
       )}
+      {expiring && <ExpiryDialog apiKey={expiring} onClose={() => setExpiring(null)} />}
       {scoping && <ScopesDialog apiKey={scoping} onClose={() => setScoping(null)} />}
       {creating && (
         <CreateKeyDialog
@@ -519,25 +544,28 @@ export function CreateKeyDialog({ onClose, onCreated }: { onClose: () => void; o
           submit();
         }}
       >
-        <Field label={t("apiKeys.form.name")}>
-          {(p) => <TextInput {...p} autoFocus value={name} maxLength={80} placeholder={t("apiKeys.form.namePlaceholder")} onChange={(e) => setName(e.target.value)} />}
-        </Field>
+        {/* The expiry sits beside the name, above the scope list, so it shows without scrolling. */}
+        <div className="grid grid-cols-[minmax(0,1fr)_11rem] gap-3 max-sm:grid-cols-1">
+          <Field label={t("apiKeys.form.name")}>
+            {(p) => <TextInput {...p} autoFocus value={name} maxLength={80} placeholder={t("apiKeys.form.namePlaceholder")} onChange={(e) => setName(e.target.value)} />}
+          </Field>
+          <Field label={t("apiKeys.form.expires")}>
+            {(p) => (
+              <Select<Expiry>
+                id={p.id}
+                value={expiry}
+                onChange={setExpiry}
+                options={[
+                  { value: "30", label: t("apiKeys.form.in30") },
+                  { value: "90", label: t("apiKeys.form.in90") },
+                  { value: "365", label: t("apiKeys.form.in365") },
+                  { value: "never", label: t("apiKeys.form.never") },
+                ]}
+              />
+            )}
+          </Field>
+        </div>
         <ScopeChecklist scopes={scopes} onChange={setScopes} />
-        <Field label={t("apiKeys.form.expires")}>
-          {(p) => (
-            <Select<Expiry>
-              id={p.id}
-              value={expiry}
-              onChange={setExpiry}
-              options={[
-                { value: "30", label: t("apiKeys.form.in30") },
-                { value: "90", label: t("apiKeys.form.in90") },
-                { value: "365", label: t("apiKeys.form.in365") },
-                { value: "never", label: t("apiKeys.form.never") },
-              ]}
-            />
-          )}
-        </Field>
         {speaks && (
           <Field label={t("apiKeys.bot.label")} hint={t("apiKeys.bot.hint")}>
             {(p) => <KeyBotSelect id={p.id} value={bot} onChange={setBot} />}

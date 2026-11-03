@@ -69,6 +69,18 @@
     },
     "scopeFull": "Vollzugriff",
     "scopeRead": "nur lesen",
+    "expiry": {
+      "menu": "Ablauf ändern",
+      "title": "Ablauf von {{name}}",
+      "current": "Läuft derzeit am {{date}} ab.",
+      "currentNever": "Läuft derzeit nie ab.",
+      "onDate": "An einem Datum",
+      "date": "Datum",
+      "future": "Wählen Sie einen Tag nach heute.",
+      "save": "Ablauf speichern",
+      "widenNeedsSignIn": "Ein späteres Datum oder keines erfordert eine kürzliche Anmeldung, wie beim Erstellen eines Schlüssels.",
+      "cell": "Ablauf von {{name}} ändern"
+    },
     "requests": {
       "menu": "Anfrageprotokoll",
       "title": "Anfrageprotokoll von {{name}}",

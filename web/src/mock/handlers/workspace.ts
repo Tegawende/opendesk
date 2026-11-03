@@ -256,6 +256,20 @@ export function registerWorkspace() {
       if (db.stepUp === "mfa_required") throw new HttpError(403, "mfa_required", "this action requires two-factor authentication");
       if (db.stepUp === "reauth_required") throw new HttpError(403, "reauth_required", "For your security, sign in again to do this. Your last sign-in is more than 12 hours old.");
     }
+    // A later expiry, or none, works like adding a scope: the same fresh sign-in. Earlier is at once.
+    if ("expires_at" in ctx.body) {
+      const to = (ctx.body.expires_at as string | null) ?? null;
+      const from = key.expires_at ?? null;
+      if (to !== null && Date.parse(to) <= Date.now()) throw new HttpError(422, "validation_failed", "expires_at must be in the future. To stop a key now, revoke it.");
+      if (from !== null && Date.parse(from) <= Date.now()) throw new HttpError(422, "validation_failed", "This key has expired and can't be brought back. Create a new key.");
+      const widens = to === null ? from !== null : from !== null && Date.parse(to) > Date.parse(from);
+      if (widens && db.stepUp === "mfa_required") throw new HttpError(403, "mfa_required", "this action requires two-factor authentication");
+      if (widens && db.stepUp === "reauth_required") throw new HttpError(403, "reauth_required", "For your security, sign in again to do this. Your last sign-in is more than 12 hours old.");
+      if (to !== from) {
+        key.expires_at = to;
+        audit(ctx.ws, "api_key.expiry_changed", "api_key", key.id, { from, to });
+      }
+    }
     assign(key, ctx.body, ["name", "scopes"]);
     if (scopes && (scopes.length !== before.length || scopes.some((sc) => !before.includes(sc))))
       audit(ctx.ws, "api_key.scopes_changed", "api_key", key.id, { from: before, to: key.scopes });

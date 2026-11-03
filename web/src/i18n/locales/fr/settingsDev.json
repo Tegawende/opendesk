@@ -70,6 +70,18 @@
     },
     "scopeFull": "accès complet",
     "scopeRead": "lecture seule",
+    "expiry": {
+      "menu": "Modifier l’expiration",
+      "title": "Expiration de {{name}}",
+      "current": "Expire actuellement le {{date}}.",
+      "currentNever": "N’expire jamais actuellement.",
+      "onDate": "À une date",
+      "date": "Date",
+      "future": "Choisissez un jour après aujourd’hui.",
+      "save": "Enregistrer l’expiration",
+      "widenNeedsSignIn": "Une date plus tardive, ou aucune, demande une connexion récente, comme pour créer une clé.",
+      "cell": "Modifier l’expiration de {{name}}"
+    },
     "requests": {
       "menu": "Journal des requêtes",
       "title": "Journal des requêtes de {{name}}",

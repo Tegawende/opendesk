@@ -69,6 +69,18 @@
     },
     "scopeFull": "full access",
     "scopeRead": "read only",
+    "expiry": {
+      "menu": "Change expiry",
+      "title": "Expiry of {{name}}",
+      "current": "Now expires {{date}}.",
+      "currentNever": "Now never expires.",
+      "onDate": "On a date",
+      "date": "Date",
+      "future": "Pick a day after today.",
+      "save": "Save expiry",
+      "widenNeedsSignIn": "A later date, or none, asks for a recent sign-in, as creating a key does.",
+      "cell": "Change the expiry of {{name}}"
+    },
     "requests": {
       "menu": "Request log",
       "title": "Request log of {{name}}",
