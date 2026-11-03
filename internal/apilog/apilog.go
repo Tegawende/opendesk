@@ -275,7 +275,7 @@ func safePath(r *http.Request) string {
 	path := rc.RoutePattern()
 	for i, key := range rc.URLParams.Keys {
 		value := rc.URLParams.Values[i]
-		if safeRef(value) {
+		if !secretName.MatchString(key) && safeRef(value) {
 			path = strings.ReplaceAll(path, "{"+key+"}", value)
 		}
 	}

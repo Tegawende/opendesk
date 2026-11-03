@@ -439,7 +439,7 @@ Core notes:
   check afterwards what an integration did. From the key's next request, every request it makes under `/v1` is kept
   90 days (the `core.cleanup` job deletes older ones): time, method, path, query, status, duration, `Idempotency-Key`,
   replay, IP, user agent and `X-Request-Id`. Path parameters retain only UUIDs, positive numbers and numeric
-  `ext:`, `gorgias:` or `zendesk:` references; other parameters use the route template. Unknown paths use
+  `ext:`, `gorgias:` or `zendesk:` references; credential-named parameters always use the route template, as do other non-ID parameters. Unknown paths use
   `/v1/[unmatched]`. Queries retain valid `limit`, `page` and `expand=messages`; known credential parameters are
   masked and other parameters omitted. Only single-ticket create/update and message create/edit JSON bodies
   are captured, with secret-looking fields masked, and only when linked to a live workspace ticket. Captures

@@ -1,6 +1,9 @@
 package apilog
 
 import (
+	"github.com/go-chi/chi/v5"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -133,5 +136,24 @@ func TestQueryCaptureAllowlist(t *testing.T) {
 		if got := maskQuery(raw); got != "" {
 			t.Fatalf("unsafe query retained: %s", got)
 		}
+	}
+}
+
+func TestSafePath(t *testing.T) {
+	router := chi.NewRouter()
+	capture := func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(safePath(r))) }
+	router.Post("/v1/phone/hooks/{provider}/{id}/{secret}", capture)
+	router.NotFound(capture)
+	for _, secret := range []string{uuid.NewString(), "123456", "PATH_CREDENTIAL_SENTINEL"} {
+		out := httptest.NewRecorder()
+		router.ServeHTTP(out, httptest.NewRequest(http.MethodPost, "/v1/phone/hooks/provider/42/"+secret, nil))
+		if got := out.Body.String(); got != "/v1/phone/hooks/{provider}/42/{secret}" {
+			t.Fatalf("unsafe path: %s", got)
+		}
+	}
+	out := httptest.NewRecorder()
+	router.ServeHTTP(out, httptest.NewRequest(http.MethodGet, "/v1/UNKNOWN_CREDENTIAL_SENTINEL", nil))
+	if out.Body.String() != "/v1/[unmatched]" {
+		t.Fatal("unmatched path content retained")
 	}
 }

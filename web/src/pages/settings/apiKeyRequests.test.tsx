@@ -145,7 +145,7 @@ describe("An API key's requests", () => {
     const sent = document.querySelector('pre[aria-label="Sent"]')!;
     expect(sent.textContent).toBe('{\n  "kind": "note",\n  "password": "***"\n}');
     expect(document.querySelector('pre[aria-label="Answer"]')?.textContent).toContain('"code": "validation_failed"');
-    expect(text()).toContain("Cut at 8 KB");
+    expect(text()).toContain("Capture exceeded 8 KB. Only safe diagnostics are kept.");
     expect(text()).toContain("returny-R-1");
     await click(button("All requests"));
     expect(rows()).toHaveLength(1);
