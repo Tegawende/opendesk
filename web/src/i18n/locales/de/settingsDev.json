@@ -79,6 +79,7 @@
       "off": "Die Aufzeichnung ist aus: Anfragen dieses Schlüssels werden nicht aufbewahrt.",
       "turnOn": "Aufzeichnung einschalten",
       "filterAll": "Alle",
+      "filterErrors": "Fehler",
       "ticketPlaceholder": "Ticket: Nummer oder ID",
       "ticketLabel": "Nach Ticket filtern",
       "refresh": "Aktualisieren",
@@ -113,7 +114,9 @@
         "answer": "Antwort",
         "answerNotKept": "Die Antwort auf eine erfolgreiche Anfrage wird nicht aufbewahrt: was sie betroffen hat, steht oben.",
         "truncated": "Bei {{size}} abgeschnitten: der Rest wurde nicht aufbewahrt."
-      }
+      },
+      "sinceLabel": "Seit {{when}}",
+      "sinceClear": "Alle Daten anzeigen"
     }
   },
   "webhooks": {

@@ -271,7 +271,10 @@ export function registerWorkspace() {
   };
   get("/v1/api-keys/:id/requests", (ctx) => {
     const status = ctx.query.get("status");
-    return paginate(ctx, keyRequests(ctx).filter((r) => !status || String(r.status)[0] === status[0]).map(({ request_body: _b, response_body: _r, ...row }) => row));
+    const since = ctx.query.get("since");
+    const ok = (r: ApiKeyRequestDetail) =>
+      (!status || (status === "errors" ? r.status >= 400 : String(r.status)[0] === status[0])) && (!since || r.created_at >= since);
+    return paginate(ctx, keyRequests(ctx).filter(ok).map(({ request_body: _b, response_body: _r, ...row }) => row));
   });
   get("/v1/api-keys/:id/requests/:requestId", (ctx) => keyRequests(ctx).find((r) => r.id === ctx.params.requestId) ?? (() => { throw notFound("Request"); })());
   del("/v1/api-keys/:id", (ctx) => {

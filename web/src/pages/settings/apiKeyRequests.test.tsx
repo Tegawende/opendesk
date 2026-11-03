@@ -7,7 +7,7 @@ import type { ApiKey, ApiKeyRequest, ApiKeyRequestDetail, Page } from "@/lib/api
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { qk } from "@/lib/queries";
 import { useSession } from "@/lib/session";
-import { ApiKeyRequestsDrawer, pretty } from "./ApiKeyRequests";
+import { ApiKeyRequestsDrawer, ago, pretty } from "./ApiKeyRequests";
 
 type Query = { limit?: number; cursor?: string | null; status?: string; ticket?: string };
 const requests = vi.fn<(id: string, q: Query) => Promise<Page<ApiKeyRequest>>>();
@@ -74,7 +74,7 @@ afterEach(async () => {
   document.body.innerHTML = "";
 });
 
-async function render(k: ApiKey) {
+async function render(k: ApiKey, initial?: Parameters<typeof ApiKeyRequestsDrawer>[0]["initial"]) {
   qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   qc.setQueryData(qk.apiKeys, [k]);
   const host = document.createElement("div");
@@ -82,7 +82,7 @@ async function render(k: ApiKey) {
   root = createRoot(host);
   await act(async () => root.render(<QueryClientProvider client={qc}>
         <TooltipProvider>
-          <ApiKeyRequestsDrawer apiKey={k} onClose={onClose} />
+          <ApiKeyRequestsDrawer apiKey={k} onClose={onClose} initial={initial} />
         </TooltipProvider>
       </QueryClientProvider>));
   await settle();
@@ -95,6 +95,39 @@ const text = () => document.body.textContent ?? "";
 const rows = () => [...document.querySelectorAll('[role="table"] [role="row"]')].slice(1);
 
 describe("An API key's requests", () => {
+  it("filters on every failure with Errors, 4xx and 5xx together", async () => {
+    requests.mockResolvedValue({ data: [row({ status: 503 })], next_cursor: null });
+    await render(key());
+    await click(button("Errors"));
+    await settle();
+    expect(requests).toHaveBeenLastCalledWith("k1", { limit: 50, cursor: null, status: "errors" });
+  });
+
+  it("opens already filtered, and the date filter can be taken off", async () => {
+    requests.mockResolvedValue({ data: [row({ status: 422 })], next_cursor: null });
+    await render(key(), { status: "errors", since: "2026-11-02T10:00:00.000Z" });
+    expect(requests).toHaveBeenLastCalledWith("k1", { limit: 50, cursor: null, status: "errors", since: "2026-11-02T10:00:00.000Z" });
+    const since = document.querySelector<HTMLButtonElement>('button[aria-label="Show every date"]')!;
+    expect(since.textContent).toContain("Since");
+    await click(since);
+    await settle();
+    expect(requests).toHaveBeenLastCalledWith("k1", { limit: 50, cursor: null, status: "errors" });
+  });
+
+  it("says when a request was made in the past tense, never as a negative duration", async () => {
+    const now = Date.parse("2026-11-03T10:00:00Z");
+    // Intl spaces these with no-break spaces.
+    const at = (iso: string) => ago(iso, now).replace(/\s/g, " ");
+    await i18n.changeLanguage("fr");
+    expect(at("2026-11-03T09:58:00Z")).toBe("il y a 2 min");
+    expect(at("2026-11-03T07:00:00Z")).not.toMatch(/^-/);
+    await i18n.changeLanguage("de");
+    expect(at("2026-11-03T09:58:00Z")).toBe("vor 2 Min.");
+    await i18n.changeLanguage("en");
+    expect(at("2026-11-03T09:58:00Z")).toBe("2m");
+    await render(key());
+  });
+
   it("lists them with their status and ticket, and filters by answer and ticket", async () => {
     requests.mockImplementation(async (_id, q) => ({
       data: q.status === "4xx" ? [row({ id: "r2", status: 422, ticket: null, ticket_ref: "999" })] : [row(), row({ id: "r2", status: 422, ticket: null, ticket_ref: "999" })],

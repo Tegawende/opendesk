@@ -94,7 +94,7 @@ func (s *svc) registerAPIKeyRequests(api huma.API) {
 		func(ctx context.Context, in *struct {
 			ID string `path:"id"`
 			httpx.ListParams
-			Status string `query:"status" enum:"2xx,3xx,4xx,5xx," doc:"Only answers of this class"`
+			Status string `query:"status" enum:"2xx,3xx,4xx,5xx,errors," doc:"Only answers of this class; errors: every failure, 400 and up"`
 			Method string `query:"method" enum:"GET,POST,PUT,PATCH,DELETE," doc:"Only this method"`
 			Since  string `query:"since" doc:"RFC 3339: made at or after"`
 			Until  string `query:"until" doc:"RFC 3339: made before"`
@@ -123,7 +123,9 @@ func (s *svc) registerAPIKeyRequests(api huma.API) {
 				cur.T = time.Now().Add(time.Hour)
 			}
 			lo, hi := 0, 1000
-			if in.Status != "" {
+			if in.Status == "errors" {
+				lo = 400
+			} else if in.Status != "" {
 				lo = int(in.Status[0]-'0') * 100
 				hi = lo + 100
 			}

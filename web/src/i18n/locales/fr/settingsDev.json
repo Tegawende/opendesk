@@ -80,6 +80,7 @@
       "off": "L'enregistrement est coupé : les requêtes de cette clé ne sont pas gardées.",
       "turnOn": "Activer l'enregistrement",
       "filterAll": "Toutes",
+      "filterErrors": "Erreurs",
       "ticketPlaceholder": "Ticket : numéro ou id",
       "ticketLabel": "Filtrer par ticket",
       "refresh": "Actualiser",
@@ -114,7 +115,9 @@
         "answer": "Réponse",
         "answerNotKept": "La réponse d'une requête réussie n'est pas gardée : ce qu'elle a touché est indiqué ci-dessus.",
         "truncated": "Coupé à {{size}} : la suite n'a pas été gardée."
-      }
+      },
+      "sinceLabel": "Depuis le {{when}}",
+      "sinceClear": "Afficher toutes les dates"
     }
   },
   "webhooks": {

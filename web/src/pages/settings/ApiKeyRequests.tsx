@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CircleDot, RefreshCw, Search } from "lucide-react";
+import { ArrowLeft, CircleDot, RefreshCw, Search, X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { ListSkeleton } from "@/components/settings2/bits";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api/endpoints";
 import type { ApiKey, ApiKeyRequest, ApiKeyRequestDetail, ApiKeyRequestFilter } from "@/lib/api/types";
+import { intlLocale } from "@/i18n";
 import { fullDate, relShort } from "@/lib/format";
 import { qk, upsertInList } from "@/lib/queries";
 import { cn } from "@/lib/cn";
@@ -23,6 +24,24 @@ type StatusFilter = "all" | NonNullable<ApiKeyRequestFilter["status"]>;
 function CodePill({ code }: { code: number }) {
   const t = code < 300 ? tone.green : code < 400 ? tone.amber : tone.red;
   return <span className={cn("mono inline-flex h-5 items-center rounded-sm px-1.5 text-[11px] font-medium tabular-nums", t.chip)}>{code}</span>;
+}
+
+/**
+ * When a request was made, short and in the past tense: "il y a 2 min", "vor 2 Min.", "2m". French's
+ * narrow relative format writes "-2 min", which reads as a negative duration.
+ */
+export function ago(iso: string, now = Date.now()): string {
+  const loc = intlLocale();
+  if (loc.toLowerCase().startsWith("en")) return relShort(iso, now);
+  const s = Math.round((now - Date.parse(iso)) / 1000);
+  if (s >= 7 * 86400) return relShort(iso, now);
+  const f = new Intl.RelativeTimeFormat(loc, { style: "short", numeric: "auto" });
+  const m = Math.round(s / 60);
+  const h = Math.round(m / 60);
+  if (s < 45) return f.format(0, "second");
+  if (m < 60) return f.format(-m, "minute");
+  if (h < 24) return f.format(-h, "hour");
+  return f.format(-Math.round(h / 24), "day");
 }
 
 /** A body as sent: JSON indented, anything else as it is. */
@@ -53,20 +72,30 @@ function TicketLink({ r }: { r: ApiKeyRequest }) {
   return <span className="text-fg-4">–</span>;
 }
 
-const grid = "grid grid-cols-[72px_minmax(0,1fr)_48px_72px] items-center gap-3 px-4";
+const grid = "grid grid-cols-[92px_minmax(0,1fr)_48px_72px] items-center gap-3 px-4";
 
 /**
  * The requests an API key made while "Record requests" was on (GET /v1/api-keys/{id}/requests):
  * a list to filter by answer and ticket, and each request with what it sent and the answer.
  */
-export function ApiKeyRequestsDrawer({ apiKey, onClose }: { apiKey: ApiKey; onClose: () => void }) {
+export function ApiKeyRequestsDrawer({
+  apiKey,
+  onClose,
+  initial,
+}: {
+  apiKey: ApiKey;
+  onClose: () => void;
+  /** Opens already filtered, e.g. on the failures of the last 24 hours. */
+  initial?: { status?: StatusFilter; since?: string };
+}) {
   const { t } = useTranslation("settingsDev");
   const qc = useQueryClient();
-  const [status, setStatus] = useState<StatusFilter>("all");
+  const [status, setStatus] = useState<StatusFilter>(initial?.status ?? "all");
+  const [since, setSince] = useState(initial?.since ?? "");
   const [ticketInput, setTicketInput] = useState("");
   const [ticket, setTicket] = useState("");
   const [open, setOpen] = useState<string | null>(null);
-  const filter: ApiKeyRequestFilter = { ...(status !== "all" ? { status } : {}), ...(ticket ? { ticket } : {}) };
+  const filter: ApiKeyRequestFilter = { ...(status !== "all" ? { status } : {}), ...(ticket ? { ticket } : {}), ...(since ? { since } : {}) };
 
   const list = useInfiniteQuery({
     queryKey: [...qk.apiKeys, "requests", apiKey.id, filter] as const,
@@ -105,11 +134,23 @@ export function ApiKeyRequestsDrawer({ apiKey, onClose }: { apiKey: ApiKey; onCl
                 onChange={setStatus}
                 options={[
                   { value: "all", label: t("apiKeys.requests.filterAll") },
+                  { value: "errors", label: t("apiKeys.requests.filterErrors") },
                   { value: "2xx", label: "2xx" },
                   { value: "4xx", label: "4xx" },
                   { value: "5xx", label: "5xx" },
                 ]}
               />
+              {since && (
+                <button
+                  type="button"
+                  onClick={() => setSince("")}
+                  aria-label={t("apiKeys.requests.sinceClear")}
+                  className="flex h-6 items-center gap-1 rounded-md border border-line px-2 text-[11.5px] text-fg-2 transition-colors hover:bg-hover"
+                >
+                  {t("apiKeys.requests.sinceLabel", { when: fullDate(since) })}
+                  <X className="size-3 text-fg-4" />
+                </button>
+              )}
               <form
                 className="flex min-w-[220px] flex-1 items-center gap-1"
                 onSubmit={(e) => {
@@ -155,8 +196,8 @@ export function ApiKeyRequestsDrawer({ apiKey, onClose }: { apiKey: ApiKey; onCl
               compact
               lit={0}
               className="py-10"
-              title={status !== "all" || ticket ? t("apiKeys.requests.emptyFiltered") : t("apiKeys.requests.empty")}
-              description={status !== "all" || ticket ? undefined : t("apiKeys.requests.emptyHint")}
+              title={status !== "all" || ticket || since ? t("apiKeys.requests.emptyFiltered") : t("apiKeys.requests.empty")}
+              description={status !== "all" || ticket || since ? undefined : t("apiKeys.requests.emptyHint")}
             />
           ) : (
             <div role="table" aria-label={t("apiKeys.requests.title", { name: apiKey.name })} className="text-[12.5px]">
@@ -179,7 +220,7 @@ export function ApiKeyRequestsDrawer({ apiKey, onClose }: { apiKey: ApiKey; onCl
                 >
                   <span role="cell">
                     <Tooltip content={fullDate(r.created_at)}>
-                      <span className="mono text-[11.5px] text-fg-3">{relShort(r.created_at)}</span>
+                      <span className="mono text-[11.5px] text-fg-3">{ago(r.created_at)}</span>
                     </Tooltip>
                   </span>
                   <span role="cell" className="mono flex min-w-0 items-center gap-2 text-[12px]">

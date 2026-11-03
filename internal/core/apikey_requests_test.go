@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -198,7 +199,7 @@ func TestAPIKeyRequestLog(t *testing.T) {
 	}
 
 	// Filters and pages.
-	for q, want := range map[string]int{"?status=4xx": 1, "?status=2xx": 4, "?method=GET": 1, "?ticket=ext:555": 1,
+	for q, want := range map[string]int{"?status=4xx": 1, "?status=errors": 1, "?status=2xx": 4, "?method=GET": 1, "?ticket=ext:555": 1,
 		"?ticket=4242": 4, "?ticket=" + ticketID.String(): 4, "?ticket=4241": 1, "?since=2000-01-01T00:00:00Z&until=2000-01-02T00:00:00Z": 0} {
 		if got := list(q); len(got) != want {
 			t.Fatalf("%s: %d, want %d", q, len(got), want)
@@ -274,5 +275,33 @@ func TestAPIKeyRequestLogOnCreate(t *testing.T) {
 	}
 	if g := c.do("GET", "/v1/api-keys/"+r.str("id"), nil); g.Body["record_requests"] != true {
 		t.Fatalf("get: %s", g.Raw)
+	}
+}
+
+// The Errors filter (status=errors) takes every failure, 4xx and 5xx, and leaves the successes.
+func TestAPIKeyRequestLogErrors(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	c, _ := e.signup("keylogerrors")
+	wid := c.newWorkspace("Key Log Errors Co")
+	r := c.do("POST", "/v1/api-keys", map[string]any{"name": "Claimy", "scopes": []string{"tickets:read"}, "record_requests": true})
+	if r.Status != 201 {
+		t.Fatalf("create: %d %s", r.Status, r.Raw)
+	}
+	key := r.str("id")
+	for _, status := range []int{201, 200, 422, 404, 503} {
+		if err := apilog.Write(ctx, e.d.DB.Pool, apilog.Entry{ID: uuid.New(), WorkspaceID: uuid.MustParse(wid), APIKeyID: uuid.MustParse(key),
+			CreatedAt: time.Now(), Method: "POST", Path: "/v1/tickets", Status: status}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for q, want := range map[string]int{"?status=errors": 3, "?status=4xx": 2, "?status=5xx": 1, "?status=2xx": 2} {
+		g := c.do("GET", "/v1/api-keys/"+key+"/requests"+q, nil)
+		if n := len(g.Body["data"].([]any)); g.Status != 200 || n != want {
+			t.Fatalf("%s: %d %d, want %d", q, g.Status, n, want)
+		}
+	}
+	if g := c.do("GET", "/v1/api-keys/"+key+"/requests?status=oops", nil); g.Status != 422 {
+		t.Fatalf("bad status: %d", g.Status)
 	}
 }
