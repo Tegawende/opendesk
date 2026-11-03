@@ -42,23 +42,24 @@ function authorName(m: Message): string {
   return m.from_name || m.from_email || "Unknown";
 }
 
-type SanitizedBody = Sanitized & { designed: boolean };
+type SanitizedBody = Sanitized & { designed: boolean; note: boolean };
 
 /**
  * A message body, sanitized once. An inbound email holds back images from other sites
  * until the reader loads them; a designed one, received, sent or a note, renders in its own frame.
+ * A note's frame follows the app's theme: it is ours, not a sender's layout to show as sent.
  */
-function useBody(html: string, inbound: boolean, designable: boolean, remote: boolean): SanitizedBody {
+function useBody(html: string, inbound: boolean, designable: boolean, remote: boolean, note = false): SanitizedBody {
   return useMemo(() => {
     const opts = { blockRemoteImages: inbound && !remote };
-    if (designable && isDesignedEmail(html)) return { designed: true, ...sanitizeEmailHtml(html, opts) };
-    return { designed: false, ...sanitizeProse(html, opts) };
-  }, [html, inbound, designable, remote]);
+    if (designable && isDesignedEmail(html)) return { designed: true, note, ...sanitizeEmailHtml(html, opts) };
+    return { designed: false, note, ...sanitizeProse(html, opts) };
+  }, [html, inbound, designable, remote, note]);
 }
 
 function Body({ body, className }: { body: SanitizedBody; className?: string }) {
   const { t } = useTranslation("inbox");
-  if (body.designed) return <EmailFrame html={body.html} title={t("message.emailContent")} className={className} />;
+  if (body.designed) return <EmailFrame html={body.html} title={t("message.emailContent")} className={className} themed={body.note} />;
   return <div className={cn("prose-od ph-no-capture", className)} data-ph-mask dangerouslySetInnerHTML={{ __html: body.html }} />;
 }
 
@@ -577,7 +578,7 @@ export const MessageItem = memo(function MessageItem({
   // Loaded for this message, or for every email (Settings → Profile → Appearance).
   const remote = useAlwaysShowImages() || loaded;
   const translated = !!(tr.showing && tr.html);
-  const body = useBody(translated ? tr.html! : m.body_html || `<p>${m.body_text}</p>`, inbound, !translated, remote);
+  const body = useBody(translated ? tr.html! : m.body_html || `<p>${m.body_text}</p>`, inbound, !translated, remote, note);
   const replyTo = inbound && m.reply_to && m.reply_to.toLowerCase() !== m.from_email.toLowerCase() ? m.reply_to : null;
 
   // A note sent as a reply is hidden like a deleted message, and says where its words went.

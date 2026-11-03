@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
+import { useTheme } from "@/lib/theme";
 
 // A designed email (receipts, newsletters, notifications) renders as its sender laid it
 // out: its own styles in a frame of its own, light like a mail client's reading pane.
 // The frame runs no scripts; links open in a new tab. It grows to its content, and a
 // fixed-width layout wider than the column is scaled down to fit.
+//
+// A themed frame (an internal note laid out with tables or colours, such as an assistant's
+// summary) is ours rather than a sender's: it sits on the message's own background and, in
+// the dark theme, its colours are turned dark (inverted, hues kept; images turned back).
 
 const BASE = `
 :root { color-scheme: light; }
@@ -17,18 +22,29 @@ body { color: #1f2328; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe 
 :where(img[data-od-held]) { background: #f1f3f5; }
 `;
 
+const THEMED = `
+html, body { background: transparent; }
+`;
+
+const THEMED_DARK = `
+#od-email { filter: invert(0.9) hue-rotate(180deg); }
+#od-email :is(img, video, picture) { filter: invert(1) hue-rotate(180deg); }
+`;
+
 // Past this the frame scrolls on its own rather than growing the page.
 const MAX_HEIGHT = 12000;
 
-function frameDocument(html: string) {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light"><meta name="referrer" content="no-referrer"><base target="_blank"><style>${BASE}</style></head><body><div id="od-email">${html}</div></body></html>`;
+export function frameDocument(html: string, themed = false, dark = false) {
+  const css = BASE + (themed ? THEMED : "") + (themed && dark ? THEMED_DARK : "");
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light"><meta name="referrer" content="no-referrer"><base target="_blank"><style>${css}</style></head><body><div id="od-email">${html}</div></body></html>`;
 }
 
-/** html is the output of sanitizeEmailHtml. */
-export function EmailFrame({ html, title, className }: { html: string; title: string; className?: string }) {
+/** html is the output of sanitizeEmailHtml. themed: an internal note, following the app's theme. */
+export function EmailFrame({ html, title, className, themed = false }: { html: string; title: string; className?: string; themed?: boolean }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(0);
-  const doc = useMemo(() => frameDocument(html), [html]);
+  const { dark } = useTheme();
+  const doc = useMemo(() => frameDocument(html, themed, dark), [html, themed, dark]);
 
   useEffect(() => {
     const frame = ref.current;
@@ -75,16 +91,16 @@ export function EmailFrame({ html, title, className }: { html: string; title: st
     };
   }, [doc]);
 
-  // On a dark surface the light pane gets a margin of its own.
+  // On a dark surface the light pane gets a margin of its own; a themed one has no pane.
   return (
-    <div className={cn("overflow-hidden rounded-md bg-white dark:p-3", className)}>
+    <div className={cn("overflow-hidden rounded-md", !themed && "bg-white dark:p-3", className)}>
       <iframe
         ref={ref}
         title={title}
         srcDoc={doc}
         sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
         referrerPolicy="no-referrer"
-        className="ph-no-capture block w-full border-0 bg-white [color-scheme:light]"
+        className={cn("ph-no-capture block w-full border-0 [color-scheme:light]", themed ? "bg-transparent" : "bg-white")}
         style={{ height: height || 80 }}
         data-ph-mask
       />
