@@ -270,6 +270,10 @@
       "label": "Après « {{action}} », ouvrir le ticket suivant",
       "hint": "Aussi après un envoi avec un statut qui retire le ticket de la liste. Le ticket suivant de la liste ou de la vue d’où vous venez s’ouvre, avec ses filtres et son tri ; après le dernier, vous revenez à la liste. Annuler l’envoi vous ramène au ticket."
     },
+    "alwaysShowImages": {
+      "label": "Toujours afficher les images",
+      "hint": "Les images distantes des e-mails reçus s’affichent avec eux, sans « Charger les images ». Elles viennent des serveurs de l’expéditeur, qui peut alors savoir quand un e-mail a été ouvert."
+    },
     "sounds": {
       "title": "Sons",
       "hint": "S’applique à ce navigateur. Le chat en direct utilise un son plus marqué ; les autres sons sont discrets.",
@@ -329,6 +333,19 @@
     "conversations": "Conversations",
     "csat": "Enquête de satisfaction",
     "csatHint": "Demandez aux clients d’évaluer la conversation après la résolution d’un ticket.",
+    "snoozePresets": "Options de mise en attente",
+    "snoozePresetsHint": "Les moments que propose le menu « Mettre en attente » d’un ticket, dans cet ordre, à l’heure de chaque agent. Les agents peuvent toujours choisir un autre jour et une autre heure.",
+    "snoozeKind": "Type de moment",
+    "snoozeKindHours": "Dans … heures",
+    "snoozeKindDays": "Dans … jours",
+    "snoozeKindWeek": "Semaine prochaine (lundi)",
+    "snoozeHours": "Heures",
+    "snoozeDays": "Jours",
+    "snoozeAt": "à",
+    "snoozeTime": "Heure",
+    "snoozeRemove": "Retirer ce moment",
+    "snoozeAdd": "Ajouter un moment",
+    "snoozeReset": "Rétablir les valeurs par défaut",
     "collabReplies": "Répondre depuis sa propre messagerie",
     "collabRepliesHint": "Les membres peuvent répondre à un ticket e-mail depuis l’un de leurs comptes de messagerie connectés plutôt que depuis l’adresse du ticket, réponse par réponse. Les réponses du client reviennent quand même sur le ticket. Chaque boîte mail peut avoir ses propres règles.",
     "collabReplyTo": "Destination des réponses",
