@@ -453,7 +453,8 @@ Core notes:
   no bot). It stays an API message: `ai` is false, it is not the AI agent's (its reports, ratings and "Improve
   answer" leave it out) and, like any API reply, it does not set `first_responded_at`. The bot is read when the
   message is written: a message keeps the bot it was sent as. Deleting a bot that a live key speaks as is
-  `409 bot_in_use`.. Create and PATCH take `record_requests` (below), audit `api_key.created` / `api_key.updated` carry it |
+  `409 bot_in_use`.
+- **Recording an API key's requests** (`ApiKey.record_requests`, off by default): an admin turns it on so a team can
   check afterwards what an integration did. From the key's next request, every request it makes under `/v1` is kept
   90 days (the `core.cleanup` job deletes older ones): time, method, path, query, status, duration, `Idempotency-Key`,
   replay, IP, user agent and `X-Request-Id`. Path parameters retain only UUIDs, positive numbers and numeric
