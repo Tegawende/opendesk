@@ -3,13 +3,13 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n, loadAgentCatalogs } from "@/i18n";
-import type { ApiKey, ApiKeyRequest, ApiKeyRequestDetail, Page } from "@/lib/api/types";
+import type { ApiKey, ApiKeyRequest, ApiKeyRequestDetail, Page, ApiKeyRequestFilter } from "@/lib/api/types";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { qk } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { ApiKeyRequestsDrawer, ago, pretty } from "./ApiKeyRequests";
 
-type Query = { limit?: number; cursor?: string | null; status?: string; ticket?: string };
+type Query = ApiKeyRequestFilter & { limit?: number; cursor?: string | null };
 const requests = vi.fn<(id: string, q: Query) => Promise<Page<ApiKeyRequest>>>();
 const request = vi.fn<(id: string, rid: string) => Promise<ApiKeyRequestDetail>>();
 const update = vi.fn<(id: string, b: { record_requests?: boolean }) => Promise<ApiKey>>();
@@ -112,6 +112,33 @@ describe("An API key's requests", () => {
     await click(since);
     await settle();
     expect(requests).toHaveBeenLastCalledWith("k1", { limit: 50, cursor: null, status: "errors" });
+  });
+
+  it("keeps the date and error filter while paging, and resets paging when status changes", async () => {
+    const since = "2026-11-02T10:00:00.000Z";
+    requests.mockImplementation(async (_id, q) => ({
+      data: q.cursor ? [row({ id: "r2", status: 503 })] : [row({ status: 422 })],
+      next_cursor: q.cursor || q.status !== "errors" ? null : "c1",
+    }));
+    await render(key(), { status: "errors", since });
+    await click(button("Load older requests"));
+    await settle();
+    expect(requests).toHaveBeenLastCalledWith("k1", { limit: 50, cursor: "c1", status: "errors", since });
+    expect(rows()).toHaveLength(2);
+    await click(button("5xx"));
+    await settle();
+    expect(requests).toHaveBeenLastCalledWith("k1", { limit: 50, cursor: null, status: "5xx", since });
+    expect(rows()).toHaveLength(1);
+    await click(button("All"));
+    await settle();
+    expect(requests).toHaveBeenLastCalledWith("k1", { limit: 50, cursor: null, since });
+  });
+
+  it("shows a filtered empty state when only a date filter is active", async () => {
+    requests.mockResolvedValue({ data: [], next_cursor: null });
+    await render(key(), { since: "2026-11-02T10:00:00.000Z" });
+    expect(text()).toContain(i18n.t("settingsDev:apiKeys.requests.emptyFiltered"));
+    expect(text()).not.toContain(i18n.t("settingsDev:apiKeys.requests.emptyHint"));
   });
 
   it("says when a request was made in the past tense, never as a negative duration", async () => {

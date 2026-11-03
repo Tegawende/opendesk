@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"net/url"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
@@ -252,4 +255,86 @@ func TestReview327PrivateRoutesMetadata(t *testing.T) {
 		}
 	}
 	t.Log("real Collab, password, MFA, webhook, bulk and unresolved-ticket failures retain safe diagnostics without private bodies, queries or path parameters")
+}
+
+func TestReview327ErrorFiltersVisibilityAndPages(t *testing.T) {
+	e, c, key, _ := reviewLoggedEnv(t)
+	ctx := context.Background()
+	wid := uuid.MustParse(c.workspace)
+	team := ids.New()
+	if _, err := e.d.DB.Pool.Exec(ctx, `INSERT INTO teams(id,workspace_id,name,private) VALUES($1,$2,'Private errors',true)`, team, wid); err != nil {
+		t.Fatal(err)
+	}
+	var ticket domain.Ticket
+	if err := e.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+		var err error
+		ticket, err = domain.CreateTicket(ctx, tx, domain.NewTicket{WorkspaceID: wid, TeamID: &team, Subject: "Private errors", Channel: domain.ChannelEmail})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
+	write := func(status int, made time.Time, method string, tid *uuid.UUID) string {
+		t.Helper()
+		id := ids.New()
+		if err := apilog.Write(ctx, e.d.DB.Pool, apilog.Entry{ID: id, WorkspaceID: wid, APIKeyID: uuid.MustParse(key), CreatedAt: made, Method: method, Path: "/v1/tickets", Status: status, TicketID: tid}); err != nil {
+			t.Fatal(err)
+		}
+		return id.String()
+	}
+	// Equal timestamps exercise the cursor's ID tie-breaker. Both error classes must survive paging.
+	badRequest := write(400, at, "POST", nil)
+	unavailable := write(503, at, "POST", nil)
+	hidden := write(500, at, "POST", &ticket.ID)
+	write(399, at, "POST", nil)
+	write(200, at, "POST", nil)
+	write(422, at.Add(-time.Second), "POST", nil)
+	write(504, at.Add(time.Second), "POST", nil)
+	write(404, at, "GET", nil)
+	path := "/v1/api-keys/" + key + "/requests"
+	filter := "?status=errors&method=POST&since=" + url.QueryEscape(at.Format(time.RFC3339)) + "&until=" + url.QueryEscape(at.Add(time.Second).Format(time.RFC3339))
+	list := func(query string) ([]string, string) {
+		t.Helper()
+		r := c.do("GET", path+query, nil)
+		if r.Status != 200 {
+			t.Fatalf("list: %d %s", r.Status, r.Raw)
+		}
+		ids := []string{}
+		for _, v := range r.Body["data"].([]any) {
+			ids = append(ids, v.(map[string]any)["id"].(string))
+		}
+		next, _ := r.Body["next_cursor"].(string)
+		return ids, next
+	}
+	first, cursor := list(filter + "&limit=1")
+	if len(first) != 1 || cursor == "" {
+		t.Fatalf("first page: %v cursor=%q", first, cursor)
+	}
+	second, next := list(filter + "&limit=1&cursor=" + url.QueryEscape(cursor))
+	if len(second) != 1 || next != "" {
+		t.Fatalf("second page: %v cursor=%q", second, next)
+	}
+	if got := append(first, second...); !reflect.DeepEqual(got, []string{unavailable, badRequest}) {
+		t.Fatalf("visible error pages: %v", got)
+	}
+	var uid uuid.UUID
+	if err := e.d.DB.Pool.QueryRow(ctx, `SELECT created_by FROM api_keys WHERE id=$1`, key).Scan(&uid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.d.DB.Pool.Exec(ctx, `INSERT INTO team_members(team_id,user_id) VALUES($1,$2)`, team, uid); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := list(filter); !reflect.DeepEqual(got, []string{hidden, unavailable, badRequest}) {
+		t.Fatalf("member's errors: %v", got)
+	}
+	if _, err := e.d.DB.Pool.Exec(ctx, `DELETE FROM team_members WHERE team_id=$1 AND user_id=$2`, team, uid); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := list(filter); !reflect.DeepEqual(got, []string{unavailable, badRequest}) {
+		t.Fatalf("former member's errors: %v", got)
+	}
+	if r := c.do("GET", path+"/"+hidden, nil); r.Status != 404 {
+		t.Fatalf("hidden detail: %d", r.Status)
+	}
+	t.Log("error filter preserves private-team visibility, membership revocation, inclusive since, exclusive until, method and stable cursor paging")
 }

@@ -290,16 +290,19 @@ func TestAPIKeyRequestLogErrors(t *testing.T) {
 		t.Fatalf("create: %d %s", r.Status, r.Raw)
 	}
 	key := r.str("id")
-	for _, status := range []int{201, 200, 422, 404, 503} {
+	for _, status := range []int{201, 200, 302, 399, 400, 422, 404, 499, 500, 503, 599} {
 		if err := apilog.Write(ctx, e.d.DB.Pool, apilog.Entry{ID: uuid.New(), WorkspaceID: uuid.MustParse(wid), APIKeyID: uuid.MustParse(key),
 			CreatedAt: time.Now(), Method: "POST", Path: "/v1/tickets", Status: status}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for q, want := range map[string]int{"?status=errors": 3, "?status=4xx": 2, "?status=5xx": 1, "?status=2xx": 2} {
+	for q, want := range map[string]int{"": 11, "?status=errors": 7, "?status=4xx": 4, "?status=5xx": 3, "?status=2xx": 2, "?status=3xx": 2} {
 		g := c.do("GET", "/v1/api-keys/"+key+"/requests"+q, nil)
-		if n := len(g.Body["data"].([]any)); g.Status != 200 || n != want {
-			t.Fatalf("%s: %d %d, want %d", q, g.Status, n, want)
+		if g.Status != 200 {
+			t.Fatalf("%s: %d %s", q, g.Status, g.Raw)
+		}
+		if n := len(g.Body["data"].([]any)); n != want {
+			t.Fatalf("%s: %d, want %d", q, n, want)
 		}
 	}
 	if g := c.do("GET", "/v1/api-keys/"+key+"/requests?status=oops", nil); g.Status != 422 {
