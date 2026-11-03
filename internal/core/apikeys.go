@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/useopendesk/opendesk/internal/ai/bots"
 	"github.com/useopendesk/opendesk/internal/audit"
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/crypto"
@@ -39,6 +40,9 @@ type CoreAPIKey struct {
 	PrivateTeams []PrivateTeamGrant `json:"private_teams"`
 	// RecordRequests: every request the key makes is kept 90 days (GET /v1/api-keys/{id}/requests).
 	RecordRequests bool `json:"record_requests" doc:"Every request the key makes is recorded and kept 90 days"`
+	// BotID is the bot the key speaks as: what it writes on tickets is shown and sent as that
+	// bot (contracts/bots.md). Null: it writes as itself.
+	BotID *uuid.UUID `json:"bot_id" doc:"The bot this key speaks as on tickets, or null"`
 }
 
 type CoreAPIKeyWithSecret struct {
@@ -46,7 +50,7 @@ type CoreAPIKeyWithSecret struct {
 	Secret string `json:"secret" doc:"The full key. Shown once."`
 }
 
-var apiKeySelect = `SELECT k.id, k.name, k.prefix, k.scopes, k.last_used_at, k.expires_at, k.created_at, k.record_requests,
+var apiKeySelect = `SELECT k.id, k.name, k.prefix, k.scopes, k.last_used_at, k.expires_at, k.created_at, k.record_requests, k.bot_id,
 	u.id, u.name, u.email, u.avatar_url, ` + grantedTeamsSQL("k.private_team_ids", "k.workspace_id") + `,
 	` + teamGrantsSQL("k.private_team_ids", "k.workspace_id", grantAPIKey, "k.id") + `
 	FROM api_keys k LEFT JOIN users u ON u.id = k.created_by`
@@ -56,7 +60,7 @@ func scanAPIKey(r pgx.Row) (CoreAPIKey, error) {
 	var uid *uuid.UUID
 	var name, email, avatar *string
 	var grants []byte
-	if err := r.Scan(&k.ID, &k.Name, &k.Prefix, &k.Scopes, &k.LastUsedAt, &k.ExpiresAt, &k.CreatedAt, &k.RecordRequests, &uid, &name, &email, &avatar,
+	if err := r.Scan(&k.ID, &k.Name, &k.Prefix, &k.Scopes, &k.LastUsedAt, &k.ExpiresAt, &k.CreatedAt, &k.RecordRequests, &k.BotID, &uid, &name, &email, &avatar,
 		&k.PrivateTeamIDs, &grants); err != nil {
 		return k, err
 	}
@@ -102,6 +106,19 @@ func validScopes(in []string) ([]string, error) {
 	}
 	slices.Sort(out)
 	return out, nil
+}
+
+// keyBot checks the bot a key is to speak as: a bot of the workspace, for a key that may
+// write on tickets. Nil clears it.
+func keyBot(ctx context.Context, q db.Querier, wid uuid.UUID, raw *string, scopes []string) (*uuid.UUID, error) {
+	bot, err := bots.ParseRef(ctx, q, wid, raw)
+	if err != nil || bot == nil {
+		return bot, err
+	}
+	if !slices.Contains(scopes, auth.ScopeTicketsWrite) {
+		return nil, httpx.Validation("A key speaks as a bot only with the tickets:write scope.")
+	}
+	return bot, nil
 }
 
 // scopeChanges says what going from one sorted scope list to another adds and removes.
@@ -185,6 +202,8 @@ func (s *svc) registerAPIKeys(api huma.API) {
 				PrivateTeamIDs []string `json:"private_team_ids,omitempty" maxItems:"200"`
 				// RecordRequests: keep every request the key makes, 90 days.
 				RecordRequests bool `json:"record_requests,omitempty" doc:"Record every request the key makes, kept 90 days"`
+				// BotID: the bot the key speaks as on tickets (needs tickets:write).
+				BotID *string `json:"bot_id,omitempty" required:"false" nullable:"true" doc:"A bot of the workspace this key speaks as on tickets (needs tickets:write), or null"`
 			}
 		}) (*struct {
 			CacheControl string `header:"Cache-Control"`
@@ -223,16 +242,20 @@ func (s *svc) registerAPIKeys(api huma.API) {
 				if err != nil {
 					return err
 				}
+				bot, err := keyBot(ctx, tx, p.WorkspaceID, in.Body.BotID, scopes)
+				if err != nil {
+					return err
+				}
 				id := ids.New()
-				if _, err := tx.Exec(ctx, `INSERT INTO api_keys (id, workspace_id, name, prefix, key_hash, scopes, created_by, expires_at, private_team_ids, record_requests)
-					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, id, p.WorkspaceID, name, prefix, hash, scopes, p.UserID, in.Body.ExpiresAt, teams, in.Body.RecordRequests); err != nil {
+				if _, err := tx.Exec(ctx, `INSERT INTO api_keys (id, workspace_id, name, prefix, key_hash, scopes, created_by, expires_at, private_team_ids, record_requests, bot_id)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, id, p.WorkspaceID, name, prefix, hash, scopes, p.UserID, in.Body.ExpiresAt, teams, in.Body.RecordRequests, bot); err != nil {
 					return err
 				}
 				if err := saveGrants(ctx, tx, p, grantAPIKey, id, teams); err != nil {
 					return err
 				}
 				if err := audit.Log(ctx, tx, p, p.WorkspaceID, "api_key.created", "api_key", &id,
-					map[string]any{"name": name, "scopes": scopes, "prefix": prefix, "private_team_ids": uuidStrings(teams), "record_requests": in.Body.RecordRequests}); err != nil {
+					map[string]any{"name": name, "scopes": scopes, "prefix": prefix, "private_team_ids": uuidStrings(teams), "record_requests": in.Body.RecordRequests, "bot_id": bot}); err != nil {
 					return err
 				}
 				k, err = loadAPIKey(ctx, tx, p.WorkspaceID, id)
@@ -242,7 +265,7 @@ func (s *svc) registerAPIKeys(api huma.API) {
 				return nil, httpx.Wrap(err)
 			}
 			s.d.Analytics.Capture(p.UserID.String(), p.WorkspaceID.String(), "api_key_created",
-				map[string]any{"scope_count": len(scopes), "expires": in.Body.ExpiresAt != nil})
+				map[string]any{"scope_count": len(scopes), "expires": in.Body.ExpiresAt != nil, "bot": k.BotID != nil})
 			return &struct {
 				CacheControl string `header:"Cache-Control"`
 				Body         CoreAPIKeyWithSecret
@@ -259,6 +282,8 @@ func (s *svc) registerAPIKeys(api huma.API) {
 				PrivateTeamIDs *[]string `json:"private_team_ids,omitempty" maxItems:"200"`
 				// RecordRequests turns recording the key's requests on or off, from its next request.
 				RecordRequests *bool `json:"record_requests,omitempty" doc:"Record every request the key makes (kept 90 days), from its next request"`
+				// BotID: the bot the key speaks as on tickets (needs tickets:write); null: itself.
+				BotID bots.Assignment `json:"bot_id,omitempty" doc:"A bot of the workspace this key speaks as on tickets (needs tickets:write), or null for none"`
 				// Scopes replaces the key's scopes. Adding one asks for the same fresh sign-in as
 				// creating a key; removing is immediate.
 				Scopes *[]string `json:"scopes,omitempty" maxItems:"20" doc:"The key's scopes, replacing the current ones. Adding a scope needs a recent sign-in (and the second factor when on), as creating a key does"`
@@ -290,9 +315,9 @@ func (s *svc) registerAPIKeys(api huma.API) {
 			teamsChanged, scopesChanged := false, false
 			err = s.tx(ctx, func(tx pgx.Tx) error {
 				var current, scopes []string
-				var creator *uuid.UUID
-				err := tx.QueryRow(ctx, `SELECT private_team_ids::text[], scopes, created_by FROM api_keys WHERE id = $1 AND workspace_id = $2 AND revoked_at IS NULL FOR UPDATE`,
-					id, p.WorkspaceID).Scan(&current, &scopes, &creator)
+				var bot, creator *uuid.UUID
+				err := tx.QueryRow(ctx, `SELECT private_team_ids::text[], scopes, bot_id, created_by FROM api_keys WHERE id = $1 AND workspace_id = $2 AND revoked_at IS NULL FOR UPDATE`,
+					id, p.WorkspaceID).Scan(&current, &scopes, &bot, &creator)
 				if db.IsNotFound(err) {
 					return httpx.NotFound("API key")
 				}
@@ -325,8 +350,13 @@ func (s *svc) registerAPIKeys(api huma.API) {
 					}
 					teamsChanged = !sameIDs(current, teams)
 				}
-				if _, err := tx.Exec(ctx, `UPDATE api_keys SET name = COALESCE($3, name), private_team_ids = COALESCE($4, private_team_ids), scopes = $5,
-					record_requests = COALESCE($6, record_requests) WHERE id = $1 AND workspace_id = $2`, id, p.WorkspaceID, name, teams, scopes, in.Body.RecordRequests); err != nil {
+				if in.Body.BotID.Set {
+					if bot, err = keyBot(ctx, tx, p.WorkspaceID, in.Body.BotID.Value, scopes); err != nil {
+						return err
+					}
+				}
+				if _, err := tx.Exec(ctx, `UPDATE api_keys SET name = COALESCE($3, name), private_team_ids = COALESCE($4, private_team_ids), bot_id = $5, scopes = $6, record_requests = COALESCE($7, record_requests)
+					WHERE id = $1 AND workspace_id = $2`, id, p.WorkspaceID, name, teams, bot, scopes, in.Body.RecordRequests); err != nil {
 					return err
 				}
 				if in.Body.PrivateTeamIDs != nil {
@@ -343,11 +373,11 @@ func (s *svc) registerAPIKeys(api huma.API) {
 						return err
 					}
 				}
-				if in.Body.Name == nil && in.Body.PrivateTeamIDs == nil && in.Body.RecordRequests == nil {
+				if in.Body.Name == nil && in.Body.PrivateTeamIDs == nil && in.Body.RecordRequests == nil && !in.Body.BotID.Set {
 					return nil
 				}
 				return audit.Log(ctx, tx, p, p.WorkspaceID, "api_key.updated", "api_key", &id,
-					map[string]any{"name": k.Name, "private_team_ids": uuidStrings(k.PrivateTeamIDs), "record_requests": k.RecordRequests})
+					map[string]any{"name": k.Name, "private_team_ids": uuidStrings(k.PrivateTeamIDs), "record_requests": k.RecordRequests, "bot_id": k.BotID})
 			})
 			if err != nil {
 				return nil, httpx.Wrap(err)

@@ -393,8 +393,8 @@ export const api = {
     test: (b: RoutingTestBody) => http.post<T.RoutingTest>("/v1/routing/test", b),
   },
   apiKeys: {
-    ...crud<T.ApiKey, { name: string; scopes: string[]; expires_at?: string | null; private_team_ids?: string[]; record_requests?: boolean }>("/v1/api-keys"),
-    create: (b: { name: string; scopes: string[]; expires_at?: string | null; private_team_ids?: string[]; record_requests?: boolean }) =>
+    ...crud<T.ApiKey, { name: string; scopes: string[]; expires_at?: string | null; private_team_ids?: string[]; record_requests?: boolean; bot_id?: string | null }>("/v1/api-keys"),
+    create: (b: { name: string; scopes: string[]; expires_at?: string | null; private_team_ids?: string[]; record_requests?: boolean; bot_id?: string | null }) =>
       http.create<T.ApiKey & { secret: string }>("/v1/api-keys", b),
     /** The key's recorded requests, newest first (admins; "Record requests" on the key). */
     requests: (id: string, q?: ListQuery & T.ApiKeyRequestFilter) => http.get<T.Page<T.ApiKeyRequest>>(`/v1/api-keys/${id}/requests`, { query: q }),
