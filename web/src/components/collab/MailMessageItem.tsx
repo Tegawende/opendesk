@@ -11,6 +11,7 @@ import { formatAddress, normEmail } from "@/lib/collab/recipients";
 import { bytes, clock, fullDate, relShort } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { isDesignedEmail, sanitizeEmailHtml, sanitizeProse } from "@/lib/sanitize";
+import { useAlwaysShowImages } from "@/lib/alwaysShowImages";
 import { escapeHtml } from "@/lib/collab/html";
 import { isForward, splitQuotedHtml, splitQuotedText } from "@/lib/collab/quote";
 import { Avatar } from "@/components/ui/avatar";
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { EmailFrame } from "@/components/tickets/detail/EmailFrame";
+import { AIDraftFeedback } from "./AIDraftFeedback";
 import { DetailsTrigger, SenderWarning, useMessageDetails, Via } from "./MailDetails";
 
 type Body = { designed: boolean; html: string; held: number };
@@ -141,7 +143,9 @@ export const MailMessageItem = memo(function MailMessageItem({
   onToggle: () => void;
 }) {
   const { t } = useTranslation("collab");
-  const [remote, setRemote] = useState(false);
+  const [loaded, setRemote] = useState(false);
+  // Loaded for this mail, or for every email (Settings → Profile → Appearance).
+  const remote = useAlwaysShowImages() || loaded;
   const [showQuoted, setShowQuoted] = useState(false);
   // Where the mail came from decides, not the From it claims: a sender writes their own From.
   const external = !m.outgoing;
@@ -229,6 +233,7 @@ export const MailMessageItem = memo(function MailMessageItem({
             <DetailsTrigger m={m} details={details.data} loading={details.isLoading} />
             {m.reply_to.length > 0 && normEmail(m.reply_to[0].email) !== normEmail(m.from.email) && <span data-text className="max-w-full cursor-text select-text truncate">{t("thread.replyTo", { list: list(m.reply_to) })}</span>}
             {m.sent_by && <span data-text className="max-w-full cursor-text select-text truncate text-fg-4">{t("thread.sentBy", { name: m.sent_by.name })}</span>}
+            <AIDraftFeedback m={m} />
           </div>
         </div>
         <Tooltip content={fullDate(m.sent_at)}>

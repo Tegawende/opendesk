@@ -76,6 +76,14 @@
       "title": "Bot für {{name}}",
       "save": "Speichern",
       "error": "Der Bot des Schlüssels konnte nicht geändert werden"
+    },
+    "scopes": {
+      "menu": "Berechtigungen bearbeiten",
+      "title": "Berechtigungen für {{name}}",
+      "description": "Wählen Sie, was dieser Schlüssel darf. Das Entfernen einer Berechtigung gilt sofort.",
+      "save": "Berechtigungen speichern",
+      "changes": "Änderungen",
+      "addingNeedsSignIn": "Eine Berechtigung hinzuzufügen erfordert eine aktuelle Anmeldung, wie beim Erstellen eines Schlüssels."
     }
   },
   "webhooks": {

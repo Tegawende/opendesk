@@ -862,7 +862,7 @@ export const api = {
       list: (q: CollabThreadQuery) => http.get<T.Page<T.MailThread>>("/v1/collab/threads", { query: q }),
       get: (id: string) => http.get<T.MailThreadDetail>(`/v1/collab/threads/${id}`),
       /** All or nothing: a thread the caller cannot act on is 404. */
-      action: (b: { thread_ids: string[]; action: T.MailThreadAction; folder_id?: string; category?: string }) =>
+      action: (b: { thread_ids: string[]; action: T.MailThreadAction; folder_id?: string; category?: string; until?: string }) =>
         http.post<{ threads: T.MailThread[] }>("/v1/collab/threads/actions", b),
       share: (id: string, shares: T.MailAudience) => http.put<T.MailThreadDetail>(`/v1/collab/threads/${id}/shares`, { shares }),
       assign: (id: string, user_ids: string[]) => http.put<T.MailThreadDetail>(`/v1/collab/threads/${id}/assignees`, { user_ids }),
@@ -904,6 +904,8 @@ export const api = {
       /** With a body the draft is saved with it first. */
       send: (id: string, b?: CollabDraftBody) => http.post<T.MailMessage>(`/v1/collab/drafts/${id}/send`, b),
     },
+    /** A person's feedback on an AI draft, for the key that wrote it (contracts/collab.md "AI draft outcomes"). */
+    aiDraftFeedback: (id: string, b: T.AIDraftFeedbackBody) => http.put<void>(`/v1/collab/ai-drafts/${id}/feedback`, b),
     sidebar: {
       get: () => http.get<T.SidebarPrefs>("/v1/collab/sidebar"),
       put: (b: T.SidebarPrefs) => http.put<T.SidebarPrefs>("/v1/collab/sidebar", b),

@@ -104,3 +104,39 @@ func TestAPIKeySpeaksAsBotSetting(t *testing.T) {
 		}
 	}
 }
+
+func TestAPIKeyBotAndScopesUpdatedTogether(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	c, _ := e.signup("keybotscopes")
+	wid := c.newWorkspace("Bot Scopes Co")
+	bot := ids.New()
+	if _, err := e.d.DB.Pool.Exec(ctx, `INSERT INTO bots (id, workspace_id, name, look) VALUES ($1, $2, 'Helper', '{}')`, bot, wid); err != nil {
+		t.Fatal(err)
+	}
+	created := c.do("POST", "/v1/api-keys", map[string]any{"name": "Helper key", "scopes": []string{"tickets:read", "tickets:write"}})
+	if created.Status != 201 {
+		t.Fatalf("create: %d %s", created.Status, created.Raw)
+	}
+	path := "/v1/api-keys/" + created.str("id")
+	changed := c.do("PATCH", path, map[string]any{"bot_id": bot.String(), "scopes": []string{"tickets:read", "tickets:write", "contacts:read"}})
+	if changed.Status != 200 || changed.str("bot_id") != bot.String() {
+		t.Fatalf("combined update: %d %s", changed.Status, changed.Raw)
+	}
+	scopes := changed.Body["scopes"].([]any)
+	if len(scopes) != 3 {
+		t.Fatalf("scopes not saved: %s", changed.Raw)
+	}
+	cleared := c.do("PATCH", path, map[string]any{"bot_id": nil, "scopes": []string{"tickets:read"}})
+	if cleared.Status != 200 || cleared.Body["bot_id"] != nil || len(cleared.Body["scopes"].([]any)) != 1 {
+		t.Fatalf("combined removal: %d %s", cleared.Status, cleared.Raw)
+	}
+	invalid := c.do("PATCH", path, map[string]any{"bot_id": bot.String(), "scopes": []string{"contacts:read"}})
+	if invalid.Status != 422 {
+		t.Fatalf("bot requires write in final scopes: %d %s", invalid.Status, invalid.Raw)
+	}
+	current := c.do("GET", path, nil)
+	if current.Status != 200 || current.Body["bot_id"] != nil || len(current.Body["scopes"].([]any)) != 1 || current.Body["scopes"].([]any)[0] != "tickets:read" {
+		t.Fatalf("refused update changed key: %d %s", current.Status, current.Raw)
+	}
+}
