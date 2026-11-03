@@ -142,6 +142,13 @@ func TestBotsCRUD(t *testing.T) {
 	if !strings.Contains(string(r.Body), "bot_in_use") || !strings.Contains(string(r.Body), "Website") {
 		t.Fatalf("in use = %s", r.Body)
 	}
+	// A procedure scoped to a bot keeps it too.
+	e.Exec(`INSERT INTO ai_procedures (workspace_id, name, when_text, instructions, bot_ids) VALUES ($1, 'Refunds', 'Refund asked', 'Steps', $2)`,
+		ws.ID, []uuid.UUID{dup.ID})
+	if r := e.Do("DELETE", "/v1/bots/"+dup.ID.String(), admin, nil).Want(t, 409); !strings.Contains(string(r.Body), "Refunds procedure") {
+		t.Fatalf("in use = %s", r.Body)
+	}
+	e.Exec(`DELETE FROM ai_procedures WHERE workspace_id = $1`, ws.ID)
 	e.Do("DELETE", "/v1/bots/"+dup.ID.String(), agent, nil).Want(t, 403)
 	e.Do("DELETE", "/v1/bots/"+dup.ID.String(), admin, nil).Want(t, 204)
 	e.Do("GET", "/v1/bots/"+dup.ID.String(), viewer, nil).Want(t, 404)
@@ -369,7 +376,7 @@ func TestBotsBackfill(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A later migration refers to bots: it is undone first, as a rollback would.
-	keyBot, err := migrations.FS.ReadFile("000707_api_key_bot.down.sql")
+	keyBot, err := migrations.FS.ReadFile("000709_api_key_bot.down.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
