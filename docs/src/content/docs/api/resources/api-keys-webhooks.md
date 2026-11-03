@@ -63,7 +63,7 @@ Private mail, drafts, bulk operations and account/provider settings keep metadat
 
 Fields named like secrets (`secret`, `token`, `password`, `api_key`, `credential`…) are masked as `***`, and the `Authorization` header is never kept. Recording happens after the answer and never slows down or fails a request.
 
-Read the record with `GET /v1/api-keys/{id}/requests`, newest first. Filter with `status=4xx` (or `2xx`, `5xx`), `method`, `since` and `until` (RFC 3339), and `ticket` (its id, its number, or the reference your path used). `GET /v1/api-keys/{id}/requests/{requestId}` gives one request with what it sent and the answer. Admins only, from the app; an API key can't read it. A revoked key's record stays readable. Ticket records follow current ticket visibility: admins outside a private team cannot read its records, and deleted tickets' records are unavailable.
+Read the record with `GET /v1/api-keys/{id}/requests`, newest first. Filter with `status=4xx` (or `2xx`, `5xx`, or `errors` for every failure, 400 and up), `method`, `since` and `until` (RFC 3339), and `ticket` (its id, its number, or the reference your path used). `GET /v1/api-keys/{id}/requests/{requestId}` gives one request with what it sent and the answer. Admins only, from the app; an API key can't read it. A revoked key's record stays readable. Ticket records follow current ticket visibility: admins outside a private team cannot read its records, and deleted tickets' records are unavailable.
 
 ```sh
 curl "https://api.opendesk.sh/v1/api-keys/$KEY_ID/requests?status=4xx" \

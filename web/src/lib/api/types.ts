@@ -1047,7 +1047,8 @@ export type ApiKeyRequestDetail = ApiKeyRequest & {
   response_body: string | null;
   response_truncated: boolean;
 };
-export type ApiKeyRequestFilter = { status?: "2xx" | "4xx" | "5xx"; method?: string; ticket?: string };
+/** status errors: every failure, 400 and up. since: RFC 3339, made at or after. */
+export type ApiKeyRequestFilter = { status?: "2xx" | "4xx" | "5xx" | "errors"; method?: string; ticket?: string; since?: string };
 export type Webhook = {
   id: string;
   url: string;

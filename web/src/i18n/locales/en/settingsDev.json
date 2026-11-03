@@ -79,6 +79,7 @@
       "off": "Recording is off: this key's requests are not kept.",
       "turnOn": "Turn on recording",
       "filterAll": "All",
+      "filterErrors": "Errors",
       "ticketPlaceholder": "Ticket: number or id",
       "ticketLabel": "Filter by ticket",
       "refresh": "Refresh",
@@ -113,7 +114,9 @@
         "answer": "Answer",
         "answerNotKept": "The answer to a successful request is not kept: the records it touched are above.",
         "truncated": "Capture exceeded {{size}}. Only safe diagnostics are kept."
-      }
+      },
+      "sinceLabel": "Since {{when}}",
+      "sinceClear": "Show every date"
     }
   },
   "webhooks": {
