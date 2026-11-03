@@ -542,6 +542,7 @@ interface MailAccount {
   owner: UserRef | null        // who connected it; null after they left (shared accounts only)
   visibility: "private" | "shared"
   handling_enabled: boolean   // shared accounts only; tracks work separately from read state
+  reply_all: boolean           // Reply all comes first in a conversation for everyone answering from it (when it adds anyone); r and a keep their meaning
   shared_with: Audience        // empty when private
   signature_html: string       // sanitized; added to new mail and replies by the composer
   status: "syncing" | "active" | "error" | "paused"   // paused: Collab is off for the workspace
@@ -700,7 +701,7 @@ interface MailComment {
 
 interface MailThreadDetail {
   thread: MailThread
-  account: { id: string; email: string; name: string; display_name: string; color: string; provider: string; signature_html: string;
+  account: { id: string; email: string; name: string; display_name: string; color: string; provider: string; signature_html: string; reply_all: boolean;
              identities: MailIdentity[]; default_from: string }
   messages: MailMessage[]      // oldest first
   comments: MailComment[]      // oldest first
@@ -846,7 +847,7 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | POST | `/v1/collab/accounts/oauth/{provider}/start` | agent+ | `{visibility, shared_with? (at most 40 teams and people: it travels in the signed state; add more afterwards), name?, email? (login hint), account_id? (reconnect, manage), history?: {since: string \| null} (older mail to import once connected, as `PUT …/history`; left out, none; kept when the account already has an import)}` → `{url}`; sets the flow cookie (send with credentials). `422 provider_not_configured` |
 | GET | `/v1/collab/accounts/oauth/{provider}/callback` | provider | redirects to `APP_URL/settings/mail-accounts?connected=<id>` or `?error=<code>`: `oauth_state`, `access_denied`, `provider_error`, `account_conflict` (the address is already connected in this workspace by someone else), `collab_required`, `forbidden`, `internal` |
 | POST | `/v1/collab/accounts/imap` | agent+ | `{email, name?, display_name?, imap_host, imap_port, imap_tls, imap_username?, password, smtp_host, smtp_port, smtp_tls, smtp_username?, smtp_password?, visibility, shared_with?, history?}` → `MailAccount` (`history` as on the OAuth start). Both servers are tried first: `422 connection_failed` with `detail`. `409 account_conflict`. `422 imap_unavailable` with `COLLAB_IMAP` off |
-| PATCH | `/v1/collab/accounts/{id}` | manage | `{name?, display_name?, color?, signature_html?, visibility?, handling_enabled?, shared_with?, imap? {…same fields, password?, smtp_password?}, default_from?}` → `MailAccount`; `handling_enabled` is available on shared accounts only and clears when an account becomes private. `default_from` must be one of its addresses that can send (`422 validation_failed`) and is kept in opendesk (Gmail's own change of its default still comes in, "Addresses"); new IMAP settings are tried first. A changed `signature_html` or `display_name` that syncs `two_way` is made at Gmail first (sanitized): a refusal is `502 provider_error` and nothing of the change is saved. `read_only` and `none` save in opendesk only. A changed `display_name` stops a Microsoft account following its profile name. A `display_name` or `signature_html` with variables ("Who sends") is checked (`422 validation_failed`) and saved in opendesk only, never at Gmail |
+| PATCH | `/v1/collab/accounts/{id}` | manage | `{name?, display_name?, color?, signature_html?, visibility?, handling_enabled?, reply_all?, shared_with?, imap? {…same fields, password?, smtp_password?}, default_from?}` → `MailAccount`; `handling_enabled` is available on shared accounts only and clears when an account becomes private. `reply_all` is kept in opendesk only and applies to everyone answering from the account. `default_from` must be one of its addresses that can send (`422 validation_failed`) and is kept in opendesk (Gmail's own change of its default still comes in, "Addresses"); new IMAP settings are tried first. A changed `signature_html` or `display_name` that syncs `two_way` is made at Gmail first (sanitized): a refusal is `502 provider_error` and nothing of the change is saved. `read_only` and `none` save in opendesk only. A changed `display_name` stops a Microsoft account following its profile name. A `display_name` or `signature_html` with variables ("Who sends") is checked (`422 validation_failed`) and saved in opendesk only, never at Gmail |
 | POST | `/v1/collab/accounts/{id}/identities` | manage | Add an address ("Addresses"): `{email, display_name?, signature_html?, reply_to?}` → `MailAccount`. Microsoft and IMAP only (`422 identities_from_provider` for Gmail); `409 identity_conflict` for the account's own or an existing address; at most 50 |
 | PATCH | `/v1/collab/accounts/{id}/identities/{identity_id}` | manage | `{display_name?, signature_html?, reply_to? (hand-added only)}` → `MailAccount`. Saved in opendesk; a Gmail address's From name and signature are replaced by Gmail's when they next change there (`pull`) |
 | POST | `/v1/collab/accounts/{id}/identities/preview` | manage | `{email?, display_name, signature_html?}` → `{from_name, from, signature_html, from_name_problem, problems: TemplateProblem[]}`: what is typed, filled for the caller and checked, nothing saved ("Who sends"). `email` is the address (default the account's own); an empty `display_name` uses the account's |
@@ -1009,9 +1010,11 @@ The composer: From lists every account the person can send from with each of its
 send (`Name <email>`). New mail starts from the default, a reply, reply all or forward from the
 address the answered message was written to. The signature follows the chosen address: it is the
 composer's signature block, swapped for the new address's on a change of From (left out when the
-person removed it). Reply all leaves out every one of the account's addresses. A `collab.accounts`
-event refreshes the account's open conversations too, so an open reply picks up a changed address
-or signature.
+person removed it). Reply all leaves out every one of the account's addresses. A change to
+`reply_all` also publishes `collab.changed` for each shared or assigned conversation, to its own
+audience, so its open reply buttons follow the preference without access to the whole account.
+A `collab.accounts` event refreshes the account's open conversations too, so an open reply picks up
+a changed address or signature.
 
 ### Who sends
 
@@ -1110,7 +1113,7 @@ webhooks.
 
 | type | data | to |
 | --- | --- | --- |
-| `collab.changed` | `{account_id: string \| null, thread_ids: string[], folders: boolean}`: conversations changed (synced, acted on, sent, shared, assigned, commented); `folders` when folders or counts changed. Refetch what is shown | who sees the account, plus who sees the conversations |
+| `collab.changed` | `{account_id: string \| null, thread_ids: string[], folders: boolean}`: conversations changed (synced, acted on, sent, shared, assigned, commented, or their account's `reply_all` changed); `folders` when folders or counts changed. Refetch what is shown | who sees the account, plus who sees the conversations |
 | `collab.accounts` | `{account_id}`: an account was connected, changed, removed, or changed status | its owner and audience, before and after |
 
 ## Audit

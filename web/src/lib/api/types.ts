@@ -759,7 +759,9 @@ export type ActionType =
   | "ai_triage"
   /** value: a mailbox id of the ticket's brand (contracts/api.md). */
   | "set_reply_address"
-  | "set_field";
+  | "set_field"
+  /** value: a procedure id; Ollie runs it on the ticket (contracts/ai.md "Automations"). Not on ticket_updated. */
+  | "run_procedure";
 /**
  * set_field: `field` is the ticket field key, `value` its string form ("12.5", "true", "2026-10-11", "a,b"; "" clears).
  * merge_into_open_ticket: `same_subject` merges only into a ticket with the same subject (contracts/api.md).
@@ -1084,7 +1086,15 @@ export type SupportChannelProvider = {
 export type SupportChannelAccount = { id: string; name: string };
 
 /** contracts/phone.md. */
-export type PhoneProvider = { key: string; name: string; fields: { name: string; label: string; secret: boolean }[] };
+export type PhoneProvider = {
+  key: string;
+  name: string;
+  fields: { name: string; label: string; secret: boolean }[];
+  /** An admin adds the connection's webhook URL in the provider by hand (Voys). */
+  manual_webhook: boolean;
+  /** A ringing call can show the caller in the provider's app (Aircall). */
+  insight_cards: boolean;
+};
 export type PhoneHealthCode = "" | "receiving" | "webhook_missing" | "credentials_refused" | "provider_unreachable";
 export type PhoneConnection = {
   id: string;
@@ -1251,7 +1261,7 @@ export type PanelListItem = { title: string; subtitle?: string; value?: PanelVal
 export type PanelLink = { label: string; url: string; icon?: string };
 /** A block of an http panel's version 2 answer (contracts/integrations.md "The http answer"). */
 export type PanelBlock =
-  | { type: "card"; title: string; url?: string; subtitle?: string; badges?: PanelBadge[]; links?: PanelLink[]; collapsed?: boolean; fields?: PanelField[]; lines?: PanelLine[]; footer?: PanelField[] }
+  | { type: "card"; id?: string; title: string; url?: string; subtitle?: string; badges?: PanelBadge[]; links?: PanelLink[]; collapsed?: boolean; fields?: PanelField[]; lines?: PanelLine[]; footer?: PanelField[] }
   | { type: "fields"; title?: string; items: PanelField[] }
   | { type: "list"; title?: string; items: PanelListItem[] }
   | { type: "note"; text: string; tone: PanelTone };
@@ -1829,7 +1839,7 @@ export type AutoRecharge = {
 };
 export type AutoRechargePatch = Partial<Pick<AutoRecharge, "enabled" | "threshold_usd" | "amount_usd" | "monthly_limit_usd">>;
 export type AIFeature =
-  | "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "answer_email" | "playground" | "kb_draft" | "assistant" | "assistant_peer";
+  | "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "answer_email" | "playground" | "kb_draft" | "assistant" | "assistant_peer" | "procedure";
 /**
  * GET /v1/billing/usage (contracts/billing.md). `from`/`to` are RFC 3339; `to` is exclusive.
  * Every usd value is US dollars, a number with up to 6 decimals.
@@ -2114,6 +2124,8 @@ export type PlaygroundDone = {
   sources: AgentSource[];
   handoff: boolean;
   action: { tool: string; title: string; summary: string } | null;
+  /** The procedures the agent read for this reply. */
+  procedures: ProcedureRef[];
   /** US dollars. */
   usd: number;
 };
@@ -2123,8 +2135,29 @@ export type PlaygroundEvent =
   | { event: "sources"; data: { sources: AgentSource[] } }
   | { event: "done"; data: PlaygroundDone };
 
+/** contracts/agent.md "Procedures". */
+export type ProcedureChannel = "chat" | "email";
+export type Procedure = {
+  id: string;
+  name: string;
+  /** "Use this when": how the agent recognises a conversation it applies to. */
+  when: string;
+  /** Markdown. */
+  instructions: string;
+  enabled: boolean;
+  /** Where the agent may pick it by `when`; [] = only when an automation runs it. */
+  channels: ProcedureChannel[];
+  /** [] = every bot. */
+  bot_ids: string[];
+  created_at: string;
+  updated_at: string;
+  updated_by: UserRef | null;
+};
+export type ProcedureBody = { name: string; when: string; instructions: string; enabled?: boolean; channels?: ProcedureChannel[]; bot_ids?: string[] };
+export type ProcedureRef = { id: string; name: string };
+
 /** contracts/agent.md "Tests". */
-export type AgentExpectationKind = "mentions" | "not_mentions" | "handoff" | "no_handoff" | "uses_tool" | "cites_knowledge";
+export type AgentExpectationKind = "mentions" | "not_mentions" | "handoff" | "no_handoff" | "uses_tool" | "cites_knowledge" | "uses_procedure";
 export type AgentExpectation = { kind: AgentExpectationKind; value?: string };
 export type AgentTestStatus = "pending" | "running" | "passed" | "failed" | "error";
 export type AgentTestCheck = { kind: AgentExpectationKind; value: string; passed: boolean; reason: string };
@@ -2136,6 +2169,7 @@ export type AgentTestResult = {
   handoff: boolean;
   tools: string[];
   sources: AgentSource[];
+  procedures: ProcedureRef[];
   action: PlaygroundDone["action"];
   checks: AgentTestCheck[];
   error: string | null;
@@ -2520,6 +2554,8 @@ export type MailAccount = {
   unread: number;
   /** Shared accounts can track work separately from provider read state. */
   handling_enabled: boolean;
+  /** Reply answers everyone on the message by default, for everyone answering from this account. */
+  reply_all: boolean;
   /** IMAP accounts, can_manage only. */
   imap?: MailImapSettings;
   created_at: string;
@@ -2824,6 +2860,8 @@ export type MailThreadAccount = {
   display_name: string;
   color: string;
   provider: string;
+  /** The account's reply default; older servers omit it. */
+  reply_all?: boolean;
   signature_html: string;
   /** The addresses it sends from, its own first. */
   identities?: MailIdentity[];
