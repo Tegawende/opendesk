@@ -236,7 +236,7 @@ describe("An API key's requests", () => {
     await i18n.changeLanguage("fr");
     requests.mockResolvedValue({ data: [], next_cursor: null });
     await render(key());
-    expect(text()).toContain("Aucune requête pour l'instant");
+    expect(text()).toContain("Aucune requête pour l’instant");
   });
 });
 
