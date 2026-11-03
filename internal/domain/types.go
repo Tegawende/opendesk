@@ -284,12 +284,6 @@ type ActivityActor struct {
 	APIKey *APIKeyRef `json:"api_key"`
 }
 
-// APIKeyRef names an API key: what the team sees of the key that made a change.
-type APIKeyRef struct {
-	ID   uuid.UUID `json:"id"`
-	Name string    `json:"name"`
-}
-
 type Activity struct {
 	ID        uuid.UUID      `json:"id"`
 	TicketID  uuid.UUID      `json:"ticket_id"`
