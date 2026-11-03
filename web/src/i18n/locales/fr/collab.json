@@ -30,6 +30,7 @@
     "shared": "Partagés avec moi",
     "assigned": "Attribués à moi",
     "needs_action": "À traiter",
+    "snoozed": "En pause",
     "folder": "Dossier"
   },
   "customize": {
@@ -192,13 +193,17 @@
     "inboxed_many": "{{count}} conversations déplacées vers la boîte de réception",
     "notSpam_one": "Conversation déplacée vers la boîte de réception",
     "notSpam_other": "{{count}} conversations déplacées vers la boîte de réception",
+    "snoozed_one": "Conversation mise en pause",
+    "snoozed_other": "{{count}} conversations mises en pause",
+    "snoozed_many": "{{count}} conversations mises en pause",
     "notSpam_many": "{{count}} conversations déplacées vers la boîte de réception",
     "undo": "Annuler",
     "failed": "L’action a échoué. Rien n’a changé.",
     "syncing": "Synchronisation de {{name}}",
     "sent": "Envoyé depuis {{email}}",
     "shared": "Partage mis à jour",
-    "assigned": "Responsables mis à jour"
+    "assigned": "Responsables mis à jour",
+    "aiFeedbackSaved": "Avis enregistré"
   },
   "thread": {
     "label": "Conversation",
@@ -206,6 +211,7 @@
     "notFound": "Cette conversation n’est plus disponible",
     "notFoundHint": "Elle a été supprimée, n’est plus accessible ou son compte a été déconnecté.",
     "back": "Retour à la liste",
+    "snoozedUntil": "En pause jusqu’au {{when}}",
     "sharedWith": "Partagée avec {{who}}",
     "assignedTo": "Attribuée à {{who}}",
     "everyone": "tout le monde",
@@ -233,6 +239,7 @@
     "fullSize": "Ouvrir en taille réelle",
     "readOnly": "Vous pouvez lire cette conversation. Les agents et les rôles supérieurs peuvent agir dessus.",
     "showComments": "Afficher les commentaires",
+    "replyOrComment": "Choisir entre répondre à l’expéditeur ou commenter pour l’équipe",
     "draft": "Brouillon",
     "draftTo": "À {{who}}",
     "draftNoRecipients": "Aucun destinataire pour le moment",
@@ -294,6 +301,7 @@
   },
   "comments": {
     "title": "Commentaires de l’équipe",
+    "internalHint": "Votre équipe seule peut voir ceci. Le commentaire ne sera pas envoyé à l’expéditeur.",
     "hint": "Seuls les collègues qui ont accès à cette conversation peuvent lire les commentaires. Ils ne sont jamais envoyés à l’expéditeur.",
     "placeholder": "Commentez, @ pour mentionner un collègue",
     "add": "Commenter",
@@ -737,5 +745,29 @@
       "action": "Configurer les catégories",
       "dismiss": "Plus tard"
     }
+  },
+  "aiFeedback": {
+    "from": "Brouillon IA de {{name}}",
+    "asWritten": "envoyé tel quel",
+    "edited": "modifié avant l’envoi",
+    "give": "Donner un avis",
+    "edit": "Modifier l’avis",
+    "title": "Avis sur ce brouillon IA",
+    "description": "{{name}} le lit pour améliorer ses brouillons. Cela ne modifie jamais le message.",
+    "reason": "Qu’est-ce qui n’allait pas ?",
+    "reasonPlaceholder": "Choisir une raison",
+    "reasons": {
+      "wrong_facts": "Faits erronés",
+      "wrong_tone": "Ton inadapté",
+      "missing_info": "Informations manquantes",
+      "should_not_answer": "N’aurait pas dû répondre",
+      "other": "Autre"
+    },
+    "note": "Note (facultatif)",
+    "notePlaceholder": "Que devrait-il faire autrement ?",
+    "better": "Meilleure réponse (facultatif)",
+    "betterPlaceholder": "Ce que vous auriez répondu",
+    "privacy": "Seul le client IA qui a écrit ce brouillon lit votre note et votre réponse.",
+    "save": "Enregistrer l’avis"
   }
 }

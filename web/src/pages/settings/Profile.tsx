@@ -27,8 +27,10 @@ import { q } from "@/lib/queries";
 import { updateUser, useRole, useSession } from "@/lib/session";
 import { useTheme, type ThemePref } from "@/lib/theme";
 import { setConversationLayout, useConversationLayout } from "@/lib/conversationLayout";
+import { setConversationWidth, useConversationWidth, type ConversationWidth } from "@/lib/conversationWidth";
 import { setTicketPropertiesPlace, useTicketPropertiesPlace, type TicketPropertiesPlace } from "@/lib/ticketPropertiesPlace";
 import { setNextTicketAfterSend, useNextTicketAfterSend } from "@/lib/nextTicket";
+import { setAlwaysShowImages, useAlwaysShowImages } from "@/lib/alwaysShowImages";
 import { useDisplay } from "@/components/tickets/fields";
 
 export default function Profile() {
@@ -180,8 +182,10 @@ export default function Profile() {
         </div>
         <AssigneeSetting />
         <ConversationLayout />
+        <ConversationWidthSetting />
         <TicketPropertiesSetting />
         <NextTicketSetting />
+        <AlwaysShowImagesSetting />
       </Section>
 
       <Section title={t("profile.clock.title")} description={t("profile.clock.hint")}>
@@ -235,6 +239,17 @@ function NextTicketSetting() {
   );
 }
 
+/** Customers' emails show their images from other sites at once, without "Load images". Off until switched on, per browser. */
+function AlwaysShowImagesSetting() {
+  const { t } = useTranslation("settings");
+  const on = useAlwaysShowImages();
+  return (
+    <Row label={t("profile.alwaysShowImages.label")} description={t("profile.alwaysShowImages.hint")}>
+      <Switch checked={on} onCheckedChange={setAlwaysShowImages} aria-label={t("profile.alwaysShowImages.label")} />
+    </Row>
+  );
+}
+
 /** How the ticket list shows the assignee. Stored per browser, like the theme. */
 function AssigneeSetting() {
   const { t } = useTranslation("settings");
@@ -264,6 +279,27 @@ function ConversationLayout() {
   return (
     <Row label={t("profile.conversation.label")} description={t("profile.conversation.hint")}>
       <Switch checked={on} onCheckedChange={setConversationLayout} aria-label={t("profile.conversation.label")} />
+    </Row>
+  );
+}
+
+/** How wide the conversation is: a readable measure, or the whole width of the ticket. */
+function ConversationWidthSetting() {
+  const { t } = useTranslation("settings");
+  const width = useConversationWidth();
+  return (
+    <Row label={t("profile.conversationWidth.label")} description={t("profile.conversationWidth.hint")} htmlFor="conversation-width">
+      <Select<ConversationWidth>
+        id="conversation-width"
+        aria-label={t("profile.conversationWidth.label")}
+        value={width}
+        onChange={setConversationWidth}
+        className="w-48"
+        options={[
+          { value: "limited", label: t("profile.conversationWidth.limited") },
+          { value: "full", label: t("profile.conversationWidth.full") },
+        ]}
+      />
     </Row>
   );
 }

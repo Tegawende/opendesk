@@ -24,7 +24,7 @@
     "guideTitle": "Was soll in der Antwort stehen?",
     "guidePlaceholder": "Halte es kurz und erwähne die Rückerstattung",
     "rewriteLabel": "Umschreiben",
-    "translateTo": "In {{language}} übersetzen",
+    "translateInto": "Übersetzen in",
     "drafting": "Antwort wird entworfen",
     "rewriting": "Dein Entwurf wird umgeschrieben",
     "rewritingSelection": "Auswahl wird umgeschrieben",
@@ -126,13 +126,16 @@
   "message": {
     "translate": "Übersetzen",
     "translateHint": "Aus {{language}} übersetzen",
+    "translateInto": "In {{language}} übersetzen",
     "translating": "Wird übersetzt",
     "translatedFrom": "Aus {{language}} übersetzt",
+    "translatedInto": "In {{language}} übersetzt",
     "showOriginal": "Original anzeigen",
     "showTranslation": "Übersetzung anzeigen",
     "failed": "Diese Nachricht konnte nicht übersetzt werden",
     "aiLabel": "KI",
-    "aiHint": "Vom KI-Assistenten aus deiner Wissensdatenbank beantwortet"
+    "aiHint": "Vom KI-Assistenten aus deiner Wissensdatenbank beantwortet",
+    "apiBotHint": "Von deiner eigenen KI über den API-Schlüssel {{key}} geschrieben"
   },
   "tools": {
     "title": "In deinen Tools",
