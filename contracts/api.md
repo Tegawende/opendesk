@@ -234,7 +234,7 @@ type ApiKeyRequest = { id: string; created_at: string; method: string; path: str
   idempotency_key: string; replayed: boolean /* an idempotent replay */; ticket: { id: string; number: number | null } | null /* the ticket the path or the answer named */;
   ticket_ref: string /* the ticket as the path named it: an id or a number, as written */; message_id: string | null; contact_id: string | null };
 type ApiKeyRequestDetail = ApiKeyRequest & { request_id: string; ip: string; user_agent: string; content_type: string; request_size: number;
-  request_body: string | null /* the JSON a write sent, secret-looking fields masked, up to 64 KB */; request_truncated: boolean;
+  request_body: string | null /* single-ticket shared writes only; secrets masked; incomplete/over 64 KB replaced by *** */; request_truncated: boolean;
   response_body: string | null /* the answer to a failed request (400 and up), up to 8 KB */; response_truncated: boolean };
 type Webhook = { id: string; url: string; description: string; events: string[]; header_names: string[]; enabled: boolean; created_at: string };
 type WebhookDelivery = { id: string; event_id: string; event_type: string; status: "pending" | "succeeded" | "failed"; attempts: number; response_code: number | null; duration_ms: number | null; created_at: string };
@@ -438,13 +438,18 @@ Core notes:
 - **Recording an API key's requests** (`ApiKey.record_requests`, off by default): an admin turns it on so a team can
   check afterwards what an integration did. From the key's next request, every request it makes under `/v1` is kept
   90 days (the `core.cleanup` job deletes older ones): time, method, path, query, status, duration, `Idempotency-Key`,
-  replay, IP, user agent and `X-Request-Id`; for a write, its JSON body up to 64 KB (`request_truncated` past it), other
-  bodies only by type and size; the answer when the status is 400 or more, up to 8 KB; and the records the request
-  touched (the ticket its path names or its answer is, the message, the contact). Members whose names look like
-  secrets (`secret`, `token`, `password`, `api_key`, `authorization`, `credential`, `signature`, in any case) are
-  masked as `***`, in the body and the query; the `Authorization` header is never kept. The record is written after
-  the answer, in the background: recording never slows a request down or fails it. Rate-limited and replayed
-  requests are recorded too.
+  replay, IP, user agent and `X-Request-Id`. Path parameters retain only UUIDs, positive numbers and numeric
+  `ext:`, `gorgias:` or `zendesk:` references; credential-named parameters always use the route template, as do other non-ID parameters. Unknown paths use
+  `/v1/[unmatched]`. Queries retain valid `limit`, `page` and `expand=messages`; known credential parameters are
+  masked and other parameters omitted. Only single-ticket create/update and message create/edit JSON bodies
+  are captured, with secret-looking fields masked, and only when linked to a live workspace ticket. Captures
+  over 64 KB or malformed/incomplete JSON are replaced by `***`; private mail, drafts, bulk operations,
+  account/provider settings and other routes keep metadata only. Failure bodies retain the HTTP status/title,
+  a known diagnostic code and validation-error count from complete JSON up to 8 KB, without free-form error
+  strings or rejected values. The records touched include the ticket, message and contact. List and detail
+  apply current ticket visibility, including assignment; hidden or deleted tickets' records are unavailable.
+  Admin status alone does not grant private-team access. Recording runs after the answer in the background;
+  rate-limited and replayed requests are recorded too.
 - MCP OAuth (outside `/v1`, `contracts/agent.md` "OAuth"): `/.well-known/oauth-protected-resource[/mcp]`,
   `/.well-known/oauth-authorization-server`, `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/token`,
   `POST /oauth/revoke`. A user acting through an OAuth grant is bound by the granted scopes like an API key, on top of

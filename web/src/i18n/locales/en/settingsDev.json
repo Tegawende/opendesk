@@ -72,7 +72,7 @@
     "requests": {
       "menu": "Request log",
       "title": "Request log of {{name}}",
-      "hint": "Every request this key made while recording was on, kept 90 days: what it sent, the answer to a failure and the ticket it touched. Secret-looking fields are masked.",
+      "hint": "Requests kept for 90 days with safe diagnostics. Shared ticket writes include masked JSON when complete. Ticket visibility still applies.",
       "recording": "Logging on",
       "recordingHint": "Every request this key makes is kept 90 days. See them in the key's menu, Request log.",
       "recordOn": "Record requests",
@@ -112,10 +112,10 @@
         "userAgent": "User agent",
         "content": "Content",
         "sent": "Sent",
-        "noBody": "Nothing kept: a read, or a body that is not JSON.",
+        "noBody": "No shared ticket JSON kept for this request.",
         "answer": "Answer",
         "answerNotKept": "The answer to a successful request is not kept: the records it touched are above.",
-        "truncated": "Cut at {{size}}: the rest was not kept."
+        "truncated": "Capture exceeded {{size}}. Only safe diagnostics are kept."
       },
       "sinceLabel": "Since {{when}}",
       "sinceClear": "Show every date"

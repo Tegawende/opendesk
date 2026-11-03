@@ -26,7 +26,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/useopendesk/opendesk/internal/auth"
@@ -34,9 +36,9 @@ import (
 )
 
 const (
-	// MaxRequestBody is how much of a write's JSON body is kept.
+	// MaxRequestBody is the largest complete JSON capture.
 	MaxRequestBody = 64 << 10
-	// MaxErrorBody is how much of the answer to a failed request is kept.
+	// MaxErrorBody bounds the complete failure JSON used for safe diagnostics.
 	MaxErrorBody = 8 << 10
 	// maxScan is how much of a successful answer is read for the records it names.
 	maxScan = 256 << 10
@@ -48,10 +50,6 @@ const (
 
 // secretName matches field and query names whose values are never kept.
 var secretName = regexp.MustCompile(`(?i)secret|token|passw|api_?key|authorization|credential|signature`)
-
-// secretField matches a JSON string member with such a name, for a body cut at MaxRequestBody
-// that no longer parses.
-var secretField = regexp.MustCompile(`("[^"\\]*(?i:secret|token|passw|api_?key|authorization|credential|signature)[^"\\]*"\s*:\s*)"(?:[^"\\]|\\.)*"`)
 
 var pending sync.WaitGroup
 
@@ -99,12 +97,12 @@ func Middleware(pool *pgxpool.Pool, log *slog.Logger) func(http.Handler) http.Ha
 			start := time.Now()
 			e := Entry{
 				ID: ids.New(), WorkspaceID: p.WorkspaceID, APIKeyID: p.APIKeyID, CreatedAt: start,
-				Method: r.Method, Path: r.URL.Path, Query: maskQuery(r.URL.RawQuery),
+				Method: r.Method, Path: r.URL.Path,
 				IdempotencyKey: truncate(r.Header.Get("Idempotency-Key"), 255),
 				IP:             p.IP, UserAgent: p.UserAgent, RequestSize: max(r.ContentLength, 0),
 				ContentType: truncate(r.Header.Get("Content-Type"), 200),
 			}
-			if r.Body != nil && r.Method != http.MethodGet && r.Method != http.MethodHead {
+			if captureTicketBody(r.Method, r.URL.Path) && r.Body != nil {
 				e.RequestBody, e.RequestTruncated = readBody(r, e.ContentType)
 			}
 			rec := &recorder{ResponseWriter: w}
@@ -121,16 +119,15 @@ func Middleware(pool *pgxpool.Pool, log *slog.Logger) func(http.Handler) http.Ha
 				e.DurationMS = int(time.Since(start) / time.Millisecond)
 				e.RequestID = truncate(r.Header.Get("X-Request-Id"), 100)
 				e.Replayed = rec.Header().Get("Idempotent-Replayed") == "true"
-				e.TicketRef = ticketRef(r.URL.Path)
+				e.Path = safePath(r)
+				e.Query = maskQuery(r.URL.RawQuery)
+				e.TicketRef = ticketRef(e.Path)
 				if e.Status >= 400 {
-					body, cut := rec.buf.Bytes(), rec.size > MaxErrorBody
-					if len(body) > MaxErrorBody {
-						body = body[:MaxErrorBody]
-					}
-					s := clean(string(body))
-					e.ResponseBody, e.ResponseTruncated = &s, cut
+					e.ResponseTruncated = rec.size > MaxErrorBody
+					s := failureBody(rec.buf.Bytes(), e.ResponseTruncated, e.Status)
+					e.ResponseBody = &s
 				} else if rec.size <= maxScan {
-					e.TicketID, e.MessageID, e.ContactID = named(r.URL.Path, rec.buf.Bytes())
+					e.TicketID, e.MessageID, e.ContactID = named(e.Path, rec.buf.Bytes())
 				}
 				if e.TicketID == nil {
 					if id, err := uuid.Parse(e.TicketRef); err == nil {
@@ -160,6 +157,24 @@ func Write(ctx context.Context, pool *pgxpool.Pool, e Entry) error {
 	var number *int64
 	if n, err := strconv.ParseInt(e.TicketRef, 10, 64); err == nil && e.TicketID == nil {
 		number = &n
+	}
+	if e.TicketID == nil && number != nil {
+		var id uuid.UUID
+		err := pool.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id=$1 AND number=$2`, e.WorkspaceID, *number).Scan(&id)
+		if err == nil {
+			e.TicketID = &id
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+	}
+	var live bool
+	if e.TicketID != nil {
+		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM tickets WHERE workspace_id=$1 AND id=$2)`, e.WorkspaceID, *e.TicketID).Scan(&live); err != nil {
+			return err
+		}
+	}
+	if !live {
+		e.RequestBody = nil
 	}
 	_, err := pool.Exec(ctx, `INSERT INTO api_key_requests (id, workspace_id, api_key_id, created_at, method, path, query, status,
 		duration_ms, request_id, idempotency_key, replayed, ip, user_agent, content_type, request_size, request_body, request_truncated,
@@ -196,23 +211,95 @@ type readCloser struct {
 	io.Closer
 }
 
-// MaskJSON returns a body with the values of secret-looking fields replaced by Masked: every
-// member under such a name when it parses, the string members when it was cut and no longer does.
+// MaskJSON keeps only complete JSON, with secret fields masked. An incomplete capture is
+// omitted as a whole, including when a byte limit falls inside a field name or value.
 func MaskJSON(body []byte, cut bool) string {
-	if !cut {
-		dec := json.NewDecoder(bytes.NewReader(body))
-		dec.UseNumber()
-		var v any
-		if err := dec.Decode(&v); err == nil {
-			var buf bytes.Buffer
-			enc := json.NewEncoder(&buf)
-			enc.SetEscapeHTML(false)
-			if enc.Encode(mask(v)) == nil {
-				return strings.TrimRight(buf.String(), "\n")
-			}
+	if cut || !json.Valid(body) {
+		return Masked
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var v any
+	if dec.Decode(&v) != nil {
+		return Masked
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if enc.Encode(mask(v)) != nil {
+		return Masked
+	}
+	result := strings.TrimRight(buf.String(), "\n")
+	if len(result) > MaxRequestBody {
+		return Masked
+	}
+	return result
+}
+
+// captureTicketBody is deliberately limited to writes with one ticket's shared content.
+// Drafts, bulk operations, private mail and account/provider settings keep metadata only.
+func captureTicketBody(method, path string) bool {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if path == "/v1/tickets" {
+		return method == http.MethodPost
+	}
+	if len(parts) < 3 || parts[0] != "v1" || parts[1] != "tickets" || !safeRef(parts[2]) {
+		return false
+	}
+	if len(parts) == 3 {
+		return method == http.MethodPatch
+	}
+	if len(parts) == 4 && parts[3] == "messages" {
+		return method == http.MethodPost
+	}
+	return len(parts) == 5 && parts[3] == "messages" && safeRef(parts[4]) && method == http.MethodPatch
+}
+
+func safeRef(s string) bool {
+	if _, err := uuid.Parse(s); err == nil {
+		return true
+	}
+	for _, prefix := range []string{"ext:", "gorgias:", "zendesk:"} {
+		s = strings.TrimPrefix(s, prefix)
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	return err == nil && n > 0
+}
+
+// Route templates keep arbitrary path parameters, including credentials, out of records.
+func safePath(r *http.Request) string {
+	rc := chi.RouteContext(r.Context())
+	if rc == nil || rc.RoutePattern() == "" {
+		return "/v1/[unmatched]"
+	}
+	path := rc.RoutePattern()
+	for i, key := range rc.URLParams.Keys {
+		value := rc.URLParams.Values[i]
+		if !secretName.MatchString(key) && safeRef(value) {
+			path = strings.ReplaceAll(path, "{"+key+"}", value)
 		}
 	}
-	return secretField.ReplaceAllString(string(body), `${1}"`+Masked+`"`)
+	return path
+}
+
+// Failure diagnostics contain no free-form strings supplied by a caller or provider.
+func failureBody(body []byte, cut bool, status int) string {
+	out := map[string]any{"status": status, "title": http.StatusText(status)}
+	var problem struct {
+		Code   string            `json:"code"`
+		Errors []json.RawMessage `json:"errors"`
+	}
+	if !cut && json.Unmarshal(body, &problem) == nil {
+		switch problem.Code {
+		case "validation_failed", "not_found", "forbidden", "unauthenticated", "rate_limited", "conflict", "bad_request", "internal", "mfa_required", "reauth_required", "plan_limit":
+			out["code"] = problem.Code
+		}
+		if len(problem.Errors) > 0 {
+			out["validation_errors"] = len(problem.Errors)
+		}
+	}
+	result, _ := json.Marshal(out)
+	return string(result)
 }
 
 func mask(v any) any {
@@ -241,9 +328,28 @@ func maskQuery(raw string) string {
 	if err != nil {
 		return ""
 	}
-	for k := range q {
-		if secretName.MatchString(k) {
-			q[k] = []string{Masked}
+	for k, values := range q {
+		switch k {
+		case "limit", "page":
+			if len(values) != 1 {
+				delete(q, k)
+				continue
+			}
+			n, err := strconv.Atoi(values[0])
+			if err != nil || n < 1 || n > 1000 {
+				delete(q, k)
+			}
+		case "expand":
+			if len(values) != 1 || values[0] != "messages" {
+				delete(q, k)
+			}
+		default:
+			switch strings.ToLower(k) {
+			case "secret", "token", "access_token", "refresh_token", "password", "api_key", "apikey", "authorization", "credential", "credentials", "signature":
+				q[k] = []string{Masked}
+			default:
+				delete(q, k)
+			}
 		}
 	}
 	return q.Encode()

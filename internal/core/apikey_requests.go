@@ -12,6 +12,7 @@ import (
 
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
@@ -21,7 +22,7 @@ type APIKeyRequest struct {
 	CreatedAt      time.Time `json:"created_at"`
 	Method         string    `json:"method"`
 	Path           string    `json:"path"`
-	Query          string    `json:"query" doc:"The query string, secret-looking parameters masked"`
+	Query          string    `json:"query" doc:"Allowlisted query parameters; known credential parameters masked"`
 	Status         int       `json:"status"`
 	DurationMS     int       `json:"duration_ms"`
 	IdempotencyKey string    `json:"idempotency_key"`
@@ -46,9 +47,9 @@ type APIKeyRequestDetail struct {
 	UserAgent         string  `json:"user_agent"`
 	ContentType       string  `json:"content_type"`
 	RequestSize       int64   `json:"request_size"`
-	RequestBody       *string `json:"request_body" doc:"The JSON a write sent, secret-looking fields masked, up to 64 KB; null for reads and other bodies"`
+	RequestBody       *string `json:"request_body" doc:"Shared single-ticket JSON writes, secrets masked; incomplete captures replaced by ***; other bodies null"`
 	RequestTruncated  bool    `json:"request_truncated"`
-	ResponseBody      *string `json:"response_body" doc:"The answer to a failed request (status 400 and up), up to 8 KB"`
+	ResponseBody      *string `json:"response_body" doc:"Safe failure diagnostics: status, known code and validation-error count"`
 	ResponseTruncated bool    `json:"response_truncated"`
 }
 
@@ -129,6 +130,10 @@ func (s *svc) registerAPIKeyRequests(api huma.API) {
 				lo = int(in.Status[0]-'0') * 100
 				hi = lo + 100
 			}
+			hidden, err := domain.HiddenTeams(ctx, s.d.DB.Pool, p)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			ticket := strings.TrimSpace(in.Ticket)
 			rows, err := s.d.DB.Pool.Query(ctx, `SELECT `+apiKeyRequestCols+apiKeyRequestFrom+`
 				WHERE r.workspace_id = $1 AND r.api_key_id = $2 AND (r.created_at, r.id) < ($3, $4)
@@ -136,8 +141,9 @@ func (s *svc) registerAPIKeyRequests(api huma.API) {
 				AND ($8::timestamptz IS NULL OR r.created_at >= $8) AND ($9::timestamptz IS NULL OR r.created_at < $9)
 				AND ($10 = '' OR r.ticket_ref = $10 OR r.ticket_id::text = $10
 					OR r.ticket_id IN (SELECT id FROM tickets WHERE workspace_id = $1 AND number::text = $10))
-				ORDER BY r.created_at DESC, r.id DESC LIMIT $11`,
-				p.WorkspaceID, id, cur.T, cur.ID, lo, hi, in.Method, since, until, ticket, in.Limit+1)
+				AND (r.ticket_id IS NULL OR (t.id IS NOT NULL AND `+domain.VisibleSQLUser("t", 12, 13)+`))
+                ORDER BY r.created_at DESC, r.id DESC LIMIT $11`,
+				p.WorkspaceID, id, cur.T, cur.ID, lo, hi, in.Method, since, until, ticket, in.Limit+1, hidden, p.UserID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -169,10 +175,14 @@ func (s *svc) registerAPIKeyRequests(api huma.API) {
 			if err != nil {
 				return nil, err
 			}
+			hidden, err := domain.HiddenTeams(ctx, s.d.DB.Pool, p)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			var d APIKeyRequestDetail
 			d.APIKeyRequest, err = scanAPIKeyRequest(s.d.DB.Pool.QueryRow(ctx, `SELECT `+apiKeyRequestCols+`,
 				r.request_id, r.ip, r.user_agent, r.content_type, r.request_size, r.request_body, r.request_truncated, r.response_body, r.response_truncated`+
-				apiKeyRequestFrom+` WHERE r.workspace_id = $1 AND r.api_key_id = $2 AND r.id = $3`, p.WorkspaceID, id, rid),
+				apiKeyRequestFrom+` WHERE r.workspace_id = $1 AND r.api_key_id = $2 AND r.id = $3 AND (r.ticket_id IS NULL OR (t.id IS NOT NULL AND `+domain.VisibleSQLUser("t", 4, 5)+`))`, p.WorkspaceID, id, rid, hidden, p.UserID),
 				&d.RequestID, &d.IP, &d.UserAgent, &d.ContentType, &d.RequestSize, &d.RequestBody, &d.RequestTruncated, &d.ResponseBody, &d.ResponseTruncated)
 			if db.IsNotFound(err) {
 				return nil, httpx.NotFound("Request")
