@@ -263,6 +263,21 @@ type AIWidgetAnswerArgs struct {
 	PageURL string `json:"page_url,omitempty"`
 }
 
+// AIProcedureRunArgs has Ollie run a procedure on one ticket for an automation's
+// run_procedure action (contracts/ai.md "Automations"). Unique by its args: one run per
+// automation, ticket and the message or call the trigger was about. Owner: ai.
+type AIProcedureRunArgs struct {
+	WorkspaceID  uuid.UUID  `json:"workspace_id"`
+	TicketID     uuid.UUID  `json:"ticket_id"`
+	AutomationID uuid.UUID  `json:"automation_id"`
+	ProcedureID  uuid.UUID  `json:"procedure_id"`
+	MessageID    *uuid.UUID `json:"message_id,omitempty"`
+	// CallID is the call a call_ended trigger was about: the run waits a while for its transcript.
+	CallID *uuid.UUID `json:"call_id,omitempty"`
+}
+
+func (AIProcedureRunArgs) Kind() string { return "ai.procedure_run" }
+
 // AIWidgetActionArgs runs an action the visitor confirmed (or records a decline) and
 // lets the widget agent continue. Owner: ai.
 type AIWidgetActionArgs struct {
@@ -488,3 +503,17 @@ func (SeedTestWorkspaceArgs) Kind() string { return "admin.seed_test_workspace" 
 type ResealArgs struct{}
 
 func (ResealArgs) Kind() string { return "sealed.reseal" }
+
+// CustomerPortalForgotArgs defers contact lookup so forgot responses are uniform.
+type CustomerPortalForgotArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	Slug        string    `json:"slug"`
+	Email       string    `json:"email"`
+}
+
+func (CustomerPortalForgotArgs) Kind() string { return "helpdesk.customer_portal_forgot" }
+
+// CustomerPortalCleanupArgs removes expired customer sessions and reset links.
+type CustomerPortalCleanupArgs struct{}
+
+func (CustomerPortalCleanupArgs) Kind() string { return "helpdesk.customer_portal_cleanup" }
