@@ -60,6 +60,12 @@ describe("snoozeAt", () => {
     expect(at("2026-10-24T23:30:00Z", hours(1), "Europe/Brussels")).toBe("2026-10-25T01:00:00.000Z");
   });
 
+  it("moves a skipped time forward across a spring clock change", () => {
+    expect(at("2027-03-13T17:00:00Z", days(1, "02:30"), "America/New_York")).toBe("2027-03-14T07:30:00.000Z");
+    expect(at("2027-03-27T17:00:00Z", days(1, "02:30"), "Europe/Brussels")).toBe("2027-03-28T01:30:00.000Z");
+    expect(at("2027-03-13T17:00:00Z", days(1, "03:30"), "America/New_York")).toBe("2027-03-14T07:30:00.000Z");
+  });
+
   it("makes next week the coming Monday, a week on when today is Monday", () => {
     expect(at("2026-11-02T10:00:00Z", week(), "Europe/Brussels")).toBe("2026-11-09T08:00:00.000Z"); // Monday
     expect(at("2026-11-04T10:00:00Z", week("14:30"), "Europe/Brussels")).toBe("2026-11-09T13:30:00.000Z"); // Wednesday

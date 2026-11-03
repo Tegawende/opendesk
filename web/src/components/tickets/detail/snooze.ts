@@ -54,7 +54,9 @@ function offset(at: number, timeZone: string): number {
 function zoned(y: number, mo: number, d: number, h: number, mi: number, timeZone: string): Date {
   const local = Date.UTC(y, mo - 1, d, h, mi);
   const first = local - offset(local, timeZone);
-  return new Date(local - offset(first, timeZone));
+  const second = local - offset(first, timeZone);
+  // In a skipped hour the offsets alternate: choose the instant after the gap.
+  return new Date(second + offset(second, timeZone) < local ? Math.max(first, second) : second);
 }
 
 function hhmm(time: string): [number, number] {
