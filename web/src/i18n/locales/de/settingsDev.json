@@ -117,6 +117,14 @@
       },
       "sinceLabel": "Seit {{when}}",
       "sinceClear": "Alle Daten anzeigen"
+    },
+    "scopes": {
+      "menu": "Berechtigungen bearbeiten",
+      "title": "Berechtigungen für {{name}}",
+      "description": "Wählen Sie, was dieser Schlüssel darf. Das Entfernen einer Berechtigung gilt sofort.",
+      "save": "Berechtigungen speichern",
+      "changes": "Änderungen",
+      "addingNeedsSignIn": "Eine Berechtigung hinzuzufügen erfordert eine aktuelle Anmeldung, wie beim Erstellen eines Schlüssels."
     }
   },
   "webhooks": {
