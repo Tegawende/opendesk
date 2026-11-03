@@ -328,6 +328,7 @@
     "teamCleared_other": "Removed the team from {{count}} tickets"
   },
   "props": {
+    "bar": "Ticket properties",
     "contact": "Contact",
     "changeContact": "Change contact",
     "searchContacts": "Search contacts",
@@ -357,6 +358,14 @@
     "details": "Details",
     "ticket": "Ticket",
     "copyLink": "Copy link",
+    "reference": "Reference",
+    "referenceHint": "Add an optional reference customers or teammates can use to find this ticket. Use 2 to 40 letters, numbers or hyphens, including at least one letter. UUID forms are reserved for ticket IDs.",
+    "referencePlaceholder": "ORDER-42",
+    "noReference": "None",
+    "copyReference": "Copy reference",
+    "editReference": "Edit reference",
+    "addReference": "Add reference",
+    "saveReference": "Save reference",
     "channel": "Channel",
     "mailbox": "Mailbox",
     "created": "Created",
@@ -368,7 +377,8 @@
     "receivedAt": "Received at",
     "aliasOf": "An alias of {{address}}",
     "startedOn": "Started on",
-    "importedFrom": "Imported from"
+    "importedFrom": "Imported from",
+    "requiredSkills": "Required skills"
   },
   "sla": {
     "title": "SLA",
@@ -421,6 +431,7 @@
     "slaFirst": "First response target was missed",
     "slaResolution": "Resolution target was missed",
     "subject": "<b>{{who}}</b> changed the subject",
+    "alias": "<b>{{who}}</b> changed the ticket reference",
     "snoozed": "<b>{{who}}</b> snoozed this",
     "snoozedUntil": "<b>{{who}}</b> snoozed this until <m>{{when}}</m>",
     "unsnoozed": "Snooze ended",
@@ -438,6 +449,9 @@
     "triagedAs": "<b>{{who}}</b> triaged this as <b>{{category}}</b>",
     "aiAnswered": "<b>{{who}}</b> answered from the knowledge base",
     "aiAnsweredEmail": "<b>{{who}}</b> answered by email",
+    "procedureRan": "<b>{{who}}</b> ran <b>{{name}}</b>",
+    "procedureNothing": "<b>{{who}}</b> ran <b>{{name}}</b>: nothing to do",
+    "procedureFailed": "<b>{{who}}</b> couldn't finish <b>{{name}}</b>",
     "aiSuggested": "<b>{{who}}</b> suggested a reply",
     "aiSuggestedSent": "<b>{{who}}</b> sent {{ollie}}'s suggested reply",
     "handoffCustomer": "The customer asked for a person",
@@ -899,7 +913,12 @@
       "abandoned_in_ivr": "Hung up in the menu",
       "abandoned_in_classic": "Hung up while waiting",
       "no_available_agent": "No teammate available",
-      "agents_did_not_answer": "Nobody answered"
+      "agents_did_not_answer": "Nobody answered",
+      "busy": "Line busy",
+      "no_answer": "Not answered",
+      "failed": "Call failed",
+      "cancelled": "Hung up before an answer",
+      "abandon": "Hung up in the queue"
     }
   },
   "panels": {

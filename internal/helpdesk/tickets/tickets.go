@@ -60,7 +60,7 @@ type listIn struct {
 	ContactNot string `query:"contact_not" doc:"Comma-separated contact ids: tickets whose contact is none of them"`
 	CompanyNot string `query:"company_not" doc:"Comma-separated company ids: tickets whose contact belongs to none of them"`
 	ViewID     string `query:"view_id" doc:"Apply a saved view's filters; explicit filters override it"`
-	Q          string `query:"q" maxLength:"200" doc:"Full text over subjects and messages, or #number"`
+	Q          string `query:"q" maxLength:"200" doc:"Full text over tickets and contacts, exact ticket alias, or #number"`
 	Spam       string `query:"spam" enum:"true,false,any," doc:"Default false (spam hidden); true lists only spam"`
 	Sort       string `query:"sort" maxLength:"60" doc:"last_message_at (default), created_at, priority, severity, due or field.<key>"`
 	Order      string `query:"order" enum:"asc,desc," doc:"Default desc, asc for due"`
@@ -210,6 +210,7 @@ func CreateTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 
 type ticketPatchBody struct {
 	Subject      *string        `json:"subject,omitempty" maxLength:"500"`
+	Alias        Opt[string]    `json:"alias,omitempty" doc:"Optional workspace-unique reference; null clears it"`
 	Status       *string        `json:"status,omitempty" enum:"open,pending,on_hold,solved,closed"`
 	Priority     *string        `json:"priority,omitempty" enum:"low,normal,high,urgent"`
 	Severity     Opt[string]    `json:"severity,omitempty" doc:"sev1, sev2, sev3, sev4, or null to clear"`
@@ -228,7 +229,7 @@ type ticketPatchBody struct {
 }
 
 func (b ticketPatchBody) toPatch() (Patch, error) {
-	p := Patch{Subject: b.Subject, Status: b.Status, Priority: b.Priority, Severity: b.Severity, Spam: b.Spam, Tags: b.Tags, AddTags: b.AddTags,
+	p := Patch{Subject: b.Subject, Alias: b.Alias, Status: b.Status, Priority: b.Priority, Severity: b.Severity, Spam: b.Spam, Tags: b.Tags, AddTags: b.AddTags,
 		RemoveTags: b.RemoveTags, Custom: b.Custom, Fields: b.Fields, Snooze: b.SnoozedUntil}
 	var err error
 	if p.Contact, err = optID(b.ContactID, "contact_id"); err != nil {
@@ -379,7 +380,7 @@ func registerTickets(d *deps.Deps, api huma.API) {
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "get-ticket", Method: http.MethodGet, Path: "/v1/tickets/{id}",
-		Summary: "Get a ticket", Tags: tags, Description: "id is the uuid, #number or number."},
+		Summary: "Get a ticket", Tags: tags, Description: "id is the uuid, alias, #number or number."},
 		func(ctx context.Context, in *struct {
 			ID string `path:"id"`
 		}) (*ticketOut, error) {
@@ -805,7 +806,7 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 	if err != nil {
 		return domain.Ticket{}, err
 	}
-	nt.TeamID, nt.Routed = routed.TeamID, routed.Routed
+	nt.TeamID, nt.Routed, nt.RequiredSkillIDs = routed.TeamID, routed.Routed, routed.RequiredSkillIDs
 	if nt.TeamID != nil && nt.Routed == nil {
 		nt.Routed = &domain.TicketRouted{Via: "api"}
 	}

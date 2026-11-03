@@ -324,6 +324,7 @@
     "teamCleared_other": "Team von {{count}} Tickets entfernt"
   },
   "props": {
+    "bar": "Ticket-Eigenschaften",
     "contact": "Kontakt",
     "changeContact": "Kontakt ändern",
     "searchContacts": "Kontakte suchen",
@@ -353,6 +354,14 @@
     "details": "Details",
     "ticket": "Ticket",
     "copyLink": "Link kopieren",
+    "reference": "Referenz",
+    "referenceHint": "Füge eine optionale Referenz hinzu, mit der Kunden oder Teammitglieder dieses Ticket finden. Verwende 2 bis 40 Buchstaben, Ziffern oder Bindestriche, darunter mindestens einen Buchstaben. UUID-Formate sind für Ticket-IDs reserviert.",
+    "referencePlaceholder": "BESTELLUNG-42",
+    "noReference": "Keine",
+    "copyReference": "Referenz kopieren",
+    "editReference": "Referenz bearbeiten",
+    "addReference": "Referenz hinzufügen",
+    "saveReference": "Referenz speichern",
     "channel": "Kanal",
     "mailbox": "Postfach",
     "created": "Erstellt",
@@ -364,7 +373,8 @@
     "receivedAt": "Empfangen an",
     "aliasOf": "Ein Alias von {{address}}",
     "startedOn": "Gestartet auf",
-    "importedFrom": "Importiert aus"
+    "importedFrom": "Importiert aus",
+    "requiredSkills": "Erforderliche Fähigkeiten"
   },
   "sla": {
     "title": "SLA",
@@ -417,6 +427,7 @@
     "slaFirst": "Das Ziel für die erste Antwort wurde verfehlt",
     "slaResolution": "Das Lösungsziel wurde verfehlt",
     "subject": "<b>{{who}}</b> hat den Betreff geändert",
+    "alias": "<b>{{who}}</b> hat die Ticketreferenz geändert",
     "snoozed": "<b>{{who}}</b> hat dies zurückgestellt",
     "snoozedUntil": "<b>{{who}}</b> hat dies bis <m>{{when}}</m> zurückgestellt",
     "unsnoozed": "Zurückstellung beendet",
@@ -434,6 +445,9 @@
     "triagedAs": "<b>{{who}}</b> hat dies als <b>{{category}}</b> eingeordnet",
     "aiAnswered": "<b>{{who}}</b> hat aus der Wissensdatenbank geantwortet",
     "aiAnsweredEmail": "<b>{{who}}</b> hat per E-Mail geantwortet",
+    "procedureRan": "<b>{{who}}</b> hat <b>{{name}}</b> ausgeführt",
+    "procedureNothing": "<b>{{who}}</b> hat <b>{{name}}</b> ausgeführt: nichts zu tun",
+    "procedureFailed": "<b>{{who}}</b> konnte <b>{{name}}</b> nicht abschließen",
     "aiSuggested": "<b>{{who}}</b> hat eine Antwort vorgeschlagen",
     "aiSuggestedSent": "<b>{{who}}</b> hat die von {{ollie}} vorgeschlagene Antwort gesendet",
     "handoffCustomer": "Der Kunde wollte mit einer Person sprechen",
@@ -895,7 +909,12 @@
       "abandoned_in_ivr": "Im Menü aufgelegt",
       "abandoned_in_classic": "In der Warteschleife aufgelegt",
       "no_available_agent": "Niemand verfügbar",
-      "agents_did_not_answer": "Niemand hat abgenommen"
+      "agents_did_not_answer": "Niemand hat abgenommen",
+      "busy": "Besetzt",
+      "no_answer": "Nicht angenommen",
+      "failed": "Anruf fehlgeschlagen",
+      "cancelled": "Vor der Annahme aufgelegt",
+      "abandon": "In der Warteschlange aufgelegt"
     }
   },
   "panels": {

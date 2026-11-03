@@ -346,6 +346,7 @@
     "teamCleared_many": "Équipe retirée de {{count}} tickets"
   },
   "props": {
+    "bar": "Propriétés du ticket",
     "contact": "Contact",
     "changeContact": "Changer de contact",
     "searchContacts": "Rechercher des contacts",
@@ -375,6 +376,14 @@
     "details": "Détails",
     "ticket": "Ticket",
     "copyLink": "Copier le lien",
+    "reference": "Référence",
+    "referenceHint": "Ajoutez une référence facultative pour permettre aux clients ou à l’équipe de retrouver ce ticket. Utilisez de 2 à 40 lettres, chiffres ou tirets, avec au moins une lettre. Les formats UUID sont réservés aux identifiants de ticket.",
+    "referencePlaceholder": "COMMANDE-42",
+    "noReference": "Aucune",
+    "copyReference": "Copier la référence",
+    "editReference": "Modifier la référence",
+    "addReference": "Ajouter une référence",
+    "saveReference": "Enregistrer la référence",
     "channel": "Canal",
     "mailbox": "Boîte mail",
     "created": "Création",
@@ -386,7 +395,8 @@
     "receivedAt": "Reçu à",
     "aliasOf": "Un alias de {{address}}",
     "startedOn": "Démarré sur",
-    "importedFrom": "Importé depuis"
+    "importedFrom": "Importé depuis",
+    "requiredSkills": "Compétences requises"
   },
   "sla": {
     "title": "SLA",
@@ -439,6 +449,7 @@
     "slaFirst": "L’objectif de première réponse n’a pas été respecté",
     "slaResolution": "L’objectif de résolution n’a pas été respecté",
     "subject": "<b>{{who}}</b> a modifié l’objet",
+    "alias": "<b>{{who}}</b> a modifié la référence du ticket",
     "snoozed": "<b>{{who}}</b> a mis ce ticket en attente",
     "snoozedUntil": "<b>{{who}}</b> a mis ce ticket en attente jusqu’à <m>{{when}}</m>",
     "unsnoozed": "Mise en attente terminée",
@@ -456,6 +467,9 @@
     "triagedAs": "<b>{{who}}</b> a classé ce ticket dans <b>{{category}}</b>",
     "aiAnswered": "<b>{{who}}</b> a répondu à partir de la base de connaissances",
     "aiAnsweredEmail": "<b>{{who}}</b> a répondu par e-mail",
+    "procedureRan": "<b>{{who}}</b> a exécuté <b>{{name}}</b>",
+    "procedureNothing": "<b>{{who}}</b> a exécuté <b>{{name}}</b> : rien à faire",
+    "procedureFailed": "<b>{{who}}</b> n’a pas pu terminer <b>{{name}}</b>",
     "aiSuggested": "<b>{{who}}</b> a suggéré une réponse",
     "aiSuggestedSent": "<b>{{who}}</b> a envoyé la réponse suggérée par {{ollie}}",
     "handoffCustomer": "Le client a demandé à parler à une personne",
@@ -875,7 +889,12 @@
       "abandoned_in_ivr": "Raccroché dans le menu",
       "abandoned_in_classic": "Raccroché pendant l'attente",
       "no_available_agent": "Aucun collègue disponible",
-      "agents_did_not_answer": "Personne n'a répondu"
+      "agents_did_not_answer": "Personne n'a répondu",
+      "busy": "Ligne occupée",
+      "no_answer": "Sans réponse",
+      "failed": "Échec de l'appel",
+      "cancelled": "Raccroché avant la réponse",
+      "abandon": "Raccroché dans la file d'attente"
     }
   },
   "panels": {

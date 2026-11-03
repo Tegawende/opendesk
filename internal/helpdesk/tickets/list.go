@@ -225,6 +225,10 @@ func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) erro
 			n, _ := strconv.ParseInt(m[1], 10, 64)
 			parts = append(parts, "t.number = "+b.arg(n))
 		}
+		alias := strings.TrimLeft(q, "# ")
+		if ticketAliasPattern.MatchString(alias) && strings.ContainsAny(alias, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") {
+			parts = append(parts, "lower(t.alias) = lower("+b.arg(alias)+")")
+		}
 		tsq := "websearch_to_tsquery('simple', " + b.arg(q) + ")"
 		// The customer's name, email and phone (contacts.search) match too.
 		contact := `EXISTS (SELECT 1 FROM contacts fc WHERE fc.workspace_id = t.workspace_id AND fc.id = t.contact_id AND (fc.search @@ ` + tsq
@@ -560,7 +564,7 @@ func mergeFilters(view, req hd.TicketFilters) hd.TicketFilters {
 	return out
 }
 
-// resolveTicket finds a ticket by uuid, "#123" or "123" in the workspace.
+// resolveTicket finds a ticket by uuid, alias, "#123" or "123" in the workspace.
 func resolveTicket(ctx context.Context, q db.Querier, wid uuid.UUID, ref string) (uuid.UUID, error) {
 	ref = strings.TrimSpace(ref)
 	if id, err := uuid.Parse(ref); err == nil {
@@ -575,12 +579,21 @@ func resolveTicket(ctx context.Context, q db.Querier, wid uuid.UUID, ref string)
 		return id, nil
 	}
 	m := numberRef.FindStringSubmatch(ref)
-	if m == nil {
+	if m != nil {
+		n, _ := strconv.ParseInt(m[1], 10, 64)
+		var id uuid.UUID
+		err := q.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id = $1 AND number = $2 AND deleted_at IS NULL`, wid, n).Scan(&id)
+		if db.IsNotFound(err) {
+			return uuid.Nil, httpx.NotFound("Ticket")
+		}
+		return id, err
+	}
+	alias := strings.TrimLeft(ref, "# ")
+	if !ticketAliasPattern.MatchString(alias) || !strings.ContainsAny(alias, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") {
 		return uuid.Nil, httpx.NotFound("Ticket")
 	}
-	n, _ := strconv.ParseInt(m[1], 10, 64)
 	var id uuid.UUID
-	err := q.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id = $1 AND number = $2 AND deleted_at IS NULL`, wid, n).Scan(&id)
+	err := q.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id = $1 AND lower(alias) = lower($2) AND deleted_at IS NULL`, wid, alias).Scan(&id)
 	if db.IsNotFound(err) {
 		return uuid.Nil, httpx.NotFound("Ticket")
 	}

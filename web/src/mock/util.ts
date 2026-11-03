@@ -1,5 +1,18 @@
 // Small helpers shared by the mock backend: a seeded RNG, ids and time.
 
+import { z } from "zod";
+
+const guid = z.guid();
+
+/** UUID references use the forms accepted by Go uuid.Parse, including arbitrary 38-byte wrappers. */
+export function parseUUID(value: string): string | undefined {
+  let canonical = value;
+  if (value.length === 45 && value.slice(0, 9).toLowerCase() === "urn:uuid:") canonical = value.slice(9);
+  else if (value.length === 38) canonical = value.slice(1, 37);
+  else if (value.length === 32) canonical = `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+  return guid.safeParse(canonical).success ? canonical.toLowerCase() : undefined;
+}
+
 let rngState = 0x2f6e2b1;
 
 /** Deterministic PRNG (mulberry32) so the seed is identical on every load. */
