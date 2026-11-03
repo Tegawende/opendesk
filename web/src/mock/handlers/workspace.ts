@@ -224,8 +224,11 @@ export function registerWorkspace() {
   });
 
   // API keys: the secret is only returned on create.
-  get("/v1/api-keys", (ctx) => paginate(ctx, ctx.ws.apiKeys, 100));
-  get("/v1/api-keys/:id", (ctx) => ctx.ws.apiKeys.find((k) => k.id === ctx.params.id) ?? (() => { throw notFound("API key"); })());
+  // Like the API: a recording key carries its failed requests of the last 24 hours (the mock's
+  // made-up log below has one), null otherwise.
+  const keyOut = (k: ApiKey): ApiKey => ({ ...k, error_count_24h: k.record_requests ? (k.error_count_24h ?? 1) : null });
+  get("/v1/api-keys", (ctx) => paginate(ctx, ctx.ws.apiKeys.map(keyOut), 100));
+  get("/v1/api-keys/:id", (ctx) => keyOut(ctx.ws.apiKeys.find((k) => k.id === ctx.params.id) ?? (() => { throw notFound("API key"); })()));
   post("/v1/api-keys", (ctx) => {
     requireAdmin(ctx.ws);
     // Like the API: a key needs the second factor (when on) and a sign-in within 12 hours.
@@ -257,7 +260,7 @@ export function registerWorkspace() {
     if ("private_team_ids" in ctx.body) setGrants(ctx.ws, key, privateTeams(ctx, key.private_team_ids ?? []));
     if (typeof ctx.body.record_requests === "boolean") key.record_requests = ctx.body.record_requests;
     audit(ctx.ws, "api_key.updated", "api_key", key.id, { fields: Object.keys(ctx.body) });
-    return key;
+    return keyOut(key);
   });
   // A recording key's requests: made-up ones, newest first, shaped like the API's.
   const keyRequests = (ctx: Ctx): ApiKeyRequestDetail[] => {

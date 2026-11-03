@@ -69,7 +69,7 @@ curl "https://api.opendesk.sh/v1/api-keys/$KEY_ID/requests?status=4xx" \
   -H "OD-Workspace: $WORKSPACE_ID"
 ```
 
-In the app: **Settings → API keys**, the key's menu, **Record requests**, then **Request log** to read them; the key shows **Logging on** while it records.
+In the app: **Settings → API keys**, the key's menu, **Record requests**. The list's **Log** column then shows **On** and the key's failures of the last 24 hours: **On** opens the request log, the failure count opens it on those failures. The key's `error_count_24h` gives the same count (`null` while it does not record).
 
 ### Change a key's scopes
 

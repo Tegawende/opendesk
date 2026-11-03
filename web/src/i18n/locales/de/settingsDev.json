@@ -24,10 +24,12 @@
       }
     },
     "col": {
-      "key": "Schlüssel und Berechtigungen",
+      "key": "Schlüssel",
       "lastUsed": "Zuletzt verwendet",
       "expires": "Läuft ab",
-      "createdBy": "Erstellt von"
+      "createdBy": "Erstellt von",
+      "scopes": "Rechte",
+      "log": "Protokoll"
     },
     "state": {
       "active": "Aktiv",
@@ -125,6 +127,40 @@
       "save": "Berechtigungen speichern",
       "changes": "Änderungen",
       "addingNeedsSignIn": "Eine Berechtigung hinzuzufügen erfordert eine aktuelle Anmeldung, wie beim Erstellen eines Schlüssels."
+    },
+    "list": {
+      "resource": {
+        "tickets": "Tickets",
+        "contacts": "Kontakte",
+        "kb": "Artikel",
+        "changelog": "Changelog",
+        "wiki": "Wiki",
+        "settings": "Einstellungen",
+        "realtime": "Echtzeit",
+        "collab": "Collab"
+      },
+      "chip": "{{resource}}: {{access}}",
+      "access": {
+        "write": "lesen und schreiben",
+        "read": "nur lesen",
+        "subscribe": "Live-Ereignisse (abonnieren)",
+        "draft": "entwirft Antworten in Ihrem Namen"
+      },
+      "word": {
+        "subscribe": "abonnieren",
+        "draft": "Entwürfe"
+      },
+      "full": "Vollzugriff",
+      "readOnly": "Nur lesen",
+      "more": "+{{count}}",
+      "edit": "Berechtigungen ansehen und ändern",
+      "logOn": "Aktiv",
+      "logOff": "Anfragen werden nicht aufgezeichnet",
+      "logOpen": "Anfrageprotokoll öffnen",
+      "errorsOpen": "Diese Fehler anzeigen",
+      "errors_one": "{{count}} Fehler in 24 Std.",
+      "errors_other": "{{count}} Fehler in 24 Std.",
+      "expiredGroup": "Abgelaufene Schlüssel ({{count}})"
     }
   },
   "webhooks": {

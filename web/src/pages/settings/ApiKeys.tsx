@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CircleDot, CircleOff, EyeOff, KeyRound, ListTree, MoreHorizontal, Pencil, Plus, ShieldCheck, SlidersHorizontal, Trash2 } from "lucide-react";
+import { ChevronRight, CircleDot, CircleOff, EyeOff, KeyRound, ListTree, MoreHorizontal, Pencil, Plus, ShieldCheck, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NoAccess, Section, SettingsPage } from "@/components/layout";
@@ -28,6 +28,7 @@ import { q, qk, upsertInList } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { cn } from "@/lib/cn";
 import { ApiKeyRequestsDrawer } from "./ApiKeyRequests";
+import { LogCell, ScopeSummary, type LogView } from "./apiKeysList";
 
 const scopeGroups: { resource: string; label: string; scopes: { id: string; label: string }[] }[] = [
   { resource: "tickets", label: "Tickets", scopes: [{ id: "tickets:read", label: "Read" }, { id: "tickets:write", label: "Write" }] },
@@ -58,6 +59,8 @@ export default function ApiKeys() {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [logging, setLogging] = useState<ApiKey | null>(null);
   const [scoping, setScoping] = useState<ApiKey | null>(null);
+  const [logView, setLogView] = useState<LogView>(undefined);
+  const [showExpired, setShowExpired] = useState(false);
 
   const revoke = useListMutation<ApiKey, string>(qk.apiKeys, (id) => api.apiKeys.remove(id), (rows, id) => rows.filter((k) => k.id !== id), {
     errorText: t("apiKeys.revokeError"),
@@ -85,6 +88,9 @@ export default function ApiKeys() {
 
   const sorted = [...(keys ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at));
   const now = Date.now();
+  // Expired keys wait at the bottom, folded: they no longer work.
+  const live = sorted.filter((k) => keyState(k, now) !== "expired");
+  const expired = sorted.filter((k) => keyState(k, now) === "expired");
   const counts = sorted.reduce(
     (c, k) => {
       const s = keyState(k, now);
@@ -139,20 +145,21 @@ export default function ApiKeys() {
             ]}
           />
         ) : (
-          <>
-            <div className="hidden h-8 items-center gap-4 border-b border-line-soft bg-sunken px-4 md:grid md:grid-cols-[minmax(0,1fr)_130px_130px_170px_28px]">
+          <div className="@container">
+            <div className={cn("hidden h-8 items-center gap-3 border-b border-line-soft bg-sunken px-4 @[48rem]:grid", rowGrid)}>
               <span className="label-caps">{t("apiKeys.col.key")}</span>
+              <span className="label-caps">{t("apiKeys.col.scopes")}</span>
+              <span className="label-caps">{t("apiKeys.col.log")}</span>
               <span className="label-caps">{t("apiKeys.col.lastUsed")}</span>
               <span className="label-caps">{t("apiKeys.col.expires")}</span>
-              <span className="label-caps">{t("apiKeys.col.createdBy")}</span>
               <span />
             </div>
             <MotionList>
-              {sorted.map((k) => {
+              {[...live, ...(showExpired ? expired : [])].map((k) => {
                 const state = keyState(k, now);
                 return (
                   <MotionRow key={k.id}>
-                    <div className="group relative flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-sunken md:grid md:grid-cols-[minmax(0,1fr)_130px_130px_170px_28px] md:items-center md:gap-4">
+                    <div className={cn("group relative flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-sunken @[48rem]:grid @[48rem]:items-center @[48rem]:gap-3", rowGrid)}>
                       <div className="flex min-w-0 items-center gap-3">
                         <IconTile tone={state === "expired" ? "gray" : "violet"}>
                           <KeyRound />
@@ -170,51 +177,52 @@ export default function ApiKeys() {
                             ) : (
                               <span className="truncate text-[13px] font-medium">{k.name}</span>
                             )}
-                            {state === "expired" ? (
-                              <StatePill state="expired">{t("apiKeys.state.expired")}</StatePill>
-                            ) : state === "expiring" ? (
-                              <StatePill state="pending">{t("apiKeys.state.expiring")}</StatePill>
-                            ) : (
-                              <StatePill state="active">{t("apiKeys.state.active")}</StatePill>
-                            )}
+                            {state === "expired" && <StatePill state="expired">{t("apiKeys.state.expired")}</StatePill>}
                           </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-1">
-                            <span className="mono mr-1 text-[11px] text-fg-4">{k.prefix.slice(0, 12)}…</span>
-                            <ScopeChips scopes={k.scopes} />
-                            {k.record_requests && (
-                              <Tooltip content={t("apiKeys.requests.recordingHint")}>
-                                <MonoChip className="border-tone-violet-line text-tone-violet">{t("apiKeys.requests.recording")}</MonoChip>
-                              </Tooltip>
-                            )}
+                          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-fg-4">
+                            <span className="mono min-w-0 truncate">{k.prefix.slice(0, 12)}…</span>
+                            <Tooltip content={k.created_by ? `${t("apiKeys.col.createdBy")} ${k.created_by.name}, ${fullDate(k.created_at)}` : fullDate(k.created_at)}>
+                              <span className="flex shrink-0 items-center gap-1">
+                                <span aria-hidden>·</span>
+                                {k.created_by && <Avatar name={k.created_by.name} src={k.created_by.avatar_url} size="xs" />}
+                                <span className="shrink-0">{shortDate(k.created_at)}</span>
+                              </span>
+                            </Tooltip>
                           </div>
                           <GrantedTeams grants={k.private_teams} className="mt-1.5" />
                         </div>
                       </div>
+                      <div className="min-w-0 @max-[48rem]:pl-11">
+                        <ScopeSummary scopes={k.scopes} full={isFull(k.scopes)} readOnly={isReadOnly(k.scopes)} name={k.name} onEdit={admin ? () => setScoping(k) : undefined} />
+                      </div>
+                      <div className="min-w-0 @max-[48rem]:pl-11">
+                        <LogCell
+                          apiKey={k}
+                          onOpen={(view) => {
+                            setLogView(view);
+                            setLogging(k);
+                          }}
+                        />
+                      </div>
                       <Tooltip content={k.last_used_at ? fullDate(k.last_used_at) : t("apiKeys.neverUsed")}>
-                        <span className={cn("text-[12px] max-md:pl-11", k.last_used_at ? "text-fg-2" : "text-fg-4")}>
+                        <span className={cn("text-[12px] @max-[48rem]:pl-11", k.last_used_at ? "text-fg-2" : "text-fg-4")}>
                           {k.last_used_at ? relLong(k.last_used_at) : t("apiKeys.neverUsed")}
                         </span>
                       </Tooltip>
-                      <span className={cn("text-[12px] max-md:pl-11", state === "expired" ? "text-fg-4" : state === "expiring" ? "text-tone-amber" : "text-fg-2")}>
-                        {k.expires_at ? shortDate(k.expires_at) : t("apiKeys.noExpiry")}
-                      </span>
-                      <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-fg-3 max-md:pl-11">
-                        {k.created_by ? (
-                          <>
-                            <Avatar name={k.created_by.name} src={k.created_by.avatar_url} size="xs" />
-                            <span className="truncate text-fg-2">{k.created_by.name}</span>
-                            <span className="shrink-0 text-fg-4">{shortDate(k.created_at)}</span>
-                          </>
-                        ) : (
-                          shortDate(k.created_at)
-                        )}
-                      </span>
+                      <Tooltip content={k.expires_at ? fullDate(k.expires_at) : t("apiKeys.noExpiry")}>
+                        <span
+                          aria-label={k.expires_at ? undefined : t("apiKeys.noExpiry")}
+                          className={cn("text-[12px] @max-[48rem]:pl-11", !k.expires_at || state === "expired" ? "text-fg-4" : state === "expiring" ? "font-medium text-tone-amber" : "text-fg-2")}
+                        >
+                          {k.expires_at ? shortDate(k.expires_at) : "—"}
+                        </span>
+                      </Tooltip>
                       <Menu>
                         <MenuTrigger asChild>
                           <button
                             type="button"
                             aria-label={`Actions for ${k.name}`}
-                            className="flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-hover hover:text-fg max-md:absolute max-md:right-3 max-md:top-3"
+                            className="flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-hover hover:text-fg @max-[48rem]:absolute @max-[48rem]:right-3 @max-[48rem]:top-3"
                           >
                             <MoreHorizontal className="size-4" />
                           </button>
@@ -226,7 +234,13 @@ export default function ApiKeys() {
                           <MenuItem icon={<SlidersHorizontal />} onSelect={() => setScoping(k)}>
                             {t("apiKeys.scopes.menu")}
                           </MenuItem>
-                          <MenuItem icon={<ListTree />} onSelect={() => setLogging(k)}>
+                          <MenuItem
+                            icon={<ListTree />}
+                            onSelect={() => {
+                              setLogView(undefined);
+                              setLogging(k);
+                            }}
+                          >
                             {t("apiKeys.requests.menu")}
                           </MenuItem>
                           <MenuItem
@@ -258,11 +272,22 @@ export default function ApiKeys() {
                 );
               })}
             </MotionList>
-          </>
+            {expired.length > 0 && (
+              <button
+                type="button"
+                aria-expanded={showExpired}
+                onClick={() => setShowExpired((v) => !v)}
+                className="flex h-9 w-full items-center gap-1.5 border-t border-line-soft px-4 text-[12px] text-fg-3 transition-colors hover:bg-sunken hover:text-fg"
+              >
+                <ChevronRight className={cn("size-3.5 transition-transform", showExpired && "rotate-90")} />
+                {t("apiKeys.list.expiredGroup", { count: expired.length })}
+              </button>
+            )}
+          </div>
         )}
       </Section>
 
-      {logging && <ApiKeyRequestsDrawer apiKey={sorted.find((k) => k.id === logging.id) ?? logging} onClose={() => setLogging(null)} />}
+      {logging && <ApiKeyRequestsDrawer apiKey={sorted.find((k) => k.id === logging.id) ?? logging} initial={logView} onClose={() => setLogging(null)} />}
       {scoping && <ScopesDialog apiKey={scoping} onClose={() => setScoping(null)} />}
       {creating && (
         <CreateKeyDialog
@@ -296,22 +321,13 @@ export default function ApiKeys() {
   );
 }
 
-/** Scopes, compact: a preset reads as one chip; write access is tinted so it stands out. */
-function ScopeChips({ scopes }: { scopes: string[] }) {
-  const { t } = useTranslation("settingsDev");
-  const set = new Set(scopes);
-  if (allScopes.every((s) => set.has(s))) return <MonoChip className="border-tone-amber-line text-tone-amber">{t("apiKeys.scopeFull")}</MonoChip>;
-  if (scopes.length === readScopes.length && readScopes.every((s) => set.has(s))) return <MonoChip>{t("apiKeys.scopeRead")}</MonoChip>;
-  return (
-    <>
-      {scopes.map((s) => (
-        <MonoChip key={s} className={s.endsWith(":write") ? "border-tone-amber-line text-tone-amber" : undefined}>
-          {s}
-        </MonoChip>
-      ))}
-    </>
-  );
-}
+// Key (who made it on hover of the avatar), access, log, last used, expires, menu. The table needs
+// about 48rem: narrower (a window with both sidebars open, a phone), the cells stack under the name,
+// by the list's own width rather than the screen's.
+const rowGrid = "@[48rem]:grid-cols-[minmax(11rem,1fr)_minmax(12rem,1.3fr)_104px_100px_80px_28px]";
+// A preset reads as one chip: every scope but the opt-in ones, or every read scope.
+const isFull = (scopes: string[]) => allScopes.every((s) => scopes.includes(s));
+const isReadOnly = (scopes: string[]) => scopes.length === readScopes.length && readScopes.every((s) => scopes.includes(s));
 
 const SOON = 14 * 86400_000;
 function keyState(k: ApiKey, now: number): "active" | "expiring" | "expired" {

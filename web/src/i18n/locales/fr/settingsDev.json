@@ -25,10 +25,12 @@
       }
     },
     "col": {
-      "key": "Clé et autorisations",
+      "key": "Clé",
       "lastUsed": "Dernière utilisation",
       "expires": "Expiration",
-      "createdBy": "Créée par"
+      "createdBy": "Créée par",
+      "scopes": "Droits",
+      "log": "Journal"
     },
     "state": {
       "active": "Active",
@@ -126,6 +128,41 @@
       "save": "Enregistrer les autorisations",
       "changes": "Changements",
       "addingNeedsSignIn": "Ajouter une autorisation demande une connexion récente, comme pour créer une clé."
+    },
+    "list": {
+      "resource": {
+        "tickets": "Tickets",
+        "contacts": "Contacts",
+        "kb": "Articles",
+        "changelog": "Changelog",
+        "wiki": "Wiki",
+        "settings": "Réglages",
+        "realtime": "Temps réel",
+        "collab": "Collab"
+      },
+      "chip": "{{resource}} : {{access}}",
+      "access": {
+        "write": "lecture et écriture",
+        "read": "lecture seule",
+        "subscribe": "événements en direct (abonnement)",
+        "draft": "brouillons en votre nom"
+      },
+      "word": {
+        "subscribe": "abonnement",
+        "draft": "brouillons"
+      },
+      "full": "Accès complet",
+      "readOnly": "Lecture seule",
+      "more": "+{{count}}",
+      "edit": "Voir et modifier les autorisations",
+      "logOn": "Actif",
+      "logOff": "Requêtes non enregistrées",
+      "logOpen": "Ouvrir le journal des requêtes",
+      "errorsOpen": "Voir ces erreurs",
+      "errors_one": "{{count}} erreur en 24 h",
+      "errors_other": "{{count}} erreurs en 24 h",
+      "errors_many": "{{count}} erreurs en 24 h",
+      "expiredGroup": "Clés expirées ({{count}})"
     }
   },
   "webhooks": {
