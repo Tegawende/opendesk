@@ -61,7 +61,6 @@ export default function ApiKeys() {
   const [scoping, setScoping] = useState<ApiKey | null>(null);
   const [logView, setLogView] = useState<LogView>(undefined);
   const [showExpired, setShowExpired] = useState(false);
-
   const revoke = useListMutation<ApiKey, string>(qk.apiKeys, (id) => api.apiKeys.remove(id), (rows, id) => rows.filter((k) => k.id !== id), {
     errorText: t("apiKeys.revokeError"),
   });
