@@ -71,7 +71,7 @@
     "requests": {
       "menu": "Journal des requêtes",
       "title": "Journal des requêtes de {{name}}",
-      "hint": "Chaque requête de cette clé faite pendant l'enregistrement, gardée 90 jours : ce qu'elle a envoyé, la réponse en cas d'échec et le ticket concerné. Les champs qui ressemblent à des secrets sont masqués.",
+      "hint": "Requêtes conservées 90 jours avec des diagnostics sûrs. Les modifications des tickets partagés incluent le JSON complet avec les secrets masqués. La visibilité des tickets reste applicable.",
       "recording": "Journal actif",
       "recordingHint": "Chaque requête de cette clé est gardée 90 jours. À voir dans le menu de la clé, Journal des requêtes.",
       "recordOn": "Enregistrer les requêtes",
@@ -110,10 +110,10 @@
         "userAgent": "User agent",
         "content": "Contenu",
         "sent": "Envoyé",
-        "noBody": "Rien de gardé : une lecture, ou un contenu qui n'est pas du JSON.",
+        "noBody": "Aucun JSON de ticket partagé conservé pour cette requête.",
         "answer": "Réponse",
         "answerNotKept": "La réponse d'une requête réussie n'est pas gardée : ce qu'elle a touché est indiqué ci-dessus.",
-        "truncated": "Coupé à {{size}} : la suite n'a pas été gardée."
+        "truncated": "La capture dépasse {{size}}. Seules les données de diagnostic sûres sont conservées."
       }
     }
   },

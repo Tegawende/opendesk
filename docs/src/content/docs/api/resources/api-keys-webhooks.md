@@ -55,13 +55,15 @@ curl -X PATCH https://api.opendesk.sh/v1/api-keys/$KEY_ID \
 From the key's next request, each request it makes is kept for 90 days:
 
 - when, the method, path and query, the status and how long it took, the `Idempotency-Key` and whether the answer was a replay;
-- for a write, the JSON it sent (up to 64 KB); a file upload only by its type and size;
-- for a failure (status 400 and up), the answer (up to 8 KB);
+- for single-ticket create/update and message create/edit, complete JSON up to 64 KB with secret fields masked; other writes keep type and size;
+- for a failure (status 400 and up), the HTTP status, a known diagnostic code and validation-error count;
 - the ticket, message and contact it touched.
+
+Private mail, drafts, bulk operations and account/provider settings keep metadata only. Incomplete or malformed JSON is replaced by `***`. Path parameters use the route template unless they are UUIDs or numeric references. Queries keep valid pagination limits and `expand=messages`; other values are omitted or masked. Failure diagnostics omit rejected values and free-form error text.
 
 Fields named like secrets (`secret`, `token`, `password`, `api_key`, `credential`…) are masked as `***`, and the `Authorization` header is never kept. Recording happens after the answer and never slows down or fails a request.
 
-Read the record with `GET /v1/api-keys/{id}/requests`, newest first. Filter with `status=4xx` (or `2xx`, `5xx`), `method`, `since` and `until` (RFC 3339), and `ticket` (its id, its number, or the reference your path used). `GET /v1/api-keys/{id}/requests/{requestId}` gives one request with what it sent and the answer. Admins only, from the app; an API key can't read it. A revoked key's record stays readable.
+Read the record with `GET /v1/api-keys/{id}/requests`, newest first. Filter with `status=4xx` (or `2xx`, `5xx`), `method`, `since` and `until` (RFC 3339), and `ticket` (its id, its number, or the reference your path used). `GET /v1/api-keys/{id}/requests/{requestId}` gives one request with what it sent and the answer. Admins only, from the app; an API key can't read it. A revoked key's record stays readable. Ticket records follow current ticket visibility: admins outside a private team cannot read its records, and deleted tickets' records are unavailable.
 
 ```sh
 curl "https://api.opendesk.sh/v1/api-keys/$KEY_ID/requests?status=4xx" \

@@ -70,7 +70,7 @@
     "requests": {
       "menu": "Anfrageprotokoll",
       "title": "Anfrageprotokoll von {{name}}",
-      "hint": "Jede Anfrage dieses Schlüssels, während die Aufzeichnung an war, 90 Tage aufbewahrt: was er gesendet hat, die Antwort bei einem Fehler und das betroffene Ticket. Felder, die wie Geheimnisse aussehen, werden maskiert.",
+      "hint": "Anfragen werden 90 Tage mit sicheren Diagnosedaten gespeichert. Gemeinsame Ticket-Änderungen enthalten vollständiges JSON mit maskierten Geheimnissen. Die Ticket-Sichtbarkeit gilt weiterhin.",
       "recording": "Protokoll aktiv",
       "recordingHint": "Jede Anfrage dieses Schlüssels wird 90 Tage aufbewahrt. Zu sehen im Menü des Schlüssels, Anfrageprotokoll.",
       "recordOn": "Anfragen aufzeichnen",
@@ -109,10 +109,10 @@
         "userAgent": "User-Agent",
         "content": "Inhalt",
         "sent": "Gesendet",
-        "noBody": "Nichts aufbewahrt: ein Lesezugriff oder ein Inhalt, der kein JSON ist.",
+        "noBody": "Für diese Anfrage wurde kein gemeinsames Ticket-JSON gespeichert.",
         "answer": "Antwort",
         "answerNotKept": "Die Antwort auf eine erfolgreiche Anfrage wird nicht aufbewahrt: was sie betroffen hat, steht oben.",
-        "truncated": "Bei {{size}} abgeschnitten: der Rest wurde nicht aufbewahrt."
+        "truncated": "Die Erfassung überschritt {{size}}. Nur sichere Diagnosedaten werden gespeichert."
       }
     }
   },

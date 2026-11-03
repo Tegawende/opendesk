@@ -21,7 +21,7 @@ import (
 )
 
 // "Record requests" on an API key (contracts/api.md "API keys"): off, nothing is kept; on, every
-// request is, with what a write sent (secrets masked, cut at 64 KB), the answer to a failure and
+// request is, with what a write sent (secrets masked, omitted past 64 KB), the answer to a failure and
 // the records it touched; only admin users read the record, and it goes after 90 days.
 func TestAPIKeyRequestLog(t *testing.T) {
 	e := newEnv(t)
@@ -106,6 +106,10 @@ func TestAPIKeyRequestLog(t *testing.T) {
 	}
 
 	// A write: its JSON, secrets masked, the idempotency key and the records its answer names.
+	if _, err := e.d.DB.Pool.Exec(ctx, `INSERT INTO tickets (id, workspace_id, number, subject, channel, brand_id) VALUES ($1, $2, 4242, 'Return R-1', 'api',
+		(SELECT id FROM brands WHERE workspace_id = $2 AND is_default))`, ticketID, wid); err != nil {
+		t.Fatal(err)
+	}
 	create := []byte(`{"subject":"Return R-1","password":"hunter2","meta":{"api_token":"abc","order":"#1042"}}`)
 	if s := call("POST", "/v1/tickets", create, "Idempotency-Key", "returny-R-1"); s != 201 {
 		t.Fatalf("create: %d", s)
@@ -114,10 +118,7 @@ func TestAPIKeyRequestLog(t *testing.T) {
 		t.Fatalf("the handler got %d bytes of %d", got, len(create))
 	}
 	// A failure keeps its answer; a ticket named by its number is found.
-	if _, err := e.d.DB.Pool.Exec(ctx, `INSERT INTO tickets (id, workspace_id, number, subject, channel, brand_id) VALUES ($1, $2, 4242, 'Return R-1', 'api',
-		(SELECT id FROM brands WHERE workspace_id = $2 AND is_default))`, ticketID, wid); err != nil {
-		t.Fatal(err)
-	}
+
 	if s := call("POST", "/v1/tickets/4241/messages", []byte(`{"kind":"note","body_html":""}`)); s != 422 {
 		t.Fatalf("refused note: %d", s)
 	}
@@ -193,7 +194,7 @@ func TestAPIKeyRequestLog(t *testing.T) {
 	if g["request_body"] != nil || strings.Contains(g["query"].(string), "s3cr3t") || !strings.Contains(g["query"].(string), "expand=messages") || g["ticket_ref"] != "ext:555" {
 		t.Fatalf("read: %v", g)
 	}
-	if b, _ := cut["request_body"].(string); cut["request_truncated"] != true || len(b) > apilog.MaxRequestBody || len(b) < apilog.MaxRequestBody-4 {
+	if b, _ := cut["request_body"].(string); cut["request_truncated"] != true || b != apilog.Masked {
 		t.Fatalf("cut body: %v, %d bytes", cut["request_truncated"], len(b))
 	}
 
