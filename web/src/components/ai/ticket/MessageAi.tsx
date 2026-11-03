@@ -46,7 +46,7 @@ export function useMessageTranslation(m: Message): MessageTranslation {
   const ours = uiLanguage();
   // Without a detected language (no triage), offer it anyway: the reader knows best.
   const eligible = ai.enabled && atLeast(role, "agent") && m.direction === "inbound" && m.kind === "reply" &&
-    (lang === null || isForeign(lang, ours));
+    (!isLanguage(lang) || isForeign(lang, ours));
 
   const res = useQuery({
     queryKey: qk.of("ai", "translate", m.id, ours),
