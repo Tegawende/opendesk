@@ -143,7 +143,7 @@ func Middleware(pool *pgxpool.Pool, log *slog.Logger) func(http.Handler) http.Ha
 					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 					defer cancel()
 					if err := Write(ctx, pool, e); err != nil {
-						log.Warn("apilog: request not recorded", "api_key_id", e.APIKeyID, "path", e.Path, "err", err)
+						log.Warn("apilog: request not recorded", "record_id", e.ID, "err", err)
 					}
 				}()
 				if failed != nil {
