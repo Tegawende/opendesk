@@ -205,7 +205,7 @@ for IMAP the first message its `References` / `In-Reply-To` name that the accoun
 a new conversation. A conversation's state is its messages': unread when any is unread, starred when
 any is starred, in a folder when any message is. A shared account can also track `needs_action`
 locally. New incoming mail in its inbox sets it, a reply clears it, and drafts do not change it. It
-never changes the provider's message state.
+never changes the provider's message state. Such a conversation can also be snoozed ("Snooze").
 
 ### Actions
 
@@ -225,6 +225,7 @@ brings back the provider's state.
 | `move` (`folder_id`) | add the label, remove `INBOX` when the target is a label | move | move |
 | `label` / `unlabel` (`folder_id`, a label) | add / remove the label | add / remove the category (the message's `categories` PATCHed) | `422 labels_unsupported` |
 | `done` / `needs_action` | local handling state | local handling state | local handling state |
+| `snooze` (`until`) | local handling state ("Snooze") | local handling state | local handling state |
 | `categorize` (`category`, a key of the account's) | Gmail category labels in `gmail` mode; otherwise opendesk only ("Categories") | opendesk only | opendesk only |
 
 A `move` to an Outlook category is `422 validation_error` (a category is a label: add it with
@@ -232,6 +233,24 @@ A `move` to an Outlook category is `422 validation_error` (a category is a label
 
 Opening a conversation does not mark it read; the web app sends `read` when it is shown (and the
 user can turn that off in the sidebar settings, `mark_read_on_open`).
+
+### Snooze
+
+Snooze works as a ticket's (`snoozed_until`, `helpdesk.snooze_wake`), on a shared account with
+handling on: a conversation that needs no action until a time, a follow-up for example, leaves Needs
+action and comes back to it on its own.
+
+- `snooze` with `until` (in the future, else `422`) sets `MailThread.snoozed_until` and clears
+  `needs_action`. Snoozing again moves the time. `done` and `needs_action` end a snooze, so a
+  conversation marked done is not woken later.
+- The job `collab.snooze_wake` runs every minute: each conversation whose time has passed loses
+  `snoozed_until` and is back in Needs action, when its account still tracks handling, and
+  `collab.changed` goes to who sees it. The AI queue then offers it like any other ("AI queue").
+- New mail from someone else in its inbox wakes it sooner (as a customer reply wakes a ticket); the
+  account's own reply, sent from opendesk or elsewhere, keeps it snoozed.
+- `box=snoozed` lists snoozed conversations still in an inbox and `counts.boxes.snoozed` counts
+  them. It is kept in opendesk only: the provider's message state, read state and folders do not
+  change, and the conversation stays in the inbox.
 
 ### Drafts
 
@@ -481,7 +500,8 @@ Any AI client, whatever model runs it (local or hosted), may draft replies for a
 - **Routes it may call**: `GET /v1/collab/threads`, `GET /v1/collab/threads/{id}` (messages and the
   team's internal comments), `POST /v1/collab/drafts` (mode `reply` or `reply_all`, no
   `attachment_ids` or `forward_attachments`) and `PUT /v1/collab/drafts/{id}` for a draft it saved
-  that nobody has saved since (`403 ai_draft_not_own` otherwise; no `attachment_ids`). Every other
+  that nobody has saved since (`403 ai_draft_not_own` otherwise; no `attachment_ids`), both with an
+  optional `client_ref`, and the outcome feed ("AI draft outcomes"). Every other
   Collab route refuses it (`403`): it never sends, discards, marks read or unread, moves, labels,
   assigns, shares or comments. Reading changes no state, so a conversation the key read stays
   unread for the team.
@@ -493,8 +513,8 @@ Any AI client, whatever model runs it (local or hosted), may draft replies for a
   as with any draft. Each save by a key is audit-logged (`collab.ai_draft_saved`, actor the member,
   `actor: "ai"` with the key).
 - **MCP tools** (contracts/agent.md): `list_collab_conversations`, `get_collab_conversation`,
-  `draft_collab_reply`, `claim_collab_conversation` and `release_collab_conversation`, offered to a
-  key with `collab:draft`.
+  `draft_collab_reply`, `claim_collab_conversation`, `release_collab_conversation` and
+  `list_collab_draft_outcomes`, offered to a key with `collab:draft`.
 
 ### AI queue
 
@@ -506,11 +526,16 @@ with a claim that expires on its own, and reports back. Nobody has to assign it.
   person's or an AI's) and no live claim, that this key has not skipped since its last message.
   The one that has waited longest (oldest `last_message_at`) comes first.
 - `POST /v1/collab/ai-queue/claim` (`collab:draft` key, member an agent or above; `403
-  ai_queue_keys_only` for a person) `{account_id?, ttl_seconds? (60..900, 300)}` → `{claim:
-  {conversation_id, claim_token, claimed_at, expires_at} | null, conversation: MailThreadDetail |
-  null}`. One holder at a time: concurrent claims take different conversations. A claim that
-  expired, or whose key was revoked, no longer holds. `claim_token` is new on every claim. At most
-  60 claims a minute per key. Claiming changes nothing a person sees.
+  ai_queue_keys_only` for a person) `{account_id?, ttl_seconds? (60..900, 300), categories?}` →
+  `{claim: {conversation_id, claim_token, claimed_at, expires_at} | null, conversation:
+  MailThreadDetail | null}`. One holder at a time: concurrent claims take different conversations.
+  A claim that expired, or whose key was revoked, no longer holds. `claim_token` is new on every
+  claim. At most 60 claims a minute per key. Claiming changes nothing a person sees.
+- **Categories** (GH#262): `categories` (category keys, at most 8; `422` otherwise) offers only
+  conversations in one of them, read as the inbox tabs read them ("Categories"): `primary` takes
+  conversations of accounts not split and those whose key the account no longer has. A conversation
+  waiting to be sorted (`collab.categorize`) is held back until it is, so it is not offered as
+  Primary before it is filed. A person's move decides from then on. Left out, every category.
 - **Report back**: the worker saves its reply with `POST /v1/collab/drafts` and `claim_token`. It
   is checked before the provider is called: `409 claim_lost` when that claim has expired, passed to
   another holder or been spent, and nothing is saved; `422 validation_failed` from a person or for
@@ -525,6 +550,42 @@ with a claim that expires on its own, and reports back. Nobody has to assign it.
 - **Approval**: an AI draft does not clear Needs action (only a sent reply does), so the
   conversation waits in Needs action, its draft labelled "AI draft by <name>", until a person sends
   or discards it.
+
+### AI draft outcomes
+
+opendesk records what becomes of each AI draft and lets the key that wrote it read that back
+(GH#261), so a client can improve its own instructions. opendesk never trains, scores or
+changes a model; what the client does with the feedback is its own business.
+
+- **The AI's text is kept** (`collab_ai_drafts`): each save by a key keeps its text, with the
+  conversation, the key, its member and the key's name. Once a person saves the draft (taking it
+  over), sends it or discards it, the AI's last text stays as it was.
+- **The server sets the outcome**, never the client:
+  - `sent_unchanged` or `sent_edited`, with the sent message's id: the draft was sent, and the words
+    a person sent (without the signature block and quoted history) are or are not the AI's;
+  - `discarded`: a person discarded it;
+  - `replaced`: a person sent another reply in the conversation while the draft waited;
+  - `abandoned`: a person marked the conversation done while the draft waited.
+
+  `sent_*` and `discarded` are final. A draft `replaced` or `abandoned` that is then sent or
+  discarded takes that outcome. A draft sent or discarded outside opendesk has none.
+- **`client_ref`** (≤200) on `POST /v1/collab/drafts` and `PUT /v1/collab/drafts/{id}` from a key:
+  the client's own label for the instructions behind the draft (for example `prompt:replies@v14`),
+  stored without being read; left out on a save again keeps the last one.
+- **On messages**: `ai_draft` names the AI draft a draft is, or a sent message was sent from
+  (`{id, client, outcome, has_feedback}`), even after a person took it over.
+- **Feedback** from a person, which never blocks a send: `PUT /v1/collab/ai-drafts/{id}/feedback`
+  (agent or above, who sees the conversation; never a key) `{reason: wrong_facts | wrong_tone |
+  missing_info | should_not_answer | other, note? (≤1000), better_answer_html? (sanitized like
+  mail)}` → `204`. Saving again replaces it. It is audit-logged (`collab.ai_draft_feedback`) with
+  the reason, never the words.
+- **The feed**: `GET /v1/collab/ai-drafts/outcomes?cursor&limit (1..200, 50)` for a `collab:draft`
+  key (`403 ai_outcomes_keys_only` otherwise) → `{data: AIDraftOutcome[], next_cursor}`: that key's
+  drafts with an outcome or feedback, in conversations its member sees now, in the order they last
+  changed. Pass the last item's `cursor`: a draft comes back when it gets an outcome or feedback.
+  It returns the sent message's id, not its text: read it with the conversation. At most 60 reads
+  a minute per key.
+- **Retention**: the records go with their conversation, account, key or workspace.
 
 ## Shapes
 
@@ -643,6 +704,7 @@ interface MailThread {
   starred: boolean
   has_attachments: boolean
   needs_action: boolean       // local handling state for a shared account
+  snoozed_until: string | null // when a snoozed conversation is back in Needs action ("Snooze")
   folder_ids: string[]
   shared: boolean              // shared on its own beyond its account's audience
   assignees: UserRef[]
@@ -674,9 +736,35 @@ interface MailMessage {
   sent_by: UserRef | null      // the teammate who sent it from opendesk (for a draft, who saved it)
   draft_id: string | null      // drafts: the id the /v1/collab/drafts routes take (the message's id)
   drafted_by_ai: string | null // drafts an AI key saved and no person has saved since: the key's name ("AI drafts")
+  ai_draft: AIDraftRef | null  // the AI draft it is, or was sent from, even once a person took it over ("AI draft outcomes")
   in_reply_to_id: string | null  // the message of the conversation it answers (its In-Reply-To), when stored
   own_address: string | null   // the account's address (its own or an alias) it was sent from, else the first in its To, Cc, then Delivered-To / X-Original-To
   outgoing: boolean            // mail the account wrote: sent from opendesk (sent_by), a draft, or filed by the provider in Sent or Drafts. Its From alone never makes mail outgoing, since a sender writes their own From. Mail that is not outgoing holds back its remote images until the reader loads them
+}
+
+type AIDraftOutcomeKind = "sent_unchanged" | "sent_edited" | "discarded" | "replaced" | "abandoned"
+
+interface AIDraftRef {
+  id: string                   // the AI draft record (PUT /v1/collab/ai-drafts/{id}/feedback)
+  client: string               // the key's name when it last saved the draft
+  outcome: AIDraftOutcomeKind | null
+  has_feedback: boolean
+}
+
+interface AIDraftOutcome {     // an item of GET /v1/collab/ai-drafts/outcomes
+  id: string
+  conversation_id: string
+  draft_id: string
+  client: string
+  client_ref: string
+  ai_body_html: string         // the AI's last saved text
+  ai_saved_at: string
+  taken_over_at: string | null // when a person first saved it
+  outcome: AIDraftOutcomeKind | null
+  outcome_at: string | null
+  sent_message_id: string | null
+  feedback: { reason: string; note: string; better_answer_html: string; at: string } | null
+  cursor: string
 }
 
 interface MailAttachment {
@@ -868,11 +956,11 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | POST | `/v1/collab/accounts/{id}/folders` | act | `{name: 1..100, parent_id?, kind?: "folder" \| "label", color?: tone}` → `MailFolder`, created at the provider first (`502 provider_error` with detail). Gmail makes labels either way; Microsoft makes a folder, or with `kind: "label"` an Outlook category (no `parent_id`); IMAP only folders (`422 labels_unsupported` for a label). `color` only for labels ("Labels and colours") |
 | PATCH | `/v1/collab/folders/{id}` | act | `{name?, color?: tone}`, at least one → `MailFolder`; at the provider first, then stored. `422` for a special folder; `color` only on a Gmail label or an Outlook category (`422 validation_error` otherwise); an Outlook category cannot be renamed (`422 rename_unsupported`) |
 | DELETE | `/v1/collab/folders/{id}` | act | → 204; its conversations stay in their other folders; `422` for a special folder |
-| GET | `/v1/collab/threads` | member | `?box=&account_id=&folder_id=&q=&to=&with=&category=&limit=(1..100, 50)&cursor=` → `Page<MailThread>`, newest first. `category`: one tab of the inbox ("Categories"), with `box=inbox` only (`422` otherwise). `to`: only conversations with that address on a message (From, To, Cc or where it was delivered), case-insensitive: one alias's mail. `box`: `inbox` (default), `unread`, `starred`, `sent`, `drafts`, `archive`, `trash`, `spam`, `all`, `shared`, `assigned`, `needs_action`. Without `account_id` it spans every account the caller sees (for `shared`, `assigned`, and `needs_action`, every conversation they see). `folder_id` replaces `box`. `unread` and `all` leave out trash and spam, `starred` leaves out trash, and `shared`, `assigned`, and `needs_action` count conversations still in an inbox. `archive` is the Archive folder, and for Gmail, which archives by removing `INBOX`, what is in none of inbox, trash, spam and drafts. `q` matches each message's subject, sender and text and the conversation's subject and participants ("Search"). `with`: only conversations with that person on a message, like `to`; without `account_id` it spans every conversation the caller sees, those shared with them on their own included ("People") |
-| GET | `/v1/collab/counts` | member | `{boxes: {inbox, unread, shared, assigned, drafts, needs_action}: number, accounts: Record<id, number>, folders: Record<id, number>, assigned: Record<account id, number>, addresses: Record<id, Record<address, number>>, categories: Record<account id, Record<key, number>>}`: unread conversations; `shared`, `assigned`, and `needs_action` count those still in an inbox, `drafts` every draft conversation; `folders` lists only folders with unread conversations, and `assigned` (`boxes.assigned` by account) only accounts with some (missing = 0); `addresses`, for each account with addresses besides its own, the unread conversations in its inbox with each of its addresses (its own included, lower case) on a message, matched like `to=` (missing = 0); `categories`, for each split account, the unread conversations in its inbox by category key, `primary` included (missing = 0) |
+| GET | `/v1/collab/threads` | member | `?box=&account_id=&folder_id=&q=&to=&with=&category=&limit=(1..100, 50)&cursor=` → `Page<MailThread>`, newest first. `category`: one tab of the inbox ("Categories"), with `box=inbox` only (`422` otherwise). `to`: only conversations with that address on a message (From, To, Cc or where it was delivered), case-insensitive: one alias's mail. `box`: `inbox` (default), `unread`, `starred`, `sent`, `drafts`, `archive`, `trash`, `spam`, `all`, `shared`, `assigned`, `needs_action`, `snoozed` ("Snooze"). Without `account_id` it spans every account the caller sees (for `shared`, `assigned`, and `needs_action`, every conversation they see). `folder_id` replaces `box`. `unread` and `all` leave out trash and spam, `starred` leaves out trash, and `shared`, `assigned`, and `needs_action` count conversations still in an inbox. `archive` is the Archive folder, and for Gmail, which archives by removing `INBOX`, what is in none of inbox, trash, spam and drafts. `q` matches each message's subject, sender and text and the conversation's subject and participants ("Search"). `with`: only conversations with that person on a message, like `to`; without `account_id` it spans every conversation the caller sees, those shared with them on their own included ("People") |
+| GET | `/v1/collab/counts` | member | `{boxes: {inbox, unread, shared, assigned, drafts, needs_action, snoozed}: number, accounts: Record<id, number>, folders: Record<id, number>, assigned: Record<account id, number>, addresses: Record<id, Record<address, number>>, categories: Record<account id, Record<key, number>>}`: unread conversations; `shared`, `assigned`, `needs_action` and `snoozed` count those still in an inbox, `drafts` every draft conversation; `folders` lists only folders with unread conversations, and `assigned` (`boxes.assigned` by account) only accounts with some (missing = 0); `addresses`, for each account with addresses besides its own, the unread conversations in its inbox with each of its addresses (its own included, lower case) on a message, matched like `to=` (missing = 0); `categories`, for each split account, the unread conversations in its inbox by category key, `primary` included (missing = 0) |
 | GET | `/v1/collab/threads/{id}` | see | `MailThreadDetail` |
 | GET | `/v1/collab/person` | member | `?email=&exclude=&limit=` → `MailPerson` ("People"); `422 validation_failed` for an address that is not one |
-| POST | `/v1/collab/threads/actions` | act | `{thread_ids: string[1..100], action, folder_id?, category?}` → `{threads: MailThread[]}`. `done` and `needs_action` are available only for a shared account with handling enabled and do not create a provider job. Threads the caller cannot act on are `404` (all or nothing). `categorize` needs a `category` every one of their accounts has (`422 validation_failed`) |
+| POST | `/v1/collab/threads/actions` | act | `{thread_ids: string[1..100], action, folder_id?, category?, until?}` → `{threads: MailThread[]}`. `done`, `needs_action` and `snooze` are available only for a shared account with handling enabled and do not create a provider job; `snooze` needs `until` in the future ("Snooze"). Threads the caller cannot act on are `404` (all or nothing). `categorize` needs a `category` every one of their accounts has (`422 validation_failed`) |
 | GET | `/v1/collab/categories` | member | `MailCategorySettings` ("Categories") |
 | PUT | `/v1/collab/categories/workspace` | admin | `{enabled, categories?, locked?}` → `MailCategorySettings`. Categories: 2..8, `primary` first, keys and names once each (`422 validation_failed`); names through `internal/displayname`. Every account is sorted again where its categories changed |
 | DELETE | `/v1/collab/categories/workspace` | admin | → `MailCategorySettings`: no default |

@@ -30,6 +30,7 @@
     "shared": "Shared with me",
     "assigned": "Assigned to me",
     "needs_action": "Needs action",
+    "snoozed": "Snoozed",
     "folder": "Folder"
   },
   "customize": {
@@ -192,12 +193,15 @@
     "inboxed_other": "{{count}} conversations moved to inbox",
     "notSpam_one": "Conversation moved to inbox",
     "notSpam_other": "{{count}} conversations moved to inbox",
+    "snoozed_one": "Conversation snoozed",
+    "snoozed_other": "{{count}} conversations snoozed",
     "undo": "Undo",
     "failed": "That did not work. Nothing changed.",
     "syncing": "Syncing {{name}}",
     "sent": "Sent from {{email}}",
     "shared": "Sharing updated",
-    "assigned": "Assignees updated"
+    "assigned": "Assignees updated",
+    "aiFeedbackSaved": "Feedback saved"
   },
   "thread": {
     "label": "Conversation",
@@ -205,6 +209,7 @@
     "notFound": "This conversation is gone",
     "notFoundHint": "It was removed, moved out of your reach, or its account was disconnected.",
     "back": "Back to the list",
+    "snoozedUntil": "Snoozed until {{when}}",
     "sharedWith": "Shared with {{who}}",
     "assignedTo": "Assigned to {{who}}",
     "everyone": "everyone",
@@ -231,6 +236,7 @@
     "fullSize": "Open full size",
     "readOnly": "You can read this conversation. Agents and above can act on it.",
     "showComments": "Show comments",
+    "replyOrComment": "Choose whether to reply to the sender or comment for your team",
     "draft": "Draft",
     "draftTo": "To {{who}}",
     "draftNoRecipients": "No recipients yet",
@@ -292,6 +298,7 @@
   },
   "comments": {
     "title": "Team comments",
+    "internalHint": "Only your team sees this. It will not be sent to the sender.",
     "hint": "Only teammates who can see this conversation read comments. They never reach the sender.",
     "placeholder": "Comment, @ to mention a teammate",
     "add": "Comment",
@@ -839,5 +846,29 @@
       "action": "Set up categories",
       "dismiss": "Not now"
     }
+  },
+  "aiFeedback": {
+    "from": "From AI draft by {{name}}",
+    "asWritten": "sent as written",
+    "edited": "edited before sending",
+    "give": "Give feedback",
+    "edit": "Edit feedback",
+    "title": "Feedback on this AI draft",
+    "description": "{{name}} reads this to improve its drafts. It never changes the mail.",
+    "reason": "What was wrong?",
+    "reasonPlaceholder": "Choose a reason",
+    "reasons": {
+      "wrong_facts": "Wrong facts",
+      "wrong_tone": "Wrong tone",
+      "missing_info": "Missing information",
+      "should_not_answer": "Should not have answered",
+      "other": "Other"
+    },
+    "note": "Note (optional)",
+    "notePlaceholder": "What should it do differently?",
+    "better": "Better answer (optional)",
+    "betterPlaceholder": "How you would have answered",
+    "privacy": "Only the AI client that wrote this draft reads your note and answer.",
+    "save": "Save feedback"
   }
 }
