@@ -141,7 +141,8 @@
       },
       "chip": "{{resource}}: {{access}}",
       "access": {
-        "write": "lesen und schreiben",
+        "readWrite": "lesen und schreiben",
+        "write": "nur schreiben",
         "read": "nur lesen",
         "subscribe": "Live-Ereignisse (abonnieren)",
         "draft": "entwirft Antworten in Ihrem Namen"

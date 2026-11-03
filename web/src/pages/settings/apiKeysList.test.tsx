@@ -91,9 +91,9 @@ const settle = () => act(() => new Promise((r) => setTimeout(r, 20)));
 const rowOf = (name: string) => [...document.querySelectorAll(".group")].find((r) => r.querySelector("span.truncate")?.textContent === name) as HTMLElement | undefined;
 
 describe("groupScopes", () => {
-  it("gives one entry per resource, write carrying read", () => {
+  it("gives one entry per resource with the permissions granted", () => {
     expect(groupScopes(["tickets:read", "tickets:write", "contacts:read", "realtime", "collab:draft"])).toEqual([
-      { resource: "tickets", level: "write" },
+      { resource: "tickets", level: "readWrite" },
       { resource: "contacts", level: "read" },
       { resource: "realtime", level: "subscribe" },
       { resource: "collab", level: "draft" },
@@ -210,4 +210,13 @@ describe("The API keys list", () => {
     expect(rowOf("Old export")).toBeDefined();
     expect(rowOf("Old export")!.textContent).toContain("Expirée");
   });
+});
+
+// Review reproduction: write-only credentials do not have read access.
+it("shows only write permission for a write-only key", async () => {
+  const host = document.createElement("div"); document.body.appendChild(host);
+  const r = createRoot(host); root = r;
+  await act(async () => r.render(<TooltipProvider><ScopeSummary scopes={["tickets:write"]} full={false} readOnly={false} /></TooltipProvider>));
+  expect(host.querySelectorAll("svg.lucide-eye")).toHaveLength(0);
+  expect(host.querySelectorAll("svg.lucide-pencil")).toHaveLength(1);
 });

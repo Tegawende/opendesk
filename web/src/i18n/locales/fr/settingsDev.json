@@ -142,7 +142,8 @@
       },
       "chip": "{{resource}} : {{access}}",
       "access": {
-        "write": "lecture et écriture",
+        "readWrite": "lecture et écriture",
+        "write": "écriture seule",
         "read": "lecture seule",
         "subscribe": "événements en direct (abonnement)",
         "draft": "brouillons en votre nom"

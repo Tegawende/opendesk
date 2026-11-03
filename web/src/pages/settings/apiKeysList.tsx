@@ -7,10 +7,10 @@ import { cn } from "@/lib/cn";
 /** The resources a key's scopes reach, in the order the scope checklist lists them. */
 export const RESOURCES = ["tickets", "contacts", "kb", "changelog", "wiki", "settings", "realtime", "collab"] as const;
 export type Resource = (typeof RESOURCES)[number];
-/** What a key may do on a resource: write carries read; realtime subscribes to live events; collab drafts replies as the key's creator. */
-export type Level = "write" | "read" | "subscribe" | "draft";
+/** What a key may do on a resource: read and write are independent; realtime subscribes to live events; collab drafts replies as the key's creator. */
+export type Level = "write" | "readWrite" | "read" | "subscribe" | "draft";
 
-/** A key's scopes as one entry per resource, at the highest level it has there. */
+/** A key's scopes as one entry per resource, with exactly the permissions it has there. */
 export function groupScopes(scopes: string[]): { resource: Resource; level: Level }[] {
   const set = new Set(scopes);
   const out: { resource: Resource; level: Level }[] = [];
@@ -19,7 +19,7 @@ export function groupScopes(scopes: string[]): { resource: Resource; level: Leve
       if (set.has("realtime")) out.push({ resource: r, level: "subscribe" });
     } else if (r === "collab") {
       if (set.has("collab:draft")) out.push({ resource: r, level: "draft" });
-    } else if (set.has(`${r}:write`)) out.push({ resource: r, level: "write" });
+    } else if (set.has(`${r}:write`)) out.push({ resource: r, level: set.has(`${r}:read`) ? "readWrite" : "write" });
     else if (set.has(`${r}:read`)) out.push({ resource: r, level: "read" });
   }
   return out;
@@ -47,8 +47,8 @@ function Chip({ resource, level }: { resource: Resource; level: Level }) {
           <span className="text-fg-4">· {t(`apiKeys.list.word.${level}`)}</span>
         ) : (
           <>
-            <Eye aria-hidden className="size-3 text-tone-violet" />
-            {level === "write" && <Pencil aria-hidden className="size-3 text-tone-amber" />}
+            {level !== "write" && <Eye aria-hidden className="size-3 text-tone-violet" />}
+            {(level === "write" || level === "readWrite") && <Pencil aria-hidden className="size-3 text-tone-amber" />}
           </>
         )}
       </span>
