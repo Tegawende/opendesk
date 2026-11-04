@@ -244,15 +244,6 @@ export default function ApiKeys() {
                           <MenuItem icon={<Pencil />} onSelect={() => setRenaming(k.id)}>
                             {t("apiKeys.rename")}
                           </MenuItem>
-                          <MenuItem icon={<ListTree />} onSelect={() => setLogging(k)}>
-                            {t("apiKeys.requests.menu")}
-                          </MenuItem>
-                          <MenuItem
-                            icon={k.record_requests ? <CircleOff /> : <CircleDot />}
-                            onSelect={() => recordRequests.mutate({ id: k.id, on: !k.record_requests })}
-                          >
-                            {k.record_requests ? t("apiKeys.requests.recordOff") : t("apiKeys.requests.recordOn")}
-                          </MenuItem>
                           {canSpeak(k.scopes) && (
                             <MenuItem icon={<BotIcon />} onSelect={() => setSpeaking(k)}>
                               {t("apiKeys.bot.menu")}
