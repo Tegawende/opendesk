@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -607,6 +608,64 @@ func TestGmailSyncBurstKeepsNewMailAndLeavesTouchedMailOut(t *testing.T) {
 	}
 	if st := gmailStateOf(t, w.reload(a)); len(st.Backlog) != 0 {
 		t.Fatalf("backlog after the second pass: %v", st.Backlog)
+	}
+}
+
+// TestGmailSyncLabelChangesNeedNoReads: label changes to stored mail are taken from history,
+// so a bulk change elsewhere costs no reads of its own.
+func TestGmailSyncLabelChangesNeedNoReads(t *testing.T) {
+	w := newWorld(t)
+	g := newFakeGmail(t)
+	w.useGmail(g)
+	a := w.account(w.agent, ProviderGoogle, VisibilityPrivate, Audience{})
+	const n = 60
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("m-%02d", i)
+		g.add(id, id, []string{"INBOX", "UNREAD", "CATEGORY_UPDATES"}, testMail{from: "[EMAIL]", to: a.Email,
+			subject: "Hello", msgID: id + "@example.com", body: "Hello"})
+	}
+	if err := w.s.syncAccount(w.ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Read and moved to Forums in bulk elsewhere.
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("m-%02d", i)
+		g.mu.Lock()
+		g.msgs[id].labels = []string{"INBOX", "CATEGORY_FORUMS"}
+		g.mu.Unlock()
+		g.record("labelsRemoved", id)
+	}
+	g.mu.Lock()
+	g.minimalGets, g.gets = 0, 0
+	g.mu.Unlock()
+	if err := w.s.syncAccount(w.ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if g.minimalGets != 0 || g.gets != 0 {
+		t.Fatalf("label changes read %d messages and %d raw again", g.minimalGets, g.gets)
+	}
+	if got := w.count(`SELECT count(*) FROM collab_messages WHERE account_id = $1 AND NOT unread
+		AND gmail_category_mask = $2 AND gmail_category_version > 100`, a.ID, gmailCategoryBit("forums")); got != n {
+		t.Fatalf("%d messages took their new labels", got)
+	}
+}
+
+// TestFetchEachStopsWhileBusy: once the provider stays busy, the rest of a batch is not asked.
+func TestFetchEachStopsWhileBusy(t *testing.T) {
+	ids := make([]string, 40)
+	var calls atomic.Int32
+	busy := &providerError{msg: "Gmail is busy. We will try again.", busy: true}
+	_, errs := fetchEach(context.Background(), 4, ids, func() int { return 0 }, func(context.Context, int, string) (int, error) {
+		calls.Add(1)
+		return 0, busy
+	})
+	if c := calls.Load(); c > 4 {
+		t.Fatalf("%d calls after the provider was busy", c)
+	}
+	for i, err := range errs {
+		if err != busy {
+			t.Fatalf("id %d: %v", i, err)
+		}
 	}
 }
 
