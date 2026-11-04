@@ -20,6 +20,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/helpdesk/kb"
 	"github.com/useopendesk/opendesk/internal/helpdesk/wiki"
 	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 type ReportDay struct {
@@ -355,7 +356,8 @@ func search(ctx context.Context, q db.Querier, p *auth.Principal, query string, 
 	allowed := func(scope string) bool {
 		return (p.Kind == auth.KindUser && p.GrantID == uuid.Nil) || p.HasScope(scope)
 	}
-	if allowed(auth.ScopeTicketsRead) {
+	// Tickets off: contacts, articles and pages are still searched, its tickets never are.
+	if allowed(auth.ScopeTicketsRead) && products.RequireTickets(ctx, q, p.WorkspaceID) == nil {
 		lq, err := forCaller(ctx, q, p, listQuery{TicketFilters: hd.TicketFilters{Q: query}})
 		if err != nil {
 			return res, err

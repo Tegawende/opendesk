@@ -23,7 +23,7 @@ import (
 
 // installImageHooks publishes member.updated (users) and workspace.updated
 // (workspace images) when a picture changes, including from the refresh job.
-func installImageHooks() {
+func installImageHooks(s *svc) {
 	images.SetHooks(images.Hooks{
 		User: func(ctx context.Context, tx pgx.Tx, uid uuid.UUID) error {
 			wids, err := userWorkspaces(ctx, tx, uid)
@@ -38,11 +38,11 @@ func installImageHooks() {
 			return nil
 		},
 		Workspace: func(ctx context.Context, tx pgx.Tx, wid uuid.UUID) error {
-			w, err := loadWorkspace(ctx, tx, wid)
+			w, err := s.loadWorkspace(ctx, tx, wid)
 			if err != nil {
 				return err
 			}
-			return publishWorkspace(ctx, tx, w)
+			return s.publishWorkspace(ctx, tx, w)
 		},
 	})
 }
@@ -353,7 +353,7 @@ func (s *svc) registerAvatars(api huma.API) {
 			}}); err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			w, err := loadWorkspace(ctx, s.d.DB.Pool, p.WorkspaceID)
+			w, err := s.loadWorkspace(ctx, s.d.DB.Pool, p.WorkspaceID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -375,7 +375,7 @@ func (s *svc) registerAvatars(api huma.API) {
 			}}); err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			w, err := loadWorkspace(ctx, s.d.DB.Pool, p.WorkspaceID)
+			w, err := s.loadWorkspace(ctx, s.d.DB.Pool, p.WorkspaceID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}

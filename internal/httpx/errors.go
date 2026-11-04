@@ -17,6 +17,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/displayname"
 	"github.com/useopendesk/opendesk/internal/plan"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 // Error is the RFC 9457 problem body every route returns. Code is a stable machine string.
@@ -25,6 +26,8 @@ type Error struct {
 	Title     string              `json:"title"`
 	Detail    string              `json:"detail,omitempty"`
 	Code      string              `json:"code,omitempty"`
+	Product   string              `json:"product,omitempty"`
+	Reason    string              `json:"reason,omitempty"`
 	RequestID string              `json:"request_id,omitempty"`
 	Errors    []*huma.ErrorDetail `json:"errors,omitempty"`
 }
@@ -124,7 +127,12 @@ func Wrap(err error) error {
 	}
 	var dn *displayname.InvalidError
 	var le *plan.LimitError
+	var disabled *products.DisabledError
 	switch {
+	case errors.As(err, &disabled):
+		e := E(403, "feature_disabled", disabled.Error())
+		e.Product, e.Reason = disabled.Product, disabled.Reason
+		return e
 	case errors.As(err, &le):
 		return E(402, "plan_limit", "Your plan includes "+plural(le.Limit, le.Resource)+". Upgrade to add more.")
 	case errors.Is(err, plan.ErrCollab):

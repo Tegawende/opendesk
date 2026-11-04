@@ -90,7 +90,7 @@ async function render(node: ReactNode, role: "agent" | "viewer" = "agent", setti
     workspaceId: "w",
   });
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, enabled: false } } });
-  qc.setQueryData<Workspace>(qk.workspace, { id: "w", name: "Acme", settings } as Workspace);
+  qc.setQueryData<Workspace>(qk.workspace, { id: "w", name: "Acme", mail_available: true, settings } as Workspace);
   qc.setQueryData(qk.teams, [team]);
   qc.setQueryData(qk.brands, []);
   qc.setQueryData(qk.mailboxes, [mailbox]);

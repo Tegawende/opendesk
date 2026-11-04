@@ -722,3 +722,28 @@ func createTicketForAttachments(t *testing.T, e *hdtest.Env, ws hdtest.WS, files
 	e.Exec(`UPDATE attachments SET message_id = $2 WHERE id = ANY($1)`, files, mid)
 	return tid
 }
+
+// With Tickets off a visitor cannot start or read a conversation, while the widget's own
+// session still opens.
+func TestTicketsOffRefusesConversations(t *testing.T) {
+	e, ws := setup(t)
+	s := start(t, e, map[string]any{"key": ws.WidgetKey, "email": "chat@example.com"})
+	va := hdtest.Auth{Visitor: s.VisitorToken}
+	e.SetSettings(ws, map[string]any{"tickets_enabled": false})
+
+	var out struct{ Code, Product string }
+	e.Do("POST", "/v1/widget/conversations", va, map[string]any{"body": "Hello"}).Want(t, 403).JSON(t, &out)
+	if out.Code != "feature_disabled" || out.Product != "tickets" {
+		t.Fatalf("%+v", out)
+	}
+	e.Do("GET", "/v1/widget/conversations", va, nil).Want(t, 403)
+	var count int
+	e.Scalar(`SELECT count(*) FROM tickets WHERE workspace_id = $1`, &count, ws.ID)
+	if count != 0 {
+		t.Fatalf("%d tickets created", count)
+	}
+	start(t, e, map[string]any{"key": ws.WidgetKey, "email": "chat@example.com"})
+
+	e.SetSettings(ws, map[string]any{"tickets_enabled": true})
+	e.Do("POST", "/v1/widget/conversations", va, map[string]any{"body": "Hello"}).Want(t, 201)
+}

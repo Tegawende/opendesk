@@ -21,6 +21,7 @@ import { atLeast, bootSession, currentMembership, openLinkedWorkspace } from "./
 import { stripWorkspaceParam, workspaceParam } from "./lib/workspaceParam";
 import { queryClient } from "./lib/queryClient";
 import { q } from "./lib/queries";
+import { productHome, requireTickets, TICKET_SETTINGS } from "./lib/products";
 import { folderById, listQuery, parseInboxSearch, teamQuery } from "./lib/folders";
 import { withRememberedSort } from "./lib/listSort";
 import { isMailRouteBox, mailListQuery, parseMailSearch } from "./lib/collab/boxes";
@@ -257,8 +258,8 @@ const appLayout = createRoute({
 const indexRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/",
-  beforeLoad: () => {
-    throw redirect({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "unassigned", ticketId: undefined } });
+  beforeLoad: async ({ context }) => {
+    throw await productHome(context.queryClient);
   },
 });
 
@@ -272,7 +273,8 @@ const inboxRoute = createRoute({
     if (s) throw redirect({ to: "/inbox/$folder/{-$ticketId}", params, search: s, replace: true });
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ context, params, deps }) => {
+  loader: async ({ context, params, deps }) => {
+    await requireTickets(context.queryClient);
     const f = folderById(params.folder);
     if (!f) throw redirect({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "unassigned", ticketId: undefined } });
     const qc = context.queryClient;
@@ -307,8 +309,9 @@ const viewRoute = createRoute({
     if (s) throw redirect({ to: "/views/$viewId/{-$ticketId}", params, search: s, replace: true });
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ context, params, deps }) => {
+  loader: async ({ context, params, deps }) => {
     const qc = context.queryClient;
+    await requireTickets(qc);
     if (params.ticketId) prefetchTicket(qc, params.ticketId);
     prefetchInboxShared(qc);
     return qc.ensureInfiniteQueryData(q.tickets(listQuery({ view_id: params.viewId }, deps)));
@@ -327,8 +330,9 @@ const teamRoute = createRoute({
     if (s) throw redirect({ to: "/teams/$teamId/{-$ticketId}", params, search: s, replace: true });
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ context, params, deps }) => {
+  loader: async ({ context, params, deps }) => {
     const qc = context.queryClient;
+    await requireTickets(qc);
     if (params.ticketId) prefetchTicket(qc, params.ticketId);
     prefetchInboxShared(qc);
     return qc.ensureInfiniteQueryData(q.tickets(listQuery(teamQuery(params.teamId, deps.tab), deps)));
@@ -341,7 +345,7 @@ const teamRoute = createRoute({
 // one (`account`). Without Collab on the workspace the mail pages are not there.
 async function requireCollab(qc: QueryClient) {
   const status = await qc.ensureQueryData(q.collabStatus());
-  if (!status?.enabled) throw redirect({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "unassigned", ticketId: undefined } });
+  if (!status?.enabled) throw await productHome(qc);
 }
 
 const mailIndexRoute = createRoute({
@@ -399,8 +403,9 @@ const newTicketRoute = createRoute({
     if (!atLeast(currentMembership()?.role ?? "viewer", "agent"))
       throw redirect({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "unassigned", ticketId: undefined }, replace: true });
   },
-  loader: ({ context }) => {
+  loader: async ({ context }) => {
     const qc = context.queryClient;
+    await requireTickets(qc);
     prefetchInboxShared(qc);
     void qc.prefetchQuery(q.savedReplies());
     void qc.prefetchQuery(q.customFields());
@@ -569,7 +574,8 @@ const reportsRoute = createRoute({
     brand: isRef(s.brand) ? s.brand : undefined,
   }),
   loaderDeps: ({ search }) => search,
-  loader: ({ context, deps }) => {
+  loader: async ({ context, deps }) => {
+    await requireTickets(context.queryClient);
     // The filters' names: teams and brands.
     void context.queryClient.prefetchQuery(q.teams());
     void context.queryClient.prefetchQuery({ ...q.brands(), retry: false });
@@ -585,6 +591,10 @@ const reportsRoute = createRoute({
 const settingsLayout = createRoute({
   getParentRoute: () => appLayout,
   path: "/settings",
+  // A link to a ticket setting is a link to nothing while Tickets is off.
+  beforeLoad: async ({ context, location }) => {
+    if ([...TICKET_SETTINGS].some((p) => location.pathname === p || location.pathname.startsWith(p + "/"))) await requireTickets(context.queryClient);
+  },
   component: page(() => import("./pages/settings/SettingsLayout")),
   staticData: { title: "settings" },
 });

@@ -21,6 +21,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/email"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 // Answering tickets from a member's own address (contracts/collab.md "Answering tickets"):
@@ -145,7 +146,7 @@ func TicketSender(ctx context.Context, d *deps.Deps, q db.Querier, p *auth.Princ
 	if !p.Role.AtLeast(auth.RoleAgent) {
 		return TicketFrom{}, auth.ErrForbidden
 	}
-	if err := d.Plan.RequireCollab(ctx, q, p.WorkspaceID); err != nil {
+	if err := products.RequireMail(ctx, q, d.Plan, d.Cfg.Collab, p.WorkspaceID); err != nil {
 		return TicketFrom{}, err
 	}
 	rules, err := loadTicketRules(ctx, q, p.WorkspaceID, ticketID)
@@ -246,6 +247,9 @@ func (s *service) sendTicketReply(ctx context.Context, wid, mid uuid.UUID, lastA
 		}
 		return river.JobCancel(errors.New("workspace suspended"))
 	}
+	if err := s.pauseIfInactive(ctx, wid); err != nil {
+		return err
+	}
 	r, err := s.tickets.PersonalReply(ctx, wid, mid)
 	if errors.Is(err, email.ErrReplySettled) {
 		return nil
@@ -260,6 +264,10 @@ func (s *service) sendTicketReply(ctx context.Context, wid, mid uuid.UUID, lastA
 	err = s.deliverTicketReply(ctx, wid, mid, r)
 	if err == nil || errors.Is(err, email.ErrReplySettled) {
 		return nil
+	}
+	var snooze *river.JobSnoozeError
+	if errors.As(err, &snooze) {
+		return err
 	}
 	var tf *ticketReplyFailure
 	var pe *providerError
@@ -298,8 +306,8 @@ func (s *service) deliverTicketReply(ctx context.Context, wid, mid uuid.UUID, r 
 		}
 		return err
 	}
-	if err := s.d.Plan.RequireCollab(ctx, pool, wid); err != nil {
-		return &ticketReplyFailure{"Collab is not on this workspace's plan."}
+	if err := s.pauseIfInactive(ctx, wid); err != nil {
+		return err
 	}
 	rules, err := loadTicketRules(ctx, pool, wid, r.TicketID)
 	if err != nil {
@@ -507,6 +515,9 @@ func (w *ticketAnswerWorker) Work(ctx context.Context, job *river.Job[jobs.Colla
 }
 
 func (s *service) takeInAnswer(ctx context.Context, args jobs.CollabTicketAnswerArgs) error {
+	if err := s.pauseIfInactive(ctx, args.WorkspaceID); err != nil {
+		return err
+	}
 	pool := s.d.DB.Pool
 	m, err := scanMessage(pool.QueryRow(ctx, `SELECT `+messageColumns+` FROM collab_messages m WHERE m.workspace_id = $1 AND m.id = $2`,
 		args.WorkspaceID, args.MessageID))

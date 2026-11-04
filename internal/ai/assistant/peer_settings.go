@@ -17,6 +17,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 // A member's own agent-to-agent sharing (contracts/ai.md "Asking a teammate"): only ever the
@@ -100,10 +101,8 @@ func (s *Service) requireSelf(ctx context.Context) (*auth.Principal, error) {
 	if p.Kind != auth.KindUser || p.Assistant || p.ViaAssistant || p.GrantID != uuid.Nil {
 		return nil, httpx.Forbidden()
 	}
-	if s.d.Plan != nil {
-		if err := s.d.Plan.RequireCollab(ctx, s.d.DB.Pool, p.WorkspaceID); err != nil {
-			return nil, httpx.Wrap(err)
-		}
+	if err := products.RequireMail(ctx, s.d.DB.Pool, s.d.Plan, s.d.Cfg.Collab, p.WorkspaceID); err != nil {
+		return nil, httpx.Wrap(err)
 	}
 	return p, nil
 }

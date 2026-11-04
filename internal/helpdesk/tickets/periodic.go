@@ -58,11 +58,11 @@ func (w *SLAScanWorker) Work(ctx context.Context, _ *river.Job[SLAScanArgs]) err
 
 // ScanSLA marks newly breached tickets.
 func ScanSLA(ctx context.Context, d *deps.Deps) error {
-	refs, err := collectRefs(d.DB.Pool.Query(ctx, `SELECT workspace_id, id FROM tickets
-		WHERE status IN ('open', 'pending', 'on_hold') AND deleted_at IS NULL AND sla_policy_id IS NOT NULL AND NOT spam
-		AND ((first_responded_at IS NULL AND first_response_due_at < now() AND sla_first_response_breached_at IS NULL)
-			OR (resolution_due_at < now() AND sla_resolution_breached_at IS NULL))
-		ORDER BY LEAST(first_response_due_at, resolution_due_at) LIMIT $1`, scanBatch))
+	refs, err := collectRefs(d.DB.Pool.Query(ctx, `SELECT t.workspace_id, t.id FROM tickets t JOIN workspaces w ON w.id = t.workspace_id
+		WHERE t.status IN ('open', 'pending', 'on_hold') AND t.deleted_at IS NULL AND t.sla_policy_id IS NOT NULL AND NOT t.spam AND `+ticketsOn+`
+		AND ((t.first_responded_at IS NULL AND t.first_response_due_at < now() AND t.sla_first_response_breached_at IS NULL)
+			OR (t.resolution_due_at < now() AND t.sla_resolution_breached_at IS NULL))
+		ORDER BY LEAST(t.first_response_due_at, t.resolution_due_at) LIMIT $1`, scanBatch))
 	if err != nil {
 		return err
 	}
@@ -124,8 +124,8 @@ func (w *SnoozeWakeWorker) Work(ctx context.Context, _ *river.Job[SnoozeWakeArgs
 
 // WakeSnoozed sets status open and clears snoozed_until for every passed snooze.
 func WakeSnoozed(ctx context.Context, d *deps.Deps) error {
-	refs, err := collectRefs(d.DB.Pool.Query(ctx, `SELECT workspace_id, id FROM tickets
-		WHERE snoozed_until IS NOT NULL AND snoozed_until <= now() AND deleted_at IS NULL ORDER BY snoozed_until LIMIT $1`, scanBatch))
+	refs, err := collectRefs(d.DB.Pool.Query(ctx, `SELECT t.workspace_id, t.id FROM tickets t JOIN workspaces w ON w.id = t.workspace_id
+		WHERE t.snoozed_until IS NOT NULL AND t.snoozed_until <= now() AND t.deleted_at IS NULL AND `+ticketsOn+` ORDER BY t.snoozed_until LIMIT $1`, scanBatch))
 	if err != nil {
 		return err
 	}
@@ -160,6 +160,9 @@ func (w *AutoCloseWorker) Work(ctx context.Context, _ *river.Job[AutoCloseArgs])
 	return AutoClose(ctx, w.D)
 }
 
+// ticketsOn leaves a workspace's tickets alone while it has Tickets off: no breaches, wakes or closes.
+const ticketsOn = `COALESCE(w.settings->>'tickets_enabled', 'true') <> 'false'`
+
 // autoCloseDays mirrors hd.Settings.AutoClose in SQL: a number in settings, default 7.
 const autoCloseDays = `(CASE WHEN jsonb_typeof(w.settings->'auto_close_days') = 'number'
 	THEN GREATEST(floor((w.settings->>'auto_close_days')::numeric), 0)::int ELSE 7 END)`
@@ -167,7 +170,7 @@ const autoCloseDays = `(CASE WHEN jsonb_typeof(w.settings->'auto_close_days') = 
 // AutoClose closes solved tickets past the delay (settings.auto_close_days, 0 = never).
 func AutoClose(ctx context.Context, d *deps.Deps) error {
 	refs, err := collectRefs(d.DB.Pool.Query(ctx, `SELECT t.workspace_id, t.id FROM tickets t JOIN workspaces w ON w.id = t.workspace_id
-		WHERE t.status = 'solved' AND t.deleted_at IS NULL AND `+autoCloseDays+` > 0
+		WHERE t.status = 'solved' AND t.deleted_at IS NULL AND `+ticketsOn+` AND `+autoCloseDays+` > 0
 		AND t.solved_at < now() - make_interval(days => `+autoCloseDays+`) ORDER BY t.solved_at LIMIT $1`, scanBatch))
 	if err != nil {
 		return err

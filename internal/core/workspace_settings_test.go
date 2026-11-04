@@ -1,6 +1,55 @@
 package core
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestWorkspaceProductSettingsDefaultAndPatch(t *testing.T) {
+	defaults := defaultWorkspaceSettings()
+	if defaults.TicketsEnabled == defaults.MailEnabled {
+		t.Fatal("product setting defaults share a pointer")
+	}
+	if err := json.Unmarshal([]byte(`{"mail_enabled":false}`), &defaults); err != nil {
+		t.Fatal(err)
+	}
+	if defaults.TicketsEnabled == nil || !*defaults.TicketsEnabled || defaults.MailEnabled == nil || *defaults.MailEnabled {
+		t.Fatalf("mail-only disable changed the wrong default: %+v", defaults)
+	}
+	defaults = defaultWorkspaceSettings()
+	if err := json.Unmarshal([]byte(`{"tickets_enabled":false}`), &defaults); err != nil {
+		t.Fatal(err)
+	}
+	if defaults.TicketsEnabled == nil || *defaults.TicketsEnabled || defaults.MailEnabled == nil || !*defaults.MailEnabled {
+		t.Fatalf("tickets-only disable changed the wrong default: %+v", defaults)
+	}
+
+	var old map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(`{"timezone":"UTC"}`), &old); err != nil {
+		t.Fatal(err)
+	}
+	tickets, mail := workspaceProductFlags(old)
+	if !tickets || !mail {
+		t.Fatalf("old workspace defaults: tickets=%v mail=%v", tickets, mail)
+	}
+	off := false
+	patch, err := validateSettings(&CoreWorkspaceSettings{TicketsEnabled: &off})
+	if err != nil || patch["tickets_enabled"] != false {
+		t.Fatalf("tickets patch: %v, %v", patch, err)
+	}
+	patch, err = validateSettings(&CoreWorkspaceSettings{MailEnabled: &off})
+	if err != nil || patch["mail_enabled"] != false {
+		t.Fatalf("mail patch: %v, %v", patch, err)
+	}
+	var explicit map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(`{"tickets_enabled":false,"mail_enabled":true}`), &explicit); err != nil {
+		t.Fatal(err)
+	}
+	tickets, mail = workspaceProductFlags(explicit)
+	if tickets || !mail {
+		t.Fatalf("explicit settings: tickets=%v mail=%v", tickets, mail)
+	}
+}
 
 // TestUndoSendSeconds checks both undo windows (email and chat) take only the offered
 // lengths, off included.

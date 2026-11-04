@@ -280,3 +280,31 @@ func TestCopiesSummary(t *testing.T) {
 		}
 	}
 }
+
+func TestPeerMailDisabled(t *testing.T) {
+	e := newEnv(t, false)
+	e.peerOn()
+	account := e.mailAccount(e.WS.Admin.ID, "private")
+	e.mail(account, "Acme renewal", "The renewal is March 14.")
+	e.putPeer(e.WS.Admin, peerBody(nil)).Want(t, 200)
+	e.Exec(`UPDATE workspaces SET settings=settings || '{"mail_enabled":false}' WHERE id=$1`, e.WS.ID)
+	var body struct{ Code, Product, Reason string }
+	e.Do("GET", "/v1/me/assistant-peer", e.WS.Admin.As(e.WS), nil).Want(t, 403).JSON(t, &body)
+	if body.Code != "feature_disabled" || body.Product != "mail" || body.Reason != "workspace_disabled" {
+		t.Fatalf("disabled sharing: %+v", body)
+	}
+	e.putPeer(e.WS.Admin, peerBody(nil)).Want(t, 403)
+	if e.S.collabOn(e.Ctx, e.WS.ID) || e.S.peerAvailable(e.Ctx, e.WS.ID) {
+		t.Fatal("Mail peer access available while disabled")
+	}
+	st, calls := e.ask("When is the Acme renewal?")
+	if st.Status != "error" || calls != 2 {
+		t.Fatalf("disabled peer read: %+v, %d model calls", st, calls)
+	}
+	e.Exec(`UPDATE workspaces SET settings=settings || '{"mail_enabled":true}' WHERE id=$1`, e.WS.ID)
+	var got PeerSettings
+	e.Do("GET", "/v1/me/assistant-peer", e.WS.Admin.As(e.WS), nil).Want(t, 200).JSON(t, &got)
+	if !got.Enabled || len(got.Accounts) != 1 || got.Accounts[0].ID != account {
+		t.Fatalf("sharing not retained: %+v", got)
+	}
+}

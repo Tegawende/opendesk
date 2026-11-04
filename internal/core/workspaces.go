@@ -29,12 +29,15 @@ import (
 	"github.com/useopendesk/opendesk/internal/ids"
 	"github.com/useopendesk/opendesk/internal/jobs"
 	"github.com/useopendesk/opendesk/internal/plan"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 // CoreWorkspaceSettings are the agent-editable workspace options (contracts/api.md).
 // Other keys in workspaces.settings (for example "widget") belong to other areas and
 // are preserved on update.
 type CoreWorkspaceSettings struct {
+	TicketsEnabled    *bool   `json:"tickets_enabled,omitempty" doc:"Whether ticketing is enabled for this workspace (default true)"`
+	MailEnabled       *bool   `json:"mail_enabled,omitempty" doc:"Whether Mail is enabled for this workspace (default true)"`
 	BrandColor        *string `json:"brand_color,omitempty" doc:"Hex colour, #RRGGBB"`
 	Timezone          *string `json:"timezone,omitempty" doc:"IANA time zone"`
 	HelpCenterEnabled *bool   `json:"help_center_enabled,omitempty"`
@@ -109,15 +112,17 @@ func validOverrides(field string, in map[string]DisplayOverride, allowed []strin
 }
 
 type CoreWorkspace struct {
-	ID           uuid.UUID             `json:"id"`
-	Name         string                `json:"name"`
-	Slug         string                `json:"slug"`
-	WidgetKey    string                `json:"widget_key"`
-	Settings     CoreWorkspaceSettings `json:"settings"`
-	AvatarURL    domain.Avatar         `json:"avatar_url" doc:"Workspace logo"`
-	AvatarSource *string               `json:"avatar_source" enum:"upload"`
-	Images       WorkspaceImages       `json:"images"`
-	CreatedAt    time.Time             `json:"created_at"`
+	ID                 uuid.UUID             `json:"id"`
+	Name               string                `json:"name"`
+	Slug               string                `json:"slug"`
+	WidgetKey          string                `json:"widget_key"`
+	Settings           CoreWorkspaceSettings `json:"settings"`
+	MailAvailable      bool                  `json:"mail_available" doc:"Whether Mail is available after instance, plan, and workspace settings are applied"`
+	MailDisabledReason string                `json:"mail_disabled_reason,omitempty" enum:"instance_disabled,plan,workspace_disabled"`
+	AvatarURL          domain.Avatar         `json:"avatar_url" doc:"Workspace logo"`
+	AvatarSource       *string               `json:"avatar_source" enum:"upload"`
+	Images             WorkspaceImages       `json:"images"`
+	CreatedAt          time.Time             `json:"created_at"`
 }
 
 // WorkspaceImages are the brand pictures besides the logo.
@@ -156,6 +161,7 @@ func scanWorkspace(row pgx.Row, extra ...any) (CoreWorkspace, error) {
 	if err != nil {
 		return w, err
 	}
+	w.Settings = defaultWorkspaceSettings()
 	_ = json.Unmarshal(raw, &w.Settings)
 	if w.AvatarURL != "" {
 		w.AvatarSource = ptr("upload")
@@ -169,7 +175,49 @@ func loadWorkspace(ctx context.Context, q db.Querier, wid uuid.UUID) (CoreWorksp
 	return scanWorkspace(q.QueryRow(ctx, `SELECT `+workspaceCols+` FROM workspaces w WHERE w.id = $1`, wid))
 }
 
-func loadMemberships(ctx context.Context, q db.Querier, uid uuid.UUID) ([]CoreMembership, error) {
+func defaultWorkspaceSettings() CoreWorkspaceSettings {
+	tickets, mail := true, true
+	return CoreWorkspaceSettings{TicketsEnabled: &tickets, MailEnabled: &mail}
+}
+
+func (s *svc) loadWorkspace(ctx context.Context, q db.Querier, wid uuid.UUID) (CoreWorkspace, error) {
+	w, err := loadWorkspace(ctx, q, wid)
+	if err != nil {
+		return w, err
+	}
+	if err := s.applyEffectiveMail(ctx, q, &w); err != nil {
+		return w, err
+	}
+	return w, nil
+}
+
+func workspaceProductFlags(settings map[string]json.RawMessage) (tickets, mail bool) {
+	tickets, mail = true, true
+	if b, ok := settings["tickets_enabled"]; ok {
+		if err := json.Unmarshal(b, &tickets); err != nil {
+			tickets = true
+		}
+	}
+	if b, ok := settings["mail_enabled"]; ok {
+		if err := json.Unmarshal(b, &mail); err != nil {
+			mail = true
+		}
+	}
+	return tickets, mail
+}
+
+func (s *svc) applyEffectiveMail(ctx context.Context, q db.Querier, w *CoreWorkspace) error {
+	state, err := products.Resolve(ctx, q, s.d.Plan, s.d.Cfg.Collab, w.ID, products.Settings{
+		TicketsEnabled: w.Settings.TicketsEnabled, MailEnabled: w.Settings.MailEnabled,
+	})
+	if err != nil {
+		return err
+	}
+	w.MailAvailable, w.MailDisabledReason = state.Mail, state.MailDisabledReason
+	return nil
+}
+
+func (s *svc) loadMemberships(ctx context.Context, q db.Querier, uid uuid.UUID) ([]CoreMembership, error) {
 	rows, err := q.Query(ctx, `SELECT `+workspaceCols+`, m.role, w.suspended_at IS NOT NULL FROM members m JOIN workspaces w ON w.id = m.workspace_id
 		WHERE m.user_id = $1 ORDER BY m.created_at LIMIT 200`, uid)
 	if err != nil {
@@ -184,6 +232,11 @@ func loadMemberships(ctx context.Context, q db.Querier, uid uuid.UUID) ([]CoreMe
 	if out == nil {
 		out = []CoreMembership{}
 	}
+	for i := range out {
+		if err := s.applyEffectiveMail(ctx, q, &out[i].Workspace); err != nil {
+			return nil, err
+		}
+	}
 	return out, err
 }
 
@@ -197,6 +250,12 @@ var localeRe = regexp.MustCompile(`^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8}){0,3}$`)
 // validateSettings checks a settings patch and returns the JSON object to merge.
 func validateSettings(s *CoreWorkspaceSettings) (map[string]any, error) {
 	out := map[string]any{}
+	if s.TicketsEnabled != nil {
+		out["tickets_enabled"] = *s.TicketsEnabled
+	}
+	if s.MailEnabled != nil {
+		out["mail_enabled"] = *s.MailEnabled
+	}
 	if s.BrandColor != nil {
 		if *s.BrandColor != "" && !hexColorRe.MatchString(*s.BrandColor) {
 			return nil, httpx.Validation("brand_color must be a hex colour like #0A0A0A.")
@@ -354,6 +413,7 @@ func (s *svc) createWorkspace(ctx context.Context, tx pgx.Tx, p *auth.Principal,
 		slug = strings.Trim(base[:min(len(base), 39-len(suffix))], "-") + "-" + suffix
 	}
 	settings := map[string]any{"timezone": "UTC", "help_center_enabled": true, "help_center_title": name + " help center",
+		"tickets_enabled": true, "mail_enabled": true,
 		"csat_enabled": false, "auto_assign": "none"}
 	if utf8.RuneCountInString(settings["help_center_title"].(string)) > 100 {
 		settings["help_center_title"] = "Help center"
@@ -419,7 +479,7 @@ func (s *svc) createWorkspace(ctx context.Context, tx pgx.Tx, p *auth.Principal,
 	if err := audit.Log(ctx, tx, p, wid, "workspace.created", "workspace", &wid, map[string]any{"name": name}); err != nil {
 		return CoreWorkspace{}, err
 	}
-	return loadWorkspace(ctx, tx, wid)
+	return s.loadWorkspace(ctx, tx, wid)
 }
 
 // fileKeys lists the stored objects of a workspace, removed after the rows are.
@@ -538,7 +598,7 @@ func (s *svc) registerWorkspaces(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			w, err := loadWorkspace(ctx, s.d.DB.Pool, p.WorkspaceID)
+			w, err := s.loadWorkspace(ctx, s.d.DB.Pool, p.WorkspaceID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -573,6 +633,43 @@ func (s *svc) registerWorkspaces(api huma.API) {
 			}
 			var w CoreWorkspace
 			err = s.presenceSettingsTx(ctx, func(tx pgx.Tx) error {
+				var rawSettings []byte
+				if err := tx.QueryRow(ctx, `SELECT settings FROM workspaces WHERE id = $1 FOR UPDATE`, p.WorkspaceID).Scan(&rawSettings); err != nil {
+					return err
+				}
+				ticketsWasOff := false
+				_, ticketPatch := patch["tickets_enabled"]
+				_, mailPatch := patch["mail_enabled"]
+				if ticketPatch || mailPatch {
+					// JSON merge semantics are applied below; check the resulting pair while holding
+					// the workspace row lock so concurrent settings writes cannot disable both.
+					var current map[string]json.RawMessage
+					_ = json.Unmarshal(rawSettings, &current)
+					tickets, mail := workspaceProductFlags(current)
+					ticketsWasOff = !tickets
+					if v, ok := patch["tickets_enabled"].(bool); ok {
+						tickets = v
+					}
+					if v, ok := patch["mail_enabled"].(bool); ok {
+						mail = v
+					}
+					if !tickets {
+						state, err := products.Resolve(ctx, tx, s.d.Plan, s.d.Cfg.Collab, p.WorkspaceID,
+							products.Settings{TicketsEnabled: &tickets, MailEnabled: &mail})
+						if err != nil {
+							return err
+						}
+						if !state.Mail {
+							return httpx.E(422, "at_least_one_product_required", "At least one available product must stay enabled.")
+						}
+					}
+					if ticketsWasOff && tickets {
+						// Inbound email, calls and channel messages held while Tickets was off resume now.
+						if err := products.Reactivate(ctx, tx, p.WorkspaceID); err != nil {
+							return err
+						}
+					}
+				}
 				if _, changes := patch["agent_online_time"]; changes {
 					if err := lockPresence(ctx, tx, p.WorkspaceID, true); err != nil {
 						return err
@@ -606,13 +703,13 @@ func (s *svc) registerWorkspaces(api huma.API) {
 				if err := brands.SyncDefault(ctx, tx, s.d.Cfg, p.WorkspaceID, patch); err != nil {
 					return err
 				}
-				if w, err = loadWorkspace(ctx, tx, p.WorkspaceID); err != nil {
+				if w, err = s.loadWorkspace(ctx, tx, p.WorkspaceID); err != nil {
 					return err
 				}
 				if len(changed) == 0 {
 					return nil
 				}
-				return publishWorkspace(ctx, tx, w)
+				return s.publishWorkspace(ctx, tx, w)
 			})
 			if err != nil {
 				return nil, httpx.Wrap(err)
@@ -796,7 +893,10 @@ func (s *svc) rotateWidgetSecret(ctx context.Context, id *uuid.UUID) (*widgetSec
 }
 
 // publishWorkspace sends workspace.updated.
-func publishWorkspace(ctx context.Context, tx pgx.Tx, w CoreWorkspace) error {
+func (s *svc) publishWorkspace(ctx context.Context, tx pgx.Tx, w CoreWorkspace) error {
+	if err := s.applyEffectiveMail(ctx, tx, &w); err != nil {
+		return err
+	}
 	_, err := events.Publish(ctx, tx, events.Event{WorkspaceID: w.ID, Type: "workspace.updated", Data: map[string]any{"workspace": w}})
 	return err
 }

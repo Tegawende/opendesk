@@ -333,8 +333,7 @@ func (s *service) categorize(ctx context.Context, id uuid.UUID, attempt int) err
 	if err != nil {
 		return err
 	}
-	ok, err := s.collabActive(ctx, a.WorkspaceID)
-	if err != nil || !ok {
+	if err := s.pauseIfInactive(ctx, a.WorkspaceID); err != nil {
 		return err
 	}
 	cs, err := loadAccountCategorySets(ctx, s.d.DB.Pool, a)

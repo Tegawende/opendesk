@@ -86,10 +86,21 @@ describe("format, German page", () => {
     expect(sp(formatUsd(0.5))).toBe("0,50 $");
     expect(sp(percent(0.5))).toBe("50 %");
     expect(relLong(ago(2 * DAY), NOW)).toBe("vor 2 Tagen");
+    expect(relShort(ago(10_000), NOW)).toBe("jetzt");
+    expect(sp(relShort(ago(5 * MIN), NOW))).toBe("5 Min.");
+    expect(sp(relShort(ago(2 * HOUR), NOW))).toBe("2 Std.");
     expect(dayLabel(ago(DAY), NOW)).toBe("Gestern");
     expect(sp(shortDate("2020-03-04T12:00:00Z"))).toMatch(/4\. März 2020/);
     expect(clock("2026-10-11T14:05:00")).toBe("14:05");
     expect(document.documentElement.lang).toBe("de");
+  });
+  it("writes a list age as a duration in French, never as \"-6 min\"", async () => {
+    await setLocale("fr", ["common"]);
+    expect(relShort(ago(10_000), NOW)).toBe("maintenant");
+    expect(sp(relShort(ago(6 * MIN), NOW))).toBe("6 min");
+    expect(sp(relShort(ago(2 * HOUR), NOW))).toBe("2 h");
+    expect(sp(relShort(ago(3 * DAY), NOW))).toBe("3 j");
+    expect(relShort(ago(6 * MIN), NOW)).not.toContain("-");
   });
   it("sets right to left for Arabic and resets after", async () => {
     await setLocale("ar", ["common"]);

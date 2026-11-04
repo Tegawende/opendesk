@@ -116,6 +116,7 @@ export function baseWorkspace(id: string, name: string, slug: string): WsData {
       name,
       slug,
       widget_key: `wk_${slug}_${uuid().slice(0, 8)}`,
+      mail_available: true,
       settings: {},
       avatar_url: null,
       avatar_source: null,

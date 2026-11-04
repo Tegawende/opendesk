@@ -14,7 +14,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/httpx"
-	"github.com/useopendesk/opendesk/internal/plan"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 // maxSidebarBytes bounds the stored sidebar preferences.
@@ -247,8 +247,9 @@ func (s *service) pinAllInboxes(ctx context.Context, wid, uid uuid.UUID, prefs S
 	if slices.Contains(prefs.AutoPins, autoPinAllInboxes) {
 		return prefs, nil
 	}
-	if err := s.d.Plan.RequireCollab(ctx, s.d.DB.Pool, wid); err != nil {
-		if errors.Is(err, plan.ErrCollab) {
+	if err := products.RequireMail(ctx, s.d.DB.Pool, s.d.Plan, s.d.Cfg.Collab, wid); err != nil {
+		var disabled *products.DisabledError
+		if errors.As(err, &disabled) {
 			return prefs, nil
 		}
 		return prefs, err

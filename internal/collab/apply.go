@@ -321,11 +321,11 @@ func (s *service) applyRemote(ctx context.Context, job *river.Job[jobs.CollabApp
 	if err != nil {
 		return err
 	}
+	if err := s.pauseIfInactive(ctx, a.WorkspaceID); err != nil {
+		return err
+	}
 	if a.Reconnect {
 		return nil
-	}
-	if ok, err := s.collabActive(ctx, a.WorkspaceID); err != nil || !ok {
-		return err
 	}
 	err = s.applyAtProvider(ctx, a, args)
 	if err == nil || isPermanent(err) || job.Attempt >= job.MaxAttempts {

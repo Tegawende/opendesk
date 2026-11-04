@@ -15,6 +15,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 // The sync engine (contracts/collab.md "Sync"): one job per account at a time, folders
@@ -71,15 +72,27 @@ func (s *service) queueSync(ctx context.Context, q db.Querier, accountID uuid.UU
 // collabActive reports whether the workspace has Collab and is not suspended; background
 // work for an account stops while it is not.
 func (s *service) collabActive(ctx context.Context, wid uuid.UUID) (bool, error) {
-	e, err := s.d.Plan.Entitlements(ctx, s.d.DB.Pool, wid)
+	state, err := products.Load(ctx, s.d.DB.Pool, s.d.Plan, s.d.Cfg.Collab, wid)
 	if err != nil {
 		return false, err
 	}
-	if !e.Collab {
+	if !state.Mail {
 		return false, nil
 	}
 	suspended, err := domain.WorkspaceSuspended(ctx, s.d.DB.Pool, wid)
 	return !suspended, err
+}
+
+// pauseIfInactive retains queued work without consuming attempts while Mail is unavailable.
+func (s *service) pauseIfInactive(ctx context.Context, wid uuid.UUID) error {
+	active, err := s.collabActive(ctx, wid)
+	if err != nil {
+		return err
+	}
+	if !active {
+		return river.JobSnooze(idleInterval)
+	}
+	return nil
 }
 
 // syncAccount runs one sync pass of an account and records how it went.
@@ -91,16 +104,16 @@ func (s *service) syncAccount(ctx context.Context, id uuid.UUID) error {
 	if err != nil {
 		return err
 	}
+	if err := s.pauseIfInactive(ctx, a.WorkspaceID); err != nil {
+		return err
+	}
 	if a.Reconnect {
 		return nil // waits for a reconnect
 	}
 	if a.Config.Demo {
-		return s.recordSyncOK(ctx, a) // nothing to fetch: its mail is all here
+		return s.recordSyncOK(ctx, a)
 	}
-	ok, err := s.collabActive(ctx, a.WorkspaceID)
-	if err != nil || !ok {
-		return err
-	}
+
 	if err := s.runSync(ctx, a); err != nil {
 		if ctx.Err() != nil && !isPermanent(err) {
 			return err // the job ran out of time: River tries again
@@ -260,7 +273,9 @@ func (s *service) enqueueDue(ctx context.Context) error {
 		return err
 	}
 	rows, err := s.d.DB.Pool.Query(ctx, `SELECT a.id, a.workspace_id FROM collab_accounts a
-		WHERE NOT a.reconnect AND NOT COALESCE((a.config->>'demo')::boolean, false)
+		JOIN workspaces w ON w.id = a.workspace_id
+		WHERE COALESCE((w.settings->>'mail_enabled')::boolean, true) AND w.suspended_at IS NULL
+		AND NOT a.reconnect AND NOT COALESCE((a.config->>'demo')::boolean, false)
 		AND (a.next_sync_at IS NULL OR a.next_sync_at <= now())
 		AND (a.last_synced_at IS NULL OR a.last_synced_at <= now() - make_interval(secs => $1)
 			OR (a.last_synced_at <= now() - make_interval(secs => $2) AND (EXISTS (

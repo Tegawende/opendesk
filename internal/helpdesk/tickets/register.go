@@ -12,10 +12,13 @@ import (
 
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/deps"
+	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
 // Register adds this package's routes.
 func Register(d *deps.Deps, api huma.API, r chi.Router) {
+	// Every route tagged Tickets or Reports answers feature_disabled while the workspace has Tickets off.
+	api.UseMiddleware(httpx.TicketsGate(d.DB.Pool, func(op *huma.Operation) bool { return httpx.HasTag(op, "Tickets") || httpx.HasTag(op, "Reports") }))
 	registerTickets(d, api)
 	registerMessages(d, api)
 	registerDrafts(d, api)

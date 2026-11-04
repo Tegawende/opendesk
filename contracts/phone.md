@@ -423,6 +423,7 @@ validation remains necessary before claiming live-tested Placetel functionality.
   URL is an adapter constant, never user input.
 - Logs carry ids, event names and errors, never numbers, names or call content.
 - A suspended workspace's events are acknowledged and dropped.
+- While the workspace has Tickets off, events are stored and acknowledged but not applied: the inbound job snoozes with the event row unprocessed, and runs when Tickets is turned on (contracts/api.md).
 
 ## Not yet
 

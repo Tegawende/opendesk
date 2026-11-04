@@ -34,6 +34,10 @@ func helpCenter(ctx context.Context, d *deps.Deps, slug string) (kb.HelpCenter, 
 
 // Register adds the portal's public configuration and separate customer authentication.
 func Register(d *deps.Deps, api huma.API, _ chi.Router) {
+	// Portal sessions and requests are ticket work; only the portal's brand stays readable.
+	api.UseMiddleware(httpx.TicketsGate(d.DB.Pool, func(op *huma.Operation) bool {
+		return httpx.HasTag(op, "Customer portal") && op.OperationID != "customer-portal-config"
+	}))
 	s := &service{d: d}
 	op := s.operation("customer-portal-config", http.MethodGet, "/v1/public/help/{workspace_slug}/portal/config", "Customer portal brand", true)
 	huma.Register(api, op, func(ctx context.Context, in *struct {

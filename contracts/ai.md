@@ -542,7 +542,8 @@ interface PeerAsk { id: string; asker: UserRef; question: string; answer: string
   result: "answered" | "declined" | "not_shared" | "failed"; sources: number; created_at: string }
 ```
 
-These routes need a signed-in member of a workspace with Collab (`402 collab_required`); API keys,
+These routes need a signed-in member of a workspace with effective Mail availability
+(`403 feature_disabled`, `product: "mail"`, `reason: "instance_disabled" | "plan" | "workspace_disabled"`); API keys,
 AI clients and Ollie itself are refused (`403`), they are left out of the OpenAPI document, and
 Ollie's API tools cannot reach them. `enabled: true` while the workspace does not allow it is
 `409 assistant_peer_off`. A user who is not a member, a team of another workspace, or an account
@@ -550,7 +551,8 @@ that is not the caller's own is `422 validation_failed`. Changes are audit-logge
 `assistant_peer.settings_updated` with the changed keys only.
 
 An ask (`ask_teammate`), checked in Go and SQL before any model call, in this order:
-1. The workspace allows it and AI is on (else the tool errors with `assistant_peer_off`).
+1. Effective Mail is available (else `feature_disabled`), and the workspace allows it and AI is on
+   (else the tool errors with `assistant_peer_off`).
 2. The teammate is another member of the workspace.
 3. The pair is under 20 asks per hour (`429`); the asker's own Ollie limits apply as usual.
 4. Collab is available, the teammate opted in, the asker is in their audience (people, or members

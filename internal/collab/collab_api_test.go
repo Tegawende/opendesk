@@ -323,7 +323,7 @@ func TestAPICollabRequired(t *testing.T) {
 	}
 	var e apiError
 	for _, path := range []string{"/v1/collab/accounts", "/v1/collab/threads", "/v1/collab/counts"} {
-		if st := doJSON(t, "GET", srv.URL+path, nil, &e); st != 402 || e.Code != "collab_required" {
+		if st := doJSON(t, "GET", srv.URL+path, nil, &e); st != 403 || e.Code != "feature_disabled" {
 			t.Fatalf("GET %s: %d %+v", path, st, e)
 		}
 	}
@@ -1101,6 +1101,11 @@ func TestAPIAttachmentSignature(t *testing.T) {
 		return resp.StatusCode
 	}
 	good := w.s.attachmentPath(mid, 0)
+	mustExec(t, w.d, `UPDATE workspaces SET settings=settings || '{"mail_enabled":false}' WHERE id=$1`, w.wid)
+	if st := get(srv.URL + good); st != 404 {
+		t.Fatalf("disabled Mail attachment: %d", st)
+	}
+	mustExec(t, w.d, `UPDATE workspaces SET settings=settings || '{"mail_enabled":true}' WHERE id=$1`, w.wid)
 	exp := strconv.FormatInt(time.Now().Add(-time.Minute).Unix(), 10)
 	for name, path := range map[string]string{
 		"no signature":   "/v1/collab/attachments/" + mid.String() + "/0",

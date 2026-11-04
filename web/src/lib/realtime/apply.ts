@@ -439,6 +439,8 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
     }
     void qc.invalidateQueries({ queryKey: qk.assignment });
     void qc.invalidateQueries({ queryKey: qk.businessHours });
+    // Turning Mail on or off changes what Collab reports.
+    void qc.invalidateQueries({ queryKey: qk.collabStatus });
     return;
   }
 

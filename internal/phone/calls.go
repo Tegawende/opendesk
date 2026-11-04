@@ -20,6 +20,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/ids"
 	"github.com/useopendesk/opendesk/internal/jobs"
 	"github.com/useopendesk/opendesk/internal/phone/provider"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 // Call outcomes, set once a call has ended.
@@ -102,6 +103,9 @@ type inboundWorker struct {
 
 func (w *inboundWorker) Work(ctx context.Context, job *river.Job[jobs.PhoneInboundArgs]) error {
 	err := w.s.ProcessInbound(ctx, job.Args)
+	if errors.Is(err, products.ErrHeld) {
+		return products.SnoozeHeld(err)
+	}
 	var limited *provider.RateLimited
 	if errors.As(err, &limited) {
 		if time.Since(job.CreatedAt) > 24*time.Hour {
@@ -147,6 +151,12 @@ func (s *Service) processInbound(ctx context.Context, a jobs.PhoneInboundArgs) e
 		suspended, err := domain.WorkspaceSuspended(ctx, tx, c.WorkspaceID)
 		if err != nil {
 			return err
+		}
+		if !suspended {
+			// The event stays stored and unapplied until Tickets is on.
+			if err := products.Hold(ctx, tx, c.WorkspaceID); err != nil {
+				return err
+			}
 		}
 		var ev provider.Event
 		if err := json.Unmarshal(raw, &ev); err != nil {

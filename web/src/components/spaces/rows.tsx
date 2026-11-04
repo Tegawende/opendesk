@@ -202,6 +202,8 @@ export function buildRow(item: { kind: string; id: string }, d: WorkspaceData, c
   const via = ctx.via ?? [];
   const here = d.open ? ctx.here : undefined;
   const hidden = new Set(d.prefs.hidden);
+  // Tickets off: its folders, teams, views and the reports are not there to pin or open.
+  if (!d.tickets && (item.kind === "ticket_folder" || item.kind === "team" || item.kind === "view" || (item.kind === "page" && item.id === "reports"))) return null;
   switch (item.kind) {
     case "ticket_folder": {
       const f = folderById(item.id);

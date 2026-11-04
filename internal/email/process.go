@@ -23,6 +23,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/helpdesk/routing"
 	"github.com/useopendesk/opendesk/internal/ids"
 	"github.com/useopendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/products"
 	"github.com/useopendesk/opendesk/internal/storage"
 )
 
@@ -38,6 +39,9 @@ type processInboundWorker struct {
 
 func (w *processInboundWorker) Work(ctx context.Context, job *river.Job[jobs.ProcessInboundArgs]) error {
 	err := w.s.processInbound(ctx, job.Args.WorkspaceID, job.Args.InboundEmailID)
+	if errors.Is(err, products.ErrHeld) {
+		return products.SnoozeHeld(err)
+	}
 	if err != nil && job.Attempt >= job.MaxAttempts {
 		_ = w.s.markInbound(context.WithoutCancel(ctx), job.Args.WorkspaceID, job.Args.InboundEmailID, "failed", "processing_failed")
 	}
@@ -98,6 +102,10 @@ func (s *service) processInbound(ctx context.Context, wid, inboundID uuid.UUID) 
 			return err
 		}
 		return s.markInbound(ctx, wid, inboundID, "ignored", "workspace_suspended")
+	}
+	// The mail is stored and stays pending: it becomes a ticket message once Tickets is on.
+	if err := products.Hold(ctx, s.d.DB.Pool, wid); err != nil {
+		return err
 	}
 	raw, err := s.readObject(ctx, key, maxRawBytes)
 	if errors.Is(err, storage.ErrNotFound) {

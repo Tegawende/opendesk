@@ -5,8 +5,13 @@ import { shortcutGroups } from "@/lib/hotkeys";
 import { shell, useShell } from "./shellStore";
 import { quickSwitchKeys } from "./useAccounts";
 import { useCollab } from "@/lib/collab/hooks";
+import { useProducts } from "@/lib/products";
 import { spaceKeys } from "@/components/spaces/actions";
 import { useDisplay } from "@/components/tickets/fields";
+
+// General shortcuts that act on tickets: not offered while the workspace has Tickets off.
+const TICKET_KEYS: ReadonlySet<string> = new Set(["searchTickets", "newTicket", "goToInbox", "switchTeam"]);
+const TICKET_EXTRA: ReadonlySet<string> = new Set(["g m", "g r"]);
 
 export function ShortcutsSheet() {
   const { t: tNav } = useTranslation("navigation");
@@ -26,16 +31,17 @@ export function ShortcutsSheet() {
     ],
   };
   const collab = useCollab();
+  const { tickets: ticketsOn } = useProducts();
   const { t: tc } = useTranslation("collab");
-  const groups: { id: string; title: string; items: { keys: string; label: string }[] }[] = shortcutGroups.map((g) => {
+  const groups: { id: string; title: string; items: { keys: string; label: string }[] }[] = shortcutGroups.filter((g) => ticketsOn || g.title === "general").map((g) => {
     const have = new Set(g.items.map((i) => i.keys));
     return {
       id: g.title,
       title: tNav(`shortcuts.${g.title}`),
       items: [
         // e finishes a ticket: its words follow the status it sets.
-        ...g.items.map((i) => ({ ...i, label: i.label === "solveFocusedTicket" ? finish.listShortcut() : i.label === "solve" ? finish.shortcut() : tNav(`shortcuts.${i.label}`) })),
-        ...(extra[g.title] ?? []).filter((i) => !have.has(i.keys)),
+        ...g.items.filter((i) => ticketsOn || !TICKET_KEYS.has(i.label)).map((i) => ({ ...i, label: i.label === "solveFocusedTicket" ? finish.listShortcut() : i.label === "solve" ? finish.shortcut() : tNav(`shortcuts.${i.label}`) })),
+        ...(extra[g.title] ?? []).filter((i) => !have.has(i.keys) && (ticketsOn || !TICKET_EXTRA.has(i.keys))),
       ],
     };
   });

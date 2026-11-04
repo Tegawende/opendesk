@@ -10,6 +10,7 @@ import { cn } from "@/lib/cn";
 import { clock, formatUsd, relShort } from "@/lib/format";
 import { notificationHolds } from "@/lib/notificationPrefs";
 import { q } from "@/lib/queries";
+import { productsOf } from "@/lib/products";
 import { AI_TONE, tone, type Tone } from "@/lib/tones";
 import { Popover } from "@/components/ui/popover";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -182,7 +183,8 @@ export function NotificationsButton() {
   const isLoading = bell.isLoading && !bell.hasAny;
   const unread = bell.unread;
   const { t } = useTranslation("shell");
-  const shown = (data ?? []).filter((x) => filter === "all" || !x.row.read_at);
+  // A ticket notification of a workspace with Tickets off opens nothing: it is not listed.
+  const shown = (data ?? []).filter((x) => (filter === "all" || !x.row.read_at) && !(x.row.ticket && !productsOf(wsOf(x.workspaceId)).tickets));
   // The bell rings once when a new unread notification arrives (not on first load).
   const [rings, setRings] = useState(0);
   const seen = useRef<number | null>(null);

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MailAccount, Team, TicketCounts, View, WorkspaceOverview } from "@/lib/api/types";
 import { defaultSidebarPrefs } from "@/lib/collab/sidebarPrefs";
 import type { WorkspaceData } from "@/lib/spaces/hooks";
-import { buildEverywhereRow, buildRow, rowHref, rowNavigate, rowNumber, type RowLabels } from "./rows";
+import { buildEverywhereRow, buildRow, rowHref, rowNavigate, rowNumber, type RowContext, type RowLabels } from "./rows";
 
 const labels: RowLabels = {
   folder: (id) => `folder ${id}`,
@@ -25,6 +25,7 @@ function data(p: Partial<WorkspaceData> = {}): WorkspaceData {
     open: false,
     role: "agent",
     collab: true,
+    tickets: true,
     prefs: defaultSidebarPrefs(),
     counts,
     teams: [team("t1"), team("secret", { private: true })],
@@ -38,6 +39,15 @@ function data(p: Partial<WorkspaceData> = {}): WorkspaceData {
 }
 
 describe("Space rows", () => {
+  it("builds no ticket row while the workspace has Tickets off", () => {
+    const ctx = { labels } as RowContext;
+    const off = data({ tickets: false });
+    for (const item of [{ kind: "ticket_folder", id: "mine" }, { kind: "team", id: "t1" }, { kind: "view", id: "v1" }, { kind: "page", id: "reports" }])
+      expect(buildRow(item, off, ctx)).toBeNull();
+    expect(buildRow({ kind: "page", id: "wiki" }, off, ctx)).not.toBeNull();
+    expect(buildRow({ kind: "ticket_folder", id: "mine" }, data(), ctx)).not.toBeNull();
+  });
+
   it("opens another workspace's page with ?ws=", () => {
     expect(rowHref({ kind: "inbox", folder: "mine" }, "w1")).toBe("/inbox/mine?ws=w1");
     expect(rowHref({ kind: "team", teamId: "t1" })).toBe("/teams/t1");

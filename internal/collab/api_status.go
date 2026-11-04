@@ -8,6 +8,7 @@ import (
 
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 func (s *service) registerStatusRoutes(api huma.API) {
@@ -23,10 +24,14 @@ func (s *service) registerStatusRoutes(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			out := CollabStatus{Enabled: ent.Collab, Providers: s.providersOffered()}
-			if !ent.Collab {
-				reason := "plan"
-				if !s.d.Cfg.Collab || (s.d.Plan != nil && s.d.Plan.CollabOff) {
+			state, err := products.Load(ctx, s.d.DB.Pool, s.d.Plan, s.d.Cfg.Collab, p.WorkspaceID)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			out := CollabStatus{Enabled: state.Mail, Providers: s.providersOffered()}
+			if !state.Mail {
+				reason := state.MailDisabledReason
+				if reason == products.InstanceDisabled {
 					reason = "disabled"
 				}
 				out.Reason = &reason

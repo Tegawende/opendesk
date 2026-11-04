@@ -350,7 +350,7 @@ type CollabProviders struct {
 
 type CollabStatus struct {
 	Enabled   bool            `json:"enabled"`
-	Reason    *string         `json:"reason" enum:"plan,disabled"`
+	Reason    *string         `json:"reason" enum:"plan,disabled,workspace_disabled"`
 	Providers CollabProviders `json:"providers"`
 	Accounts  int             `json:"accounts"`
 	Storage   CollabStorage   `json:"storage"`

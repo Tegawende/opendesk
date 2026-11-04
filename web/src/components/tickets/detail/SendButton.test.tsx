@@ -91,7 +91,7 @@ describe("SendButton", () => {
   type Props = Partial<Parameters<typeof SendButton>[0]>;
   async function render(settings: WorkspaceSettings, props: Props = {}) {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-    qc.setQueryData<Workspace>(qk.workspace, { id: "w", name: "Acme", settings } as Workspace);
+    qc.setQueryData<Workspace>(qk.workspace, { id: "w", name: "Acme", mail_available: true, settings } as Workspace);
     const onSend = vi.fn<(s?: TicketStatus) => void>();
     await act(async () =>
       root.render(

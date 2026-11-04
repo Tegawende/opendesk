@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/useopendesk/opendesk/internal/plan"
 )
 
 func testPNG(t *testing.T, w, h int) []byte {
@@ -141,6 +142,79 @@ func TestProfilePictureAndWorkspaceImages(t *testing.T) {
 	}
 	if r := owner.do("DELETE", "/v1/workspace/images/logo", nil); r.Status != 200 || r.Body["avatar_url"] != nil {
 		t.Fatalf("remove logo: %d %s", r.Status, r.Raw)
+	}
+}
+
+func TestEffectiveMailStateOnWorkspaceMembershipAndImageEvent(t *testing.T) {
+	e := newEnv(t)
+	e.d.Cfg.Collab = true
+	e.d.Plan = plan.New(false, 1)
+	owner, _ := e.signup("effective-mail")
+	wid := owner.newWorkspace("Effective Mail Co")
+	owner.workspace = wid
+
+	check := func(w map[string]any, available bool, reason string) {
+		t.Helper()
+		if w["mail_available"] != available {
+			t.Fatalf("mail availability: wanted %v, got %#v", available, w)
+		}
+		if reason == "" {
+			if _, ok := w["mail_disabled_reason"]; ok {
+				t.Fatalf("unexpected disabled reason: %#v", w["mail_disabled_reason"])
+			}
+		} else if w["mail_disabled_reason"] != reason {
+			t.Fatalf("mail reason: wanted %q, got %#v", reason, w["mail_disabled_reason"])
+		}
+	}
+	checkWorkspace := func(available bool, reason string) {
+		t.Helper()
+		current := owner.do("GET", "/v1/workspace", nil)
+		if current.Status != 200 {
+			t.Fatalf("GET workspace: %d %s", current.Status, current.Raw)
+		}
+		check(current.Body, available, reason)
+		me := owner.do("GET", "/v1/me", nil)
+		if me.Status != 200 {
+			t.Fatalf("GET me: %d %s", me.Status, me.Raw)
+		}
+		memberships := me.Body["memberships"].([]any)
+		for _, raw := range memberships {
+			membership := raw.(map[string]any)
+			workspace := membership["workspace"].(map[string]any)
+			if workspace["id"] == wid {
+				check(workspace, available, reason)
+				return
+			}
+		}
+		t.Fatalf("workspace %s missing from /v1/me: %s", wid, me.Raw)
+	}
+	checkWorkspace(true, "")
+	e.d.Plan.CollabOff = true
+	checkWorkspace(false, "instance_disabled")
+	e.d.Plan.CollabOff = false
+	originalPlan := e.d.Plan
+	e.d.Plan = plan.New(true, 1)
+	checkWorkspace(false, "plan")
+	e.d.Plan = originalPlan
+	e.d.Cfg.Collab = false
+	checkWorkspace(false, "instance_disabled")
+	e.d.Cfg.Collab = true
+
+	if r := owner.do("PATCH", "/v1/workspace", map[string]any{"settings": map[string]any{"mail_enabled": false}}); r.Status != 200 {
+		t.Fatalf("disable Mail: %d %s", r.Status, r.Raw)
+	}
+	checkWorkspace(false, "workspace_disabled")
+
+	if r := owner.upload("PUT", "/v1/workspace/images/logo", testPNG(t, 40, 20)); r.Status != 200 {
+		t.Fatalf("upload logo: %d %s", r.Status, r.Raw)
+	}
+	var reason string
+	if err := e.d.DB.Pool.QueryRow(context.Background(), `SELECT data->'workspace'->>'mail_disabled_reason'
+		FROM events WHERE workspace_id = $1 AND type = 'workspace.updated' ORDER BY seq DESC LIMIT 1`, wid).Scan(&reason); err != nil {
+		t.Fatal(err)
+	}
+	if reason != "workspace_disabled" {
+		t.Fatalf("workspace image event mail reason: %q", reason)
 	}
 }
 

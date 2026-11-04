@@ -23,6 +23,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 // Asking a teammate's Ollie (contracts/ai.md "Asking a teammate"): the user's Ollie asks a
@@ -116,7 +117,7 @@ func (s *Service) peerAvailable(ctx context.Context, wid uuid.UUID) bool {
 }
 
 func (s *Service) collabOn(ctx context.Context, wid uuid.UUID) bool {
-	return s.d.Plan == nil || s.d.Plan.RequireCollab(ctx, s.d.DB.Pool, wid) == nil
+	return products.RequireMail(ctx, s.d.DB.Pool, s.d.Plan, s.d.Cfg.Collab, wid) == nil
 }
 
 // peerAccess is what the teammate shares with this asker.
@@ -193,6 +194,9 @@ func askTeammate(ctx context.Context, rc *runCtx, raw json.RawMessage) (output, 
 		return output{}, httpx.Validation("question must be 1 to 1,000 characters")
 	}
 	s, p := rc.svc, rc.p
+	if err := products.RequireMail(ctx, s.d.DB.Pool, s.d.Plan, s.d.Cfg.Collab, p.WorkspaceID); err != nil {
+		return output{}, httpx.Wrap(err)
+	}
 	st, err := s.ai.WorkspaceAI(ctx, p.WorkspaceID)
 	if err != nil {
 		return output{}, ai.APIError(err)

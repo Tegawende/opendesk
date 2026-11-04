@@ -38,6 +38,7 @@ import { DesktopUpdateBanner } from "@/components/desktop/UpdateBanner";
 import { AllowNotificationsBanner } from "@/components/notifications/AllowBanner";
 import { NEW_TICKET_PATH, shell, toggleNav, useNav, useShell } from "./shellStore";
 import { useCollab } from "@/lib/collab/hooks";
+import { useProducts } from "@/lib/products";
 import { useSpaceUi } from "@/lib/spaces/store";
 import { compose } from "@/lib/collab/compose";
 
@@ -262,6 +263,7 @@ export function AppLayout() {
   useWaitingAlerts(authed && !suspended);
 
   const collab = useCollab();
+  const { tickets: ticketsOn } = useProducts();
   const spaceEditor = useSpaceUi((s) => !!s.editor);
   // On the mail pages, c writes new mail and g i goes to the mail inbox.
   const onMail = collab.enabled && section === "mail";
@@ -277,7 +279,7 @@ export function AppLayout() {
     "shift+?": () => shell.shortcuts(),
     c: () => {
       if (onMail) compose.open();
-      else if (!onNewTicket) shell.newTicket();
+      else if (ticketsOn && !onNewTicket) shell.newTicket();
     },
     b: () => toggleNav(),
     "g i": () =>
@@ -354,7 +356,7 @@ export function AppLayout() {
           <UpgradeDialog />
         </Suspense>
       )}
-      {newTicketOpen && !onNewTicket && (
+      {ticketsOn && newTicketOpen && !onNewTicket && (
         <Suspense fallback={null}>
           <NewTicketDialog />
         </Suspense>

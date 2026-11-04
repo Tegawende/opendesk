@@ -54,6 +54,7 @@ import { sortTeams, TeamDot, useTeamsCtx } from "@/components/tickets/teams";
 import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import type { SearchResults } from "@/lib/api/types";
 import { useCollab, useMailAccounts } from "@/lib/collab/hooks";
+import { TICKET_SETTINGS, useProducts } from "@/lib/products";
 import { compose } from "@/lib/collab/compose";
 import { AccountDot } from "@/components/collab/bits";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
@@ -113,6 +114,7 @@ export function CommandPalette() {
   const { t: tShell } = useTranslation("shell");
   const [aiMode, setAiMode] = useState(false);
   const collab = useCollab();
+  const { tickets: ticketsOn } = useProducts();
   const { data: mailAccounts } = useMailAccounts();
   const { t: tCollab } = useTranslation("collab");
   const { t: tw } = useTranslation("workspaces");
@@ -149,7 +151,8 @@ export function CommandPalette() {
   const link = (to: NavigateOptions) => ({ href: toHref(to), onSelect: () => go(() => void navigate(to)) });
   const root = useRef<HTMLDivElement>(null);
 
-  const results = search.data;
+  // The server leaves tickets out while Tickets is off; a result cached before that is not shown either.
+  const results = search.data && !ticketsOn ? { ...search.data, tickets: [] } : search.data;
   const wikiPages = results?.wiki_pages ?? [];
   const hasResults = !!results && (results.tickets.length + results.contacts.length + results.articles.length + wikiPages.length > 0);
   const role = useRole();
@@ -317,7 +320,7 @@ export function CommandPalette() {
               )}
 
               <Command.Group heading={tNav("command.goTo")} className={groupCls}>
-                {folders.map((f) => (
+                {ticketsOn && folders.map((f) => (
                   <Item
                     key={f.id}
                     value={`go inbox ${f.id}`}
@@ -397,9 +400,9 @@ export function CommandPalette() {
                 <Item value="go wiki internal docs runbooks policies" keywords={[tNav("titles.wiki")]} icon={<NotebookText />} hint={<Kbd>g w</Kbd>} {...link({ to: "/wiki" })}>
                   {tNav("titles.wiki")}
                 </Item>
-                <Item value="go reports analytics" keywords={[tNav("titles.reports")]} icon={<BarChart3 />} {...link({ to: "/reports" })}>
+                {ticketsOn && <Item value="go reports analytics" keywords={[tNav("titles.reports")]} icon={<BarChart3 />} {...link({ to: "/reports" })}>
                   {tNav("titles.reports")}
-                </Item>
+                </Item>}
                 {(
                   [
                     ["/settings/profile", "titles.profile"],
@@ -429,7 +432,7 @@ export function CommandPalette() {
                     ["/settings/audit-log", "titles.auditLog"],
                     ["/settings/import", "command.importHistory"],
                   ] as const
-                ).map(([to, labelKey]) => (
+                ).filter(([to]) => ticketsOn || !TICKET_SETTINGS.has(to)).map(([to, labelKey]) => (
                   <Item key={to} value={`settings ${to}`} keywords={[tNav(labelKey)]} icon={<Settings />} hint={tNav("titles.settings")} {...link({ to })}>
                     {tNav(labelKey)}
                   </Item>
@@ -437,12 +440,12 @@ export function CommandPalette() {
               </Command.Group>
 
               <Command.Group heading={tNav("command.actions")} className={groupCls}>
-                {!onNewTicket && (
+                {ticketsOn && !onNewTicket && (
                   <Item value="new ticket compose create" keywords={[tNav("command.newTicket")]} icon={<SquarePen />} hint={<Kbd>c</Kbd>} onSelect={() => go(() => shell.newTicket())}>
                     {tNav("command.newTicket")}
                   </Item>
                 )}
-                {!onNewTicket && atLeast(role, "agent") && (
+                {ticketsOn && !onNewTicket && atLeast(role, "agent") && (
                   <Item value="new ticket full page compose create" keywords={[tNav("command.newTicketPage")]} icon={<SquarePen />} {...link({ to: NEW_TICKET_PATH })}>
                     {tNav("command.newTicketPage")}
                   </Item>

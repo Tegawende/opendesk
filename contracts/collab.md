@@ -25,9 +25,23 @@ reading the inbox directly with its OAuth clients, or generic IMAP ("Providers a
 | billing off (self-hosted) | on for every workspace while the instance has `COLLAB` on (default on) |
 | billing on (opendesk Cloud) | on while the workspace is on the `collab` plan (a paid subscription), or has complimentary Collab access from an instance admin that has not ended (contracts/admin.md "Collab access") |
 
-Without it every `/v1/collab/*` route except `GET /v1/collab` and the sidebar
-(`/v1/collab/sidebar`) answers `402 collab_required` ("Collab is not on this workspace's plan."). Accounts connected while it was on are kept as they
-are and stop syncing; nothing is deleted. Turning it back on resumes them.
+Effective Mail availability also applies the workspace's `settings.mail_enabled` (default true).
+The shared `internal/products` gate applies instance configuration first (`COLLAB=false` or
+`Plan.CollabOff`), then Collab entitlement, then the workspace flag. Every `/v1/collab/*` direct
+operation except `GET /v1/collab` and the sidebar (`/v1/collab/sidebar`) answers
+`403 feature_disabled` while unavailable, with `product: "mail"` and
+`reason: "instance_disabled" | "plan" | "workspace_disabled"`. This includes account connections,
+AI draft credentials and ticket replies sent from personal accounts. OAuth callbacks recheck it
+and redirect with `error=feature_disabled`. Signed attachment links return `404` while unavailable.
+The overview returns `mail_counts: null`; sidebar preferences remain readable and writable, but
+account-derived auto-pins wait. Assistant peer sharing and access to its Mail excerpts use the
+same availability check.
+
+Accounts, credentials, mail, configuration and provider cursors stay stored. Sync, category
+sorting and provider actions pause; pending River work snoozes for ten minutes without consuming
+attempts or replacing its job identity. The periodic tick skips disabled accounts and category
+intents. Once Mail is available again, due accounts sync normally and pending jobs resume within
+ten minutes. Owner-removal and storage-trash cleanup still run to enforce data removal.
 
 ## Providers and scopes
 
@@ -804,7 +818,7 @@ interface MailThreadDetail {
 
 interface CollabStatus {
   enabled: boolean
-  reason: "plan" | "disabled" | null   // why not: not on the plan, or off on this instance
+  reason: "plan" | "disabled" | "workspace_disabled" | null // instance off wins (disabled), then plan, then workspace flag
   providers: { google: boolean; microsoft: boolean; imap: boolean }
   accounts: number             // accounts the caller sees
   storage: {                   // the workspace's Collab storage ("Storage")
@@ -937,7 +951,7 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | GET | `/v1/collab` | member | `CollabStatus`; with or without Collab |
 | GET | `/v1/collab/accounts` | member | `MailAccount[]` the caller sees, theirs first. `?manage=true`: an admin also gets the shared accounts of people who left (`owner: null`), to manage or disconnect |
 | POST | `/v1/collab/accounts/oauth/{provider}/start` | agent+ | `{visibility, shared_with? (at most 40 teams and people: it travels in the signed state; add more afterwards), name?, email? (login hint), account_id? (reconnect, manage), history?: {since: string \| null} (older mail to import once connected, as `PUT …/history`; left out, none; kept when the account already has an import)}` → `{url}`; sets the flow cookie (send with credentials). `422 provider_not_configured` |
-| GET | `/v1/collab/accounts/oauth/{provider}/callback` | provider | redirects to `APP_URL/settings/mail-accounts?connected=<id>` or `?error=<code>`: `oauth_state`, `access_denied`, `provider_error`, `account_conflict` (the address is already connected in this workspace by someone else), `collab_required`, `forbidden`, `internal` |
+| GET | `/v1/collab/accounts/oauth/{provider}/callback` | provider | redirects to `APP_URL/settings/mail-accounts?connected=<id>` or `?error=<code>`: `oauth_state`, `access_denied`, `provider_error`, `account_conflict` (the address is already connected in this workspace by someone else), `feature_disabled`, `forbidden`, `internal` |
 | POST | `/v1/collab/accounts/imap` | agent+ | `{email, name?, display_name?, imap_host, imap_port, imap_tls, imap_username?, password, smtp_host, smtp_port, smtp_tls, smtp_username?, smtp_password?, visibility, shared_with?, history?}` → `MailAccount` (`history` as on the OAuth start). Both servers are tried first: `422 connection_failed` with `detail`. `409 account_conflict`. `422 imap_unavailable` with `COLLAB_IMAP` off |
 | PATCH | `/v1/collab/accounts/{id}` | manage | `{name?, display_name?, color?, signature_html?, visibility?, handling_enabled?, reply_all?, shared_with?, imap? {…same fields, password?, smtp_password?}, default_from?}` → `MailAccount`; `handling_enabled` is available on shared accounts only and clears when an account becomes private. `reply_all` is kept in opendesk only and applies to everyone answering from the account. `default_from` must be one of its addresses that can send (`422 validation_failed`) and is kept in opendesk (Gmail's own change of its default still comes in, "Addresses"); new IMAP settings are tried first. A changed `signature_html` or `display_name` that syncs `two_way` is made at Gmail first (sanitized): a refusal is `502 provider_error` and nothing of the change is saved. `read_only` and `none` save in opendesk only. A changed `display_name` stops a Microsoft account following its profile name. A `display_name` or `signature_html` with variables ("Who sends") is checked (`422 validation_failed`) and saved in opendesk only, never at Gmail |
 | POST | `/v1/collab/accounts/{id}/identities` | manage | Add an address ("Addresses"): `{email, display_name?, signature_html?, reply_to?}` → `MailAccount`. Microsoft and IMAP only (`422 identities_from_provider` for Gmail); `409 identity_conflict` for the account's own or an existing address; at most 50 |
@@ -991,7 +1005,7 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | GET | `/v1/collab/sidebar` | member | `SidebarPrefs` (defaults when never saved); with or without Collab; with Collab, pins All inboxes once at a second account ("All inboxes in Favorites") |
 | PUT | `/v1/collab/sidebar` | member | `SidebarPrefs` → `SidebarPrefs`; with or without Collab; at most 16 KB; unknown ids are kept (an id of something gone is ignored by the app). `badges`: at most 300, keys of at most 100 characters with the prefixes above, values `unread`, `total`, `count`, `awaiting`, `urgent`, `overdue`, `open` or `none`; `mail_tabs`: at most 30, each a box above or `folder:<uuid>`, once. Leaving out `badges`, `mail_tabs` or `auto_pins` keeps the saved value; `422` otherwise |
 
-Errors: `402 collab_required`, `404 not_found`, `422 labels_unsupported`, `422 connection_failed`,
+Errors: `403 feature_disabled` (with product and reason), `404 not_found`, `422 labels_unsupported`, `422 connection_failed`,
 `409 account_conflict`, `502 provider_error`, `502 send_failed`, `422 provider_not_configured`,
 `422 imap_unavailable`, `422 rename_unsupported`, `422 drafts_unsupported`, `422 signature_sync_unsupported`,
 `422 out_of_office_read_only`, `422 out_of_office_unsupported`, `422 identities_from_provider`, `409 identity_conflict`,

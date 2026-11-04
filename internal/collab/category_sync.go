@@ -305,7 +305,7 @@ func (s *service) deliverCategoryIntent(ctx context.Context, job *river.Job[jobs
 	if err != nil {
 		return err
 	}
-	if ok, err := s.collabActive(ctx, a.WorkspaceID); err != nil || !ok {
+	if err := s.pauseIfInactive(ctx, a.WorkspaceID); err != nil {
 		return err
 	}
 	i, err := s.currentCategoryIntent(ctx, a, *args.CategoryIntentID)
@@ -403,31 +403,69 @@ func (s *service) deliverCategoryIntent(ctx context.Context, job *river.Job[jobs
 // Recover lost wakeups and blocked work after reconnect. A retry remains a durable
 // intent, including when River exhausted a readback job or a process died.
 func (s *service) recoverCategoryIntents(ctx context.Context) error {
-	rows, err := s.d.DB.Pool.Query(ctx, `SELECT i.workspace_id,i.account_id,i.id FROM collab_category_intents i
+	const batchSize = 100
+	type due struct {
+		wid, aid, id uuid.UUID
+		updatedAt    time.Time
+	}
+	var after *time.Time
+	var afterID uuid.UUID
+	allowed := map[uuid.UUID]bool{}
+	recovered := 0
+	// Page past paused work without changing its age; only eligible intents use the batch budget.
+	for recovered < batchSize {
+		rows, err := s.d.DB.Pool.Query(ctx, `SELECT i.workspace_id,i.account_id,i.id,i.updated_at FROM collab_category_intents i
         JOIN collab_accounts a ON a.id = i.account_id WHERE i.state IN ('pending','confirming','blocked')
         AND NOT a.reconnect AND i.epoch = a.category_epoch AND i.updated_at < now() - interval '2 minutes'
+        AND ($1::timestamptz IS NULL OR (i.updated_at, i.id) > ($1, $2::uuid))
         AND NOT EXISTS (SELECT 1 FROM river_job j WHERE j.kind = 'collab.apply'
             AND j.args->>'category_intent_id' = i.id::text AND j.state IN ('available','pending','running','retryable','scheduled'))
-        ORDER BY i.updated_at LIMIT 100`)
-	if err != nil {
-		return err
-	}
-	type due struct{ wid, aid, id uuid.UUID }
-	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (due, error) { var d due; return d, r.Scan(&d.wid, &d.aid, &d.id) })
-	if err != nil {
-		return err
-	}
-	for _, d := range list {
-		if err := s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
-			if _, err := tx.Exec(ctx, `UPDATE collab_category_intents SET state = CASE WHEN state = 'blocked' THEN 'pending' ELSE state END, updated_at = now() WHERE id = $1`, d.id); err != nil {
-				return err
-			}
-			return s.queueCategoryIntent(ctx, tx, &accountRow{ID: d.aid, WorkspaceID: d.wid}, d.id)
-		}); err != nil {
+        ORDER BY i.updated_at, i.id LIMIT 100`, after, afterID)
+		if err != nil {
 			return err
 		}
+		list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (due, error) {
+			var d due
+			return d, r.Scan(&d.wid, &d.aid, &d.id, &d.updatedAt)
+		})
+		if err != nil {
+			return err
+		}
+		if len(list) == 0 {
+			break
+		}
+		last := list[len(list)-1]
+		after, afterID = &last.updatedAt, last.id
+		for _, d := range list {
+			active, seen := allowed[d.wid]
+			if !seen {
+				if active, err = s.collabActive(ctx, d.wid); err != nil {
+					return err
+				}
+				allowed[d.wid] = active
+			}
+			if !active {
+				continue
+			}
+			if err := s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				if _, err := tx.Exec(ctx, `UPDATE collab_category_intents SET state = CASE WHEN state = 'blocked' THEN 'pending' ELSE state END, updated_at = now() WHERE id = $1`, d.id); err != nil {
+					return err
+				}
+				return s.queueCategoryIntent(ctx, tx, &accountRow{ID: d.aid, WorkspaceID: d.wid}, d.id)
+			}); err != nil {
+				return err
+			}
+			recovered++
+			if recovered == batchSize {
+				break
+			}
+		}
+		if len(list) < batchSize {
+			break
+		}
 	}
-	_, err = s.d.DB.Pool.Exec(ctx, `DELETE FROM collab_category_intents WHERE state IN ('applied','failed','canceled') AND updated_at < now() - interval '30 days'`)
+
+	_, err := s.d.DB.Pool.Exec(ctx, `DELETE FROM collab_category_intents WHERE state IN ('applied','failed','canceled') AND updated_at < now() - interval '30 days'`)
 	return err
 }
 

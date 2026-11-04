@@ -241,3 +241,23 @@ func TestPortalReply(t *testing.T) {
 		})
 	}
 }
+
+// With Tickets off the portal answers feature_disabled for sign-in and requests, and keeps
+// its brand readable.
+func TestTicketsOffRefusesPortal(t *testing.T) {
+	e, ws, cid, access := ticketSession(t)
+	ticket := portalTicket(t, e, ws, cid, "open")
+	e.SetSettings(ws, map[string]any{"tickets_enabled": false})
+
+	var out struct{ Code, Product string }
+	e.Do("GET", portalTickets, access, nil).Want(t, 403).JSON(t, &out)
+	if out.Code != "feature_disabled" || out.Product != "tickets" {
+		t.Fatalf("%+v", out)
+	}
+	e.Do("GET", portalTickets+"/"+ticket.ID.String(), access, nil).Want(t, 403)
+	e.Do("POST", base(ws)+"/auth/login", hdtest.Auth{}, map[string]any{"email": "x@example.com", "password": password}).Want(t, 403)
+	e.Do("GET", base(ws)+"/config", hdtest.Auth{}, nil).Want(t, 200)
+
+	e.SetSettings(ws, map[string]any{"tickets_enabled": true})
+	e.Do("GET", portalTickets, access, nil).Want(t, 200)
+}

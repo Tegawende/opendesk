@@ -10,6 +10,7 @@ import { inWorkspace } from "../api/client";
 import { api } from "../api/endpoints";
 import type { CollabStatus, MailAccount, MailCounts, MailFolder, Role, SidebarPrefs, Space, SpacesResponse, Team, TicketCounts, View, WorkspaceOverview } from "../api/types";
 import { normalizePrefs } from "../collab/sidebarPrefs";
+import { productsOf } from "../products";
 import { q, qk } from "../queries";
 import { useSession } from "../session";
 import { teamsOf } from "../ticketCache";
@@ -112,6 +113,8 @@ export type WorkspaceData = {
   role: Role;
   /** Whether it has Collab; undefined while unknown. */
   collab: boolean | undefined;
+  /** Whether it has Tickets on: with it off its folders, teams, views and reports are not rows. */
+  tickets: boolean;
   /** The member's SidebarPrefs there (every member has them, with or without Collab). */
   prefs: SidebarPrefs;
   counts: TicketCounts | undefined;
@@ -179,6 +182,7 @@ export function useWorkspacesData(wids: string[], opts: { folders?: (wid: string
       open,
       role: m.role,
       collab,
+      tickets: productsOf(m.workspace).tickets,
       prefs: normalizePrefs(sidebar[i]?.data),
       counts: (open ? counts[i]?.data : undefined) ?? o?.ticket_counts ?? undefined,
       teams: tm,

@@ -25,7 +25,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/email"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
-	"github.com/useopendesk/opendesk/internal/plan"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 // Connecting accounts (contracts/collab.md "Endpoints"): OAuth for Google and Microsoft
@@ -321,9 +321,10 @@ func (s *service) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		fail("forbidden")
 		return
 	}
-	if err := s.d.Plan.RequireCollab(ctx, s.d.DB.Pool, wid); err != nil {
-		if errors.Is(err, plan.ErrCollab) {
-			fail("collab_required")
+	if err := products.RequireMail(ctx, s.d.DB.Pool, s.d.Plan, s.d.Cfg.Collab, wid); err != nil {
+		var disabled *products.DisabledError
+		if errors.As(err, &disabled) {
+			fail("feature_disabled")
 		} else {
 			fail("internal")
 		}

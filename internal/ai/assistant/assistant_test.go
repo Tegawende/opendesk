@@ -130,6 +130,7 @@ func newEnv(t *testing.T, billing bool) *env {
 	d := *base
 	cfg := *base.Cfg
 	cfg.AIProvider, cfg.AIModel, cfg.AIFastModel = "openai", "m", "m"
+	cfg.Collab = true
 	d.Cfg = &cfg
 	d.Plan = plan.New(billing, 1.5)
 	m := newModel(t)

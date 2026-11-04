@@ -390,7 +390,7 @@ func (s *svc) registerInvitations(api huma.API) {
 						return err
 					}
 				}
-				w, err := loadWorkspace(ctx, tx, wid)
+				w, err := s.loadWorkspace(ctx, tx, wid)
 				if err != nil {
 					return err
 				}

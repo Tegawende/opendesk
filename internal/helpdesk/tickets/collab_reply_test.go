@@ -16,6 +16,9 @@ import (
 // address, and is refused where it does not apply.
 func TestReplyFromOwnAddress(t *testing.T) {
 	e, ws := newEnv(t)
+	previousCollab := e.D.Cfg.Collab
+	e.D.Cfg.Collab = true
+	t.Cleanup(func() { e.D.Cfg.Collab = previousCollab })
 	mb := addMailbox(t, e, ws)
 	tk := createTicket(t, e, ws, map[string]any{"channel": "email", "mailbox_id": mb.String(), "kind": "note",
 		"contact": map[string]any{"email": "carla@customer.test", "name": "Carla"}})
@@ -61,6 +64,18 @@ func TestReplyFromOwnAddress(t *testing.T) {
 	e.Do("POST", path, hdtest.Auth{Bearer: e.APIKey(ws, auth.ScopeTicketsWrite, auth.ScopeTicketsRead)}, body(nil)).Want(t, 403)
 	e.Do("POST", path, ws.Agent.As(ws), map[string]any{"kind": "reply", "body_html": "<p>x</p>",
 		"from_account": map[string]any{"account_id": uuid.NewString()}}).Want(t, 404)
+	// Disabled Mail refuses the reply before creating a message or enqueueing a send.
+	e.SetSettings(ws, map[string]any{"mail_enabled": false})
+	before := countRows(t, e, `SELECT count(*) FROM messages WHERE workspace_id=$1 AND ticket_id=$2`, ws.ID, tk.ID)
+	var disabled struct{ Code, Product, Reason string }
+	e.Do("POST", path, ws.Agent.As(ws), body(nil)).Want(t, 403).JSON(t, &disabled)
+	if disabled.Code != "feature_disabled" || disabled.Product != "mail" || disabled.Reason != "workspace_disabled" {
+		t.Fatalf("disabled reply: %+v", disabled)
+	}
+	if after := countRows(t, e, `SELECT count(*) FROM messages WHERE workspace_id=$1 AND ticket_id=$2`, ws.ID, tk.ID); after != before {
+		t.Fatal("disabled reply was stored")
+	}
+	e.SetSettings(ws, map[string]any{"mail_enabled": true})
 	// Off for the workspace.
 	e.SetSettings(ws, map[string]any{"collab_ticket_replies": false})
 	e.Do("POST", path, ws.Agent.As(ws), body(nil)).Want(t, 409)

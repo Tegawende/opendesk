@@ -50,6 +50,7 @@ export { WorkspaceGlyph } from "./sidebarParts";
 import type { SidebarPrefs, SidebarSectionId } from "@/lib/api/types";
 import { RowMenu } from "@/components/collab/RowMenu";
 import { useCollab, useSidebarPrefs } from "@/lib/collab/hooks";
+import { useProducts } from "@/lib/products";
 import { ticketRowNumbers } from "@/lib/collab/badges";
 import { badgeFor, hid, pickCount, visibleSections, type BadgeNumbers } from "@/lib/collab/sidebarPrefs";
 import { collabUi } from "@/lib/collab/ui";
@@ -358,6 +359,9 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
   const rp: RowPrefs = { prefs };
   const shown = (key: string, section: SidebarSectionId, nums: BadgeNumbers) => pickCount(badgeFor(prefs, key, section, "ticket"), nums);
   const waitingFor = useWaitingFor();
+  const products = useProducts();
+  // Tickets off: its folders, teams and views are not there; Mail and the rest stay.
+  if (!products.tickets && (id === "inbox" || id === "teams" || id === "views")) return null;
   switch (id) {
     case "inbox":
       return (

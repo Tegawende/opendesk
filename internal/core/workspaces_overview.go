@@ -113,7 +113,7 @@ func workspacePrincipal(p *auth.Principal, m CoreMembership) *auth.Principal {
 }
 
 func (s *svc) overview(ctx context.Context, p *auth.Principal) ([]WorkspaceOverview, error) {
-	ms, err := loadMemberships(ctx, s.d.DB.Pool, p.UserID)
+	ms, err := s.loadMemberships(ctx, s.d.DB.Pool, p.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func (s *svc) registerWorkspaceOverview(api huma.API) {
 // workspaces they are in (p's is the token's own wid) that are not suspended, with their
 // role and the private teams they may see in each, in joining order within the budget.
 func (s *svc) realtimeWorkspaces(ctx context.Context, p *auth.Principal) (map[string]auth.WSWorkspace, error) {
-	ms, err := loadMemberships(ctx, s.d.DB.Pool, p.UserID)
+	ms, err := s.loadMemberships(ctx, s.d.DB.Pool, p.UserID)
 	if err != nil {
 		return nil, err
 	}

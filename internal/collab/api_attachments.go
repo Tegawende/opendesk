@@ -13,6 +13,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/email"
 	"github.com/useopendesk/opendesk/internal/ids"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 // inlineImageTypes are the images a browser may show inline from an attachment link.
@@ -55,7 +56,7 @@ func (s *service) attachmentHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if err := s.d.Plan.RequireCollab(ctx, s.d.DB.Pool, a.WorkspaceID); err != nil {
+	if err := products.RequireMail(ctx, s.d.DB.Pool, s.d.Plan, s.d.Cfg.Collab, a.WorkspaceID); err != nil {
 		http.NotFound(w, r)
 		return
 	}

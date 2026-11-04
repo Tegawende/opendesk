@@ -653,8 +653,9 @@ function state(ws: WsData): State {
 function status(ws: WsData): CollabStatus {
   // ?mock_collab=off|plan turns it off everywhere; a workspace seeded without it (Pressroom) has it off.
   const p = new URLSearchParams(location.search).get("mock_collab") ?? ws.collabOff ?? null;
-  const off = p === "off" || p === "plan" || p === "disabled";
-  return { enabled: !off, reason: off ? (p === "plan" ? "plan" : "disabled") : null, providers: { google: true, microsoft: true, imap: true }, accounts: off ? 0 : visibleAccounts(ws).length, storage: storage() };
+  const workspaceOff = ws.workspace.settings.mail_enabled === false;
+  const off = p === "off" || p === "plan" || p === "disabled" || workspaceOff;
+  return { enabled: !off, reason: workspaceOff && !p ? "workspace_disabled" : off ? (p === "plan" ? "plan" : "disabled") : null, providers: { google: true, microsoft: true, imap: true }, accounts: off ? 0 : visibleAccounts(ws).length, storage: storage() };
 }
 
 /**

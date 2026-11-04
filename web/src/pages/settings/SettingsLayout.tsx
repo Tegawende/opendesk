@@ -53,6 +53,7 @@ import {
 import { Fragment, type ReactNode } from "react";
 import { BrandMark } from "@/components/settings2/teams";
 import { useCollab } from "@/lib/collab/hooks";
+import { TICKET_SETTINGS, useProducts } from "@/lib/products";
 
 type NavPath =
   | "/settings/profile"
@@ -98,6 +99,7 @@ type NavPath =
   | "/settings/import";
 
 const AGENT_GROUP = "aiAgent";
+
 
 const groups: { title: keyof typeof navigation.groups; items: { to: NavPath; label: keyof typeof navigation.settings; icon: ReactNode }[] }[] = [
   {
@@ -186,9 +188,12 @@ function useVisibleGroups() {
   // Mail accounts are Collab's, listed only while the workspace has it; agent-to-agent also needs AI.
   const collab = useCollab();
   const peer = collab.enabled && !!ai?.enabled;
+  const { tickets } = useProducts();
   const workspaceCount = useSession((s) => s.memberships.length);
   return groups
     .filter((g) => !(hideAgent && g.title === AGENT_GROUP))
+    .map((g) => (tickets ? g : { ...g, items: g.items.filter((i) => !TICKET_SETTINGS.has(i.to)) }))
+    .filter((g) => g.items.length > 0)
     .map((g) => (hideAi ? { ...g, items: g.items.filter((i) => i.to !== "/settings/ai") } : g))
     .map((g) => (collab.enabled ? g : { ...g, items: g.items.filter((i) => i.to !== "/settings/mail-accounts" && i.to !== "/settings/mail-categories") }))
     .map((g) => (peer ? g : { ...g, items: g.items.filter((i) => i.to !== "/settings/agent-to-agent") }))

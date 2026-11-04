@@ -59,7 +59,9 @@ function capitalize(s: string) {
   return s ? s.charAt(0).toLocaleUpperCase(intlLocale()) + s.slice(1) : s;
 }
 
-/** Compact age for dense lists: "now", "5m", "2h", "3d", then a short date. */
+/** Compact age for dense lists: "now", "5m", "2h", "3d", then a short date.
+ * Other languages read the age as a duration ("5 min", "2 Std.", "3 j"), as English does:
+ * a relative "narrow" format writes the past as "-5 min" in French. */
 export function relShort(iso: string | null | undefined, now = Date.now()): string {
   if (!iso) return "";
   const t = Date.parse(iso);
@@ -74,13 +76,16 @@ export function relShort(iso: string | null | undefined, now = Date.now()): stri
       if (h < 24) return `${h}h`;
       return `${d}d`;
     }
-    const f = rtf({ style: "narrow", numeric: "auto" });
-    if (s < 45) return f.format(0, "second");
-    if (m < 60) return f.format(-m, "minute");
-    if (h < 24) return f.format(-h, "hour");
-    return f.format(-d, "day");
+    if (s < 45) return rtf({ numeric: "auto" }).format(0, "second");
+    if (m < 60) return age(m, "minute");
+    if (h < 24) return age(h, "hour");
+    return age(d, "day");
   }
   return shortDate(iso);
+}
+
+function age(n: number, unit: "minute" | "hour" | "day"): string {
+  return nf({ style: "unit", unit, unitDisplay: "short" }).format(n);
 }
 
 /** "5 minutes ago", "2 days ago", in the active language. */

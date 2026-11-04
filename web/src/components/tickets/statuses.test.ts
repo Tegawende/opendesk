@@ -26,7 +26,7 @@ describe("hidden statuses", () => {
       const client = new QueryClient();
       client.setQueryData(q.workspace().queryKey, {
         id: "w", name: "Acme", slug: "acme", widget_key: "widget", created_at: "2026-10-28T00:00:00Z",
-        avatar_url: null, avatar_source: null,
+        mail_available: true, avatar_url: null, avatar_source: null,
         images: { help_center_logo: null, help_center_favicon: null, widget_avatar: null, widget_launcher: null },
         settings: { status_labels: labels },
       });

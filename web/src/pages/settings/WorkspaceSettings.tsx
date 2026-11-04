@@ -38,7 +38,7 @@ import { LOCALE_NAMES, matchLocale, SUPPORTED } from "@/i18n";
 type DisplaySettings = { status_labels?: Overrides<TicketStatus>; priority_labels?: Overrides<Priority>; send_and_finish_button?: boolean; severity_enabled?: boolean };
 type Draft = {
   name: string;
-  settings: Required<Pick<WS, "timezone" | "help_center_enabled" | "help_center_title" | "csat_enabled" | "gravatar" | "domain_logos" | "undo_send_seconds" | "undo_send_chat_seconds" | "message_delete" | "collab_ticket_replies" | "collab_ticket_reply_to" | "agent_online_time" | "snooze_presets">> & {
+  settings: Required<Pick<WS, "tickets_enabled" | "mail_enabled" | "timezone" | "help_center_enabled" | "help_center_title" | "csat_enabled" | "gravatar" | "domain_logos" | "undo_send_seconds" | "undo_send_chat_seconds" | "message_delete" | "collab_ticket_replies" | "collab_ticket_reply_to" | "agent_online_time" | "snooze_presets">> & {
     brand_color: string;
     locale: string;
     locale_fixed: boolean;
@@ -57,6 +57,8 @@ function toDraft(w: Workspace): Draft {
     },
     name: w.name,
     settings: {
+      tickets_enabled: w.settings.tickets_enabled ?? true,
+      mail_enabled: w.settings.mail_enabled ?? true,
       timezone: w.settings.timezone ?? "UTC",
       help_center_enabled: w.settings.help_center_enabled ?? false,
       help_center_title: w.settings.help_center_title ?? "",
@@ -149,6 +151,7 @@ export default function WorkspaceSettings() {
     onSuccess: (w) => {
       qc.setQueryData(qk.workspace, w);
       updateWorkspace(w);
+      void qc.invalidateQueries({ queryKey: qk.collabStatus });
       toast.success(t("workspace.saved"));
     },
   });
@@ -162,6 +165,7 @@ export default function WorkspaceSettings() {
     );
   }
 
+  const mailUsable = ws.mail_disabled_reason !== "instance_disabled" && ws.mail_disabled_reason !== "plan";
   const base = toDraft(ws);
   const dirty = JSON.stringify(base) !== JSON.stringify(draft);
   const set = <K extends keyof Draft["settings"]>(k: K, v: Draft["settings"][K]) => setDraft({ ...draft, settings: { ...draft.settings, [k]: v } });
@@ -229,6 +233,31 @@ export default function WorkspaceSettings() {
           <Row label={t("workspace.languageFixed")} description={t("workspace.languageFixedHint", { language: LOCALE_NAMES[matchLocale(draft.settings.locale) ?? "en"] })}>
             <Switch aria-label={t("workspace.languageFixed")} checked={draft.settings.locale_fixed} onCheckedChange={(v) => set("locale_fixed", v)} disabled={!canEdit} />
           </Row>
+        </Section>
+
+        <Section title={t("workspace.products")} description={t("workspace.productsHint")}>
+          <Row label={t("workspace.productTickets")} description={t("workspace.productTicketsHint")}>
+            <Switch
+              aria-label={t("workspace.productTickets")}
+              checked={draft.settings.tickets_enabled}
+              onCheckedChange={(v) => set("tickets_enabled", v)}
+              disabled={!canEdit || (draft.settings.tickets_enabled && (!draft.settings.mail_enabled || !mailUsable))}
+            />
+          </Row>
+          <Row
+            label={t("workspace.productMail")}
+            description={ws.mail_disabled_reason && ws.mail_disabled_reason !== "workspace_disabled" ? t(`workspace.mailUnavailable.${ws.mail_disabled_reason}`) : t("workspace.productMailHint")}
+          >
+            <Switch
+              aria-label={t("workspace.productMail")}
+              checked={draft.settings.mail_enabled && mailUsable}
+              onCheckedChange={(v) => set("mail_enabled", v)}
+              disabled={!canEdit || !mailUsable || (draft.settings.mail_enabled && !draft.settings.tickets_enabled)}
+            />
+          </Row>
+          {(!draft.settings.tickets_enabled || !draft.settings.mail_enabled) && (
+            <Row label={t("workspace.productKept")} description={t("workspace.productKeptHint")} />
+          )}
         </Section>
 
         <Section title={t("workspace.helpCenter")} description={t("workspace.helpCenterHint")}>

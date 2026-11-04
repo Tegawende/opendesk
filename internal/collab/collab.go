@@ -2,7 +2,7 @@
 // (Google, Microsoft, IMAP), private or shared, synced both ways and read and handled in
 // opendesk like a mailbox, with conversations shared, assigned and discussed on their own.
 // It is the collab plan's: every route but GET /v1/collab and the member's sidebar
-// (/v1/collab/sidebar) needs plan.Entitlements.Collab.
+// (/v1/collab/sidebar) needs effective workspace Mail availability.
 package collab
 
 import (
@@ -23,7 +23,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/deps"
 	"github.com/useopendesk/opendesk/internal/email"
 	"github.com/useopendesk/opendesk/internal/jobs"
-	"github.com/useopendesk/opendesk/internal/plan"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 // Limits (contracts/collab.md "Sync").
@@ -120,8 +120,9 @@ func (s *service) overviewCounts(ctx context.Context, p *auth.Principal) (any, e
 	if p.Kind != auth.KindUser || p.Assistant || p.GrantID != uuid.Nil {
 		return nil, nil
 	}
-	if err := s.d.Plan.RequireCollab(ctx, s.d.DB.Pool, p.WorkspaceID); err != nil {
-		if errors.Is(err, plan.ErrCollab) {
+	if err := products.RequireMail(ctx, s.d.DB.Pool, s.d.Plan, s.d.Cfg.Collab, p.WorkspaceID); err != nil {
+		var disabled *products.DisabledError
+		if errors.As(err, &disabled) {
 			return nil, nil
 		}
 		return nil, err
@@ -169,7 +170,7 @@ func (s *service) require(ctx context.Context, min auth.Role) (*auth.Principal, 
 	if err != nil {
 		return nil, err
 	}
-	if err := s.d.Plan.RequireCollab(ctx, s.d.DB.Pool, p.WorkspaceID); err != nil {
+	if err := products.RequireMail(ctx, s.d.DB.Pool, s.d.Plan, s.d.Cfg.Collab, p.WorkspaceID); err != nil {
 		return nil, err
 	}
 	return p, nil
@@ -216,7 +217,7 @@ func (s *service) requireDrafter(ctx context.Context, min auth.Role) (*auth.Prin
 	if err != nil {
 		return nil, err
 	}
-	if err := s.d.Plan.RequireCollab(ctx, s.d.DB.Pool, p.WorkspaceID); err != nil {
+	if err := products.RequireMail(ctx, s.d.DB.Pool, s.d.Plan, s.d.Cfg.Collab, p.WorkspaceID); err != nil {
 		return nil, err
 	}
 	// The member, reached through the key: Collab's visibility follows UserID and Role.

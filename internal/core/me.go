@@ -37,7 +37,7 @@ func (s *svc) registerMe(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			ms, err := loadMemberships(ctx, s.d.DB.Pool, p.UserID)
+			ms, err := s.loadMemberships(ctx, s.d.DB.Pool, p.UserID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
