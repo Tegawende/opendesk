@@ -814,6 +814,13 @@
   },
   "links": {
     "title": "Linked",
+    "states": {
+      "backlog": "Backlog",
+      "todo": "To do",
+      "in_progress": "In progress",
+      "done": "Done",
+      "canceled": "Canceled"
+    },
     "add": "Add link",
     "addTitle": "Add a link",
     "addDescription": "Add a URL from Linear or another tool to this ticket.",

@@ -30,14 +30,49 @@ func TestNormalizeNumber(t *testing.T) {
 }
 
 func TestSubject(t *testing.T) {
-	if s := Subject("inbound", "Jane Doe", "+32470"); s != "Call from Jane Doe" {
+	if s := Subject("en", "inbound", "Jane Doe", "+32470"); s != "Call from Jane Doe" {
 		t.Fatal(s)
 	}
-	if s := Subject("outbound", "", "+32470"); s != "Call to +32470" {
+	if s := Subject("en", "outbound", "", "+32470"); s != "Call to +32470" {
 		t.Fatal(s)
 	}
-	if s := Subject("inbound", "", ""); s != "Call from a withheld number" {
+	if s := Subject("en", "inbound", "", ""); s != "Call from a withheld number" {
 		t.Fatal(s)
+	}
+	if s := Subject("fr", "inbound", "Jane Doe", "+32470"); s != "Appel de Jane Doe" {
+		t.Fatal(s)
+	}
+	if s := Subject("fr", "outbound", "", "+32470"); s != "Appel vers +32470" {
+		t.Fatal(s)
+	}
+	if s := Subject("de", "inbound", "", ""); s != "Anruf von einer unterdrückten Nummer" {
+		t.Fatal(s)
+	}
+}
+
+// Every language has the call words English has, and a workspace locale picks its base
+// language, else English.
+func TestCallTexts(t *testing.T) {
+	for lang, words := range callTexts {
+		for k := range callTexts["en"] {
+			if words[k] == "" {
+				t.Errorf("%s lacks %q", lang, k)
+			}
+		}
+		if len(words) != len(callTexts["en"]) {
+			t.Errorf("%s has %d words, English %d", lang, len(words), len(callTexts["en"]))
+		}
+	}
+	for in, want := range map[string]string{"": "en", "fr": "fr", "fr-BE": "fr", "FR_be": "fr", "de-CH": "de", "nl-BE": "en", "en-GB": "en", "pt-BR": "en"} {
+		if got := callLanguage(in); got != want {
+			t.Errorf("callLanguage(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if s := callText("fr", "status.on_hold"); s != "En pause" {
+		t.Error(s)
+	}
+	if s := callText("fr", "status.some_new"); s != "some new" {
+		t.Error(s)
 	}
 }
 

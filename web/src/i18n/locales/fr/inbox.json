@@ -799,6 +799,13 @@
   },
   "links": {
     "title": "Liens",
+    "states": {
+      "backlog": "À planifier",
+      "todo": "À faire",
+      "in_progress": "En cours",
+      "done": "Terminé",
+      "canceled": "Annulé"
+    },
     "add": "Ajouter un lien",
     "addTitle": "Ajouter un lien",
     "addDescription": "Ajoutez à ce ticket une URL Linear ou provenant d’un autre outil.",

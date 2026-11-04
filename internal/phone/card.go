@@ -39,7 +39,8 @@ const cardTickets = `t.deleted_at IS NULL AND t.merged_into_id IS NULL AND NOT t
 	AND NOT EXISTS (SELECT 1 FROM teams pt WHERE pt.workspace_id = t.workspace_id AND pt.id = t.team_id AND pt.private)`
 
 // Card builds what the agent sees about a ringing call: who calls, the ticket the call
-// is on and the caller's three latest other tickets, each linked to opendesk.
+// is on and the caller's three latest other tickets, each linked to opendesk, in the
+// workspace's language (callTexts).
 func (s *Service) Card(ctx context.Context, q db.Querier, wid, callID uuid.UUID) (provider.Card, *PhoneConnection, string, error) {
 	var ticketID, contactID, connID *uuid.UUID
 	var external, number string
@@ -59,10 +60,14 @@ func (s *Service) Card(ctx context.Context, q db.Querier, wid, callID uuid.UUID)
 	if err != nil {
 		return provider.Card{}, nil, "", err
 	}
+	lang, err := workspaceCallLanguage(ctx, q, wid)
+	if err != nil {
+		return provider.Card{}, nil, "", err
+	}
 	app := strings.TrimRight(s.d.Cfg.AppURL, "/")
 	card := provider.Card{Title: number}
 	if number == "" {
-		card.Title = "Withheld number"
+		card.Title = callText(lang, "number")
 	}
 	if contactID != nil {
 		var name string
@@ -77,7 +82,7 @@ func (s *Service) Card(ctx context.Context, q db.Querier, wid, callID uuid.UUID)
 		err := q.QueryRow(ctx, `SELECT t.number, t.subject, t.status FROM tickets t WHERE t.workspace_id = $1 AND t.id = $2 AND `+cardTickets, wid, *ticketID).
 			Scan(&n, &subject, &status)
 		if err == nil {
-			card.Lines = append(card.Lines, provider.CardLine{Label: "Ticket", Text: fmt.Sprintf("#%d %s", n, subject), Link: app + "/inbox/all/" + ticketID.String()})
+			card.Lines = append(card.Lines, provider.CardLine{Label: callText(lang, "ticket"), Text: fmt.Sprintf("#%d %s", n, subject), Link: app + "/inbox/all/" + ticketID.String()})
 		} else if !db.IsNotFound(err) {
 			return provider.Card{}, nil, "", err
 		}
@@ -96,7 +101,7 @@ func (s *Service) Card(ctx context.Context, q db.Querier, wid, callID uuid.UUID)
 			if err := rows.Scan(&id, &n, &subject, &status); err != nil {
 				return provider.Card{}, nil, "", err
 			}
-			card.Lines = append(card.Lines, provider.CardLine{Label: "Earlier", Text: fmt.Sprintf("#%d %s · %s", n, subject, strings.ReplaceAll(status, "_", " ")),
+			card.Lines = append(card.Lines, provider.CardLine{Label: callText(lang, "earlier"), Text: fmt.Sprintf("#%d %s · %s", n, subject, callText(lang, "status."+status)),
 				Link: app + "/inbox/all/" + id.String()})
 		}
 		if err := rows.Err(); err != nil {

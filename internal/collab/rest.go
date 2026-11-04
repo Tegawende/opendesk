@@ -307,6 +307,13 @@ func isNotFound(err error) bool {
 	return errors.As(err, &pe) && pe.notFound
 }
 
+// isPassing reports a provider that is busy or unreachable: the calls after it would fail
+// alike, and a later pass tries again.
+func isPassing(err error) bool {
+	var pe *providerError
+	return errors.Is(err, errProviderUnavailable) || errors.As(err, &pe) && pe.busy
+}
+
 // isPermanent reports a failure that retrying will not fix.
 func isPermanent(err error) bool {
 	var pe *providerError

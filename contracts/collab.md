@@ -98,6 +98,8 @@ after a connect, a reconnect, `POST .../sync` or an action. One runs per account
     out); each pass takes its own new mail first, then the backlog's, the newest first. History
     longer than a pass (50 pages) goes on from its saved page next pass and then from the history
     id its first page answered; a saved page that Gmail refuses is read again from the stored id.
+    A stored message's labels, and its Gmail tab with the history record as its version, come from
+    history itself: a change made elsewhere costs no read of the message.
   - Microsoft: mail received since the connect (and in the last 30 days) is new. A pass reads
     the folder's whole round; when new mail did not fit, the next pass first reads the pages
     again from the first with mail left out, for that mail alone, then the folder's next round.
@@ -114,7 +116,9 @@ after a connect, a reconnect, `POST .../sync` or an action. One runs per account
   for a place).
 - A provider that is busy (a rate limit, or a 5xx to a read) is asked again within the call after
   1 and 4 seconds, or after its `Retry-After` when that is at most 15 seconds. A request that
-  changes something is asked again only after a rate limit, which refused it before it ran.
+  changes something is asked again only after a rate limit, which refused it before it ran. A
+  provider still busy (or unreachable) after that ends the pass: the messages its batch has not
+  read yet are not asked for.
 - Failures are stored on the account (`status: "error"`, a safe `last_error`), retried with
   backoff (1 minute doubling to 1 hour). A passing failure (a busy or unreachable provider) waits
   with the backoff without changing the status for the first three in a row (about seven minutes), so a

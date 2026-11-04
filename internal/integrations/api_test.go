@@ -9,8 +9,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/useopendesk/opendesk/internal/core"
 	"github.com/useopendesk/opendesk/internal/helpdesk"
@@ -251,6 +253,43 @@ func TestTicketLinks(t *testing.T) {
 	if l["provider"] != "linear" || l["title"] != "Export fails" || l["actor_type"] != "user" {
 		t.Fatalf("link = %v", l)
 	}
+	if l["external_id"] != nil || l["external_state"] != nil || l["external_state_name"] != nil || l["synced_at"] != nil {
+		t.Fatalf("unsynced link state = %v", l)
+	}
+	linkID, err := uuid.Parse(l["id"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, seq := e.Events(ws.ID, 0)
+	state := LinkStateInProgress
+	syncedAt := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	var updated Link
+	err = e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
+		var err error
+		updated, err = For(e.D).updateLinkState(e.Ctx, tx, ws.ID, linkID, "issue-123", state, "In Development", syncedAt)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ExternalID == nil || *updated.ExternalID != "issue-123" || updated.ExternalState == nil || *updated.ExternalState != state || updated.ExternalStateName == nil || *updated.ExternalStateName != "In Development" || updated.SyncedAt == nil || !updated.SyncedAt.Equal(syncedAt) {
+		t.Fatalf("updated link state = %+v", updated)
+	}
+	types, lastSeq := e.Events(ws.ID, seq)
+	if !slices.Contains(types, "ticket_link.updated") {
+		t.Fatalf("updated link event = %v", types)
+	}
+	// A refresh with the same item and state advances synced_at without a noisy event.
+	err = e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
+		_, err := For(e.D).updateLinkState(e.Ctx, tx, ws.ID, linkID, "issue-123", state, "In Development", syncedAt.Add(time.Minute))
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next, _ := e.Events(ws.ID, lastSeq); len(next) != 0 {
+		t.Fatalf("timestamp-only refresh published events = %v", next)
+	}
 	again := e.Do("POST", path, agent, map[string]any{"url": "https://linear.app/a/issue/A-1"}).Want(t, 201).Map(t)
 	if again["id"] != l["id"] {
 		t.Fatal("same link added twice")
@@ -258,8 +297,13 @@ func TestTicketLinks(t *testing.T) {
 	other := e.NewWorkspace()
 	e.Do("GET", path, other.Agent.As(other), nil).Want(t, 404)
 	e.Do("DELETE", path+"/"+l["id"].(string), other.Agent.As(other), nil).Want(t, 404)
-	if n := len(e.Do("GET", path, viewer, nil).Want(t, 200).Map(t)["data"].([]any)); n != 1 {
+	listed := e.Do("GET", path, viewer, nil).Want(t, 200).Map(t)["data"].([]any)
+	if n := len(listed); n != 1 {
 		t.Fatalf("links = %d", n)
+	}
+	listLink := listed[0].(map[string]any)
+	if listLink["external_id"] != "issue-123" || listLink["external_state"] != string(state) || listLink["external_state_name"] != "In Development" || listLink["synced_at"] == nil {
+		t.Fatalf("listed state = %v", listLink)
 	}
 	e.Do("DELETE", path+"/"+l["id"].(string), agent, nil).Want(t, 204)
 	var acts int
@@ -281,6 +325,10 @@ func TestTicketLinksFollowVisibility(t *testing.T) {
 	e.Do("POST", "/v1/tickets", lead.As(ws), map[string]any{"subject": "Breach", "body_html": "x", "team_id": team.String()}).Want(t, 201).JSON(t, &tk)
 	path := "/v1/tickets/" + tk.ID + "/links"
 	l := e.Do("POST", path, lead.As(ws), map[string]any{"url": "https://linear.app/a/issue/S-1"}).Want(t, 201).Map(t)
+	linkID, err := uuid.Parse(l["id"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
 	outsider := ws.Agent.As(ws)
 	e.Do("GET", path, outsider, nil).Want(t, 404)
 	e.Do("POST", path, outsider, map[string]any{"url": "https://linear.app/a/issue/S-2"}).Want(t, 404)
@@ -292,6 +340,18 @@ func TestTicketLinksFollowVisibility(t *testing.T) {
 	e.Scalar(`SELECT count(*) FROM events WHERE workspace_id = $1 AND type = 'ticket_link.created' AND team_id = $2`, &scoped, ws.ID, team)
 	if scoped != 1 {
 		t.Fatalf("link event not scoped to the team: %d", scoped)
+	}
+	state := LinkStateDone
+	if err := e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
+		_, err := For(e.D).updateLinkState(e.Ctx, tx, ws.ID, linkID, "issue-456", state, "Done", time.Now().UTC())
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var updatedScoped int
+	e.Scalar(`SELECT count(*) FROM events WHERE workspace_id = $1 AND type = 'ticket_link.updated' AND data->>'ticket_id' = $2 AND team_id = $3`, &updatedScoped, ws.ID, tk.ID, team)
+	if updatedScoped != 1 {
+		t.Fatalf("link state event not scoped to the private team: %d", updatedScoped)
 	}
 }
 

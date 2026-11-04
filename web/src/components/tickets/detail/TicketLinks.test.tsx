@@ -20,6 +20,10 @@ const addedLink: TicketLink = {
   ticket_id: "ticket-1",
   integration_id: null,
   provider: "linear",
+  external_id: null,
+  external_state: null,
+  external_state_name: null,
+  synced_at: null,
   url: "https://linear.app/acme/issue/ENG-123",
   title: "ENG-123",
   actor_type: "user",
@@ -100,4 +104,13 @@ it("requires an HTTPS URL before submitting", async () => {
 it("does not show an empty Linked section to a viewer", async () => {
   await render(false);
   expect(host.textContent).toBe("");
+});
+
+it("keeps provider state visible while an agent can add another link", async () => {
+  client.setQueryData<TicketLink[]>(qk.ticketLinks("ticket-1"), [
+    { ...addedLink, external_state: "done", external_state_name: "Shipped" },
+  ]);
+  await render();
+  expect(host.textContent).toContain("Shipped");
+  expect([...host.querySelectorAll("button")].some((button) => button.textContent?.trim() === "Add link")).toBe(true);
 });

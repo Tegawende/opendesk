@@ -262,8 +262,11 @@ type gmailChange struct {
 	ThreadID    string
 	LabelIDs    []string
 	Labels      bool // LabelIDs is known
-	Added       bool // a messagesAdded record: the message is new to the mailbox
-	Deleted     bool
+	// Version is the history record that carried LabelIDs: the message's historyId as of
+	// those labels, which Gmail defines as the last record that changed it.
+	Version string
+	Added   bool // a messagesAdded record: the message is new to the mailbox
+	Deleted bool
 }
 
 // gmailSyncState is collab_accounts.sync_state of a Gmail account.
@@ -310,6 +313,7 @@ func (g *gmailProvider) history(ctx context.Context, since, pageToken string) ([
 		}
 		var page struct {
 			History []struct {
+				ID              string                           `json:"id"`
 				MessagesAdded   []struct{ Message gmailMessage } `json:"messagesAdded"`
 				MessagesDeleted []struct{ Message gmailMessage } `json:"messagesDeleted"`
 				LabelsAdded     []struct{ Message gmailMessage } `json:"labelsAdded"`
@@ -327,7 +331,7 @@ func (g *gmailProvider) history(ctx context.Context, since, pageToken string) ([
 		if first == "" {
 			first = page.HistoryID
 		}
-		note := func(m gmailMessage, added, deleted bool) {
+		note := func(record string, m gmailMessage, added, deleted bool) {
 			i, ok := index[m.ID]
 			if !ok {
 				i = len(changes)
@@ -339,7 +343,7 @@ func (g *gmailProvider) history(ctx context.Context, since, pageToken string) ([
 				c.ThreadID = m.ThreadID
 			}
 			if m.LabelIDs != nil {
-				c.LabelIDs, c.Labels = m.LabelIDs, true
+				c.LabelIDs, c.Labels, c.Version = m.LabelIDs, true, record
 			}
 			c.Added = c.Added || added
 			if deleted {
@@ -350,16 +354,16 @@ func (g *gmailProvider) history(ctx context.Context, since, pageToken string) ([
 		}
 		for _, h := range page.History {
 			for _, x := range h.MessagesAdded {
-				note(x.Message, true, false)
+				note(h.ID, x.Message, true, false)
 			}
 			for _, x := range h.LabelsAdded {
-				note(x.Message, false, false)
+				note(h.ID, x.Message, false, false)
 			}
 			for _, x := range h.LabelsRemoved {
-				note(x.Message, false, false)
+				note(h.ID, x.Message, false, false)
 			}
 			for _, x := range h.MessagesDeleted {
-				note(x.Message, false, true)
+				note(h.ID, x.Message, false, true)
 			}
 		}
 		token = page.NextPageToken
@@ -691,12 +695,20 @@ func (s *service) applyGmailChanges(ctx context.Context, p *pass, g *gmailProvid
 			return nil, err
 		}
 		// Network first, a few messages at once, then one transaction for the chunk. A known
-		// message only needs its labels; a new one is read whole.
+		// message only needs its labels, read again when history did not carry them; a new
+		// one is read whole.
 		var todo []string
 		var at []int // todo's index in chunk
 		for i := range chunk {
 			c := &chunk[i]
 			if c.Deleted || (known[c.ID] == nil && !admit[c.ID]) {
+				continue
+			}
+			if known[c.ID] != nil && c.Labels && c.Version != "" {
+				c.Observation, err = gmailObservation(&gmailMessage{HistoryID: c.Version, LabelIDs: c.LabelIDs})
+				if err != nil {
+					return nil, err
+				}
 				continue
 			}
 			todo, at = append(todo, c.ID), append(at, i)

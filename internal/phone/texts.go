@@ -1,0 +1,89 @@
+package phone
+
+import (
+	"context"
+	"strings"
+
+	"github.com/google/uuid"
+
+	"github.com/useopendesk/opendesk/internal/db"
+)
+
+// The words opendesk writes itself for a call, which no reader's app translates: the subject
+// of the ticket a call opens and the insight card the provider shows. They are in the
+// workspace's language (its locale, the default of its customer-facing pages) when the agent
+// app speaks it, else in English, the app's fallback.
+
+// callTexts are those words per language; every language has every key (TestCallTexts).
+var callTexts = map[string]map[string]string{
+	"en": {
+		"from":           "Call from ",
+		"to":             "Call to ",
+		"withheld":       "Call from a withheld number",
+		"number":         "Withheld number",
+		"ticket":         "Ticket",
+		"earlier":        "Earlier",
+		"status.open":    "Open",
+		"status.pending": "Pending",
+		"status.on_hold": "On hold",
+		"status.solved":  "Solved",
+		"status.closed":  "Closed",
+	},
+	"fr": {
+		"from":           "Appel de ",
+		"to":             "Appel vers ",
+		"withheld":       "Appel d’un numéro masqué",
+		"number":         "Numéro masqué",
+		"ticket":         "Ticket",
+		"earlier":        "Précédent",
+		"status.open":    "Ouvert",
+		"status.pending": "En attente",
+		"status.on_hold": "En pause",
+		"status.solved":  "Résolu",
+		"status.closed":  "Fermé",
+	},
+	"de": {
+		"from":           "Anruf von ",
+		"to":             "Anruf an ",
+		"withheld":       "Anruf von einer unterdrückten Nummer",
+		"number":         "Unterdrückte Nummer",
+		"ticket":         "Ticket",
+		"earlier":        "Früher",
+		"status.open":    "Offen",
+		"status.pending": "Wartend",
+		"status.on_hold": "Angehalten",
+		"status.solved":  "Gelöst",
+		"status.closed":  "Geschlossen",
+	},
+}
+
+// callLanguage is a callTexts language for a workspace locale (BCP 47): its base language
+// when there are words for it, else English.
+func callLanguage(locale string) string {
+	base, _, _ := strings.Cut(strings.ToLower(strings.ReplaceAll(strings.TrimSpace(locale), "_", "-")), "-")
+	if _, ok := callTexts[base]; ok {
+		return base
+	}
+	return "en"
+}
+
+// workspaceCallLanguage is the language of the workspace's call texts.
+func workspaceCallLanguage(ctx context.Context, q db.Querier, wid uuid.UUID) (string, error) {
+	var locale string
+	if err := q.QueryRow(ctx, `SELECT COALESCE(settings ->> 'locale', '') FROM workspaces WHERE id = $1`, wid).Scan(&locale); err != nil {
+		return "", err
+	}
+	return callLanguage(locale), nil
+}
+
+// callText is one of the call words in lang; a status ("status.<status>") without words is
+// as stored, spaced.
+func callText(lang, key string) string {
+	if s, ok := callTexts[lang][key]; ok {
+		return s
+	}
+	if s, ok := callTexts["en"][key]; ok {
+		return s
+	}
+	return strings.ReplaceAll(strings.TrimPrefix(key, "status."), "_", " ")
+}
