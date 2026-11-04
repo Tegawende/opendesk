@@ -27,7 +27,10 @@ interface ToolInfo { name: string; title: string; description: string;
   ask_first: boolean /* an admin set it to wait for approval */;
   auto_run: boolean /* a write that runs without the user's approval: on auto_tools, not read-only, not ask_first */; enabled: boolean }
 interface Link { id: string; ticket_id: string; integration_id: string | null; provider: string /* key, custom or link */;
-  url: string; title: string; actor_type: "user"|"ai"|"api"; created_by: string | null; created_at: string }
+  url: string; title: string; external_id: string | null;
+  external_state: "backlog"|"todo"|"in_progress"|"done"|"canceled" | null;
+  external_state_name: string | null; synced_at: string | null;
+  actor_type: "user"|"ai"|"api"; created_by: string | null; created_at: string }
 ```
 
 | method | path | role | body → response |
@@ -44,6 +47,10 @@ interface Link { id: string; ticket_id: string; integration_id: string | null; p
 | GET | `/v1/tickets/{id}/links` | viewer, `tickets:read` | → `{data: Link[]}` |
 | POST | `/v1/tickets/{id}/links` | agent, `tickets:write` | `{url /* https */, title?, integration_id?}` → 201 `Link` (the same URL again answers the existing link) |
 | DELETE | `/v1/tickets/{id}/links/{linkId}` | agent, `tickets:write` | → 204. The item in the other product is left as it is |
+
+The external fields are null until a provider reports the linked item's state. `external_state` is
+normalized across providers; `external_state_name` is the provider's label. A state change publishes
+`ticket_link.updated` with `{ticket_id, link}`.
 
 - Token and open (`none`) connections are checked when created: the tool list is fetched,
   or the request fails with `422 integration_failed`. OAuth connections start `pending` and
@@ -145,6 +152,7 @@ Tools turned off in settings are neither offered nor run. `disabled_tools`, `ask
 | `integration.created` / `integration.updated` | `{integration: Integration}` |
 | `integration.deleted` | `{integration_id}` |
 | `ticket_link.created` | `{ticket_id, link: Link}` |
+| `ticket_link.updated` | `{ticket_id, link: Link}` |
 | `ticket_link.deleted` | `{ticket_id, link_id}` |
 
 Activities: `linked{link_id, url, title, provider}`, `unlinked{url, title, provider}`.
