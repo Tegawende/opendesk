@@ -25,12 +25,14 @@ export function Toaster() {
         unstyled: true,
         classNames: {
           toast:
-            "relative flex w-[340px] items-center gap-2.5 overflow-hidden rounded-lg border border-line bg-raised px-3 py-2.5 text-[12.5px] text-fg shadow-float",
-          content: "min-w-0 flex-1",
+            "relative flex w-[340px] flex-wrap items-center gap-x-2.5 gap-y-2 overflow-hidden rounded-lg border border-line bg-raised px-3 py-2.5 text-[12.5px] text-fg shadow-float",
+          // The message keeps room to read; buttons that no longer fit beside it
+          // (longer labels in other languages) move to a row of their own, on the right.
+          content: "min-w-40 flex-1",
           title: "font-medium",
           description: "text-fg-3 text-xs",
-          actionButton: "ml-auto h-6 shrink-0 whitespace-nowrap rounded-md bg-inverse px-2 text-xs font-medium text-inverse-fg",
-          cancelButton: "h-6 shrink-0 whitespace-nowrap rounded-md px-2 text-xs text-fg-3 hover:bg-hover",
+          actionButton: "ml-auto h-6 shrink-0 whitespace-nowrap rounded-md bg-inverse px-2 text-xs font-medium text-inverse-fg [[data-cancel]+&]:ml-0",
+          cancelButton: "ml-auto h-6 shrink-0 whitespace-nowrap rounded-md px-2 text-xs text-fg-3 hover:bg-hover",
           icon: "flex",
         },
       }}

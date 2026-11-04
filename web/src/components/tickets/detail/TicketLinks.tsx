@@ -18,7 +18,17 @@ import { appForUrl, appLogo } from "@/lib/appLogos";
 import type { TicketLink } from "@/lib/api/types";
 import { ease } from "@/lib/motion";
 import { q, qk, removeFromList, upsertInList } from "@/lib/queries";
+import { Badge } from "@/components/ui/badge";
 import { SetByOllie, useAssistantName } from "../ollie";
+
+const stateTone = { backlog: "gray", todo: "gray", in_progress: "blue", done: "green", canceled: "gray" } as const;
+const stateTranslation = {
+  backlog: "links.states.backlog",
+  todo: "links.states.todo",
+  in_progress: "links.states.in_progress",
+  done: "links.states.done",
+  canceled: "links.states.canceled",
+} as const;
 
 function href(l: TicketLink): string | null {
   try {
@@ -98,6 +108,8 @@ export function TicketLinks({ ticketId, canEdit }: { ticketId: string; canEdit: 
             {links.map((l) => {
               const url = href(l);
               const source = nameOf(l);
+              const state = l.external_state;
+              const stateLabel = state && (l.external_state_name || t(stateTranslation[state]));
               return (
                 <motion.li
                   key={l.id}
@@ -114,7 +126,10 @@ export function TicketLinks({ ticketId, canEdit }: { ticketId: string; canEdit: 
                   </span>
                   {url ? (
                     <a href={url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 outline-none" title={l.url}>
-                      <span className="block truncate text-[12.5px] text-fg-2 group-hover:text-fg">{l.title || source}</span>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="min-w-0 truncate text-[12.5px] text-fg-2 group-hover:text-fg">{l.title || source}</span>
+                        {state && stateLabel && <Badge tone={stateTone[state]}>{stateLabel}</Badge>}
+                      </span>
                       <span className="block truncate text-[11px] text-fg-4">{source}</span>
                     </a>
                   ) : (

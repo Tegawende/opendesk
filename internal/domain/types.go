@@ -279,6 +279,9 @@ type AIAction struct {
 type ActivityActor struct {
 	Type string   `json:"type"`
 	User *UserRef `json:"user"`
+	// APIKey is the API key that made the change (type "api"); null otherwise, and for an
+	// entry recorded before keys were (its key is not known), or whose key was deleted.
+	APIKey *APIKeyRef `json:"api_key"`
 }
 
 type Activity struct {

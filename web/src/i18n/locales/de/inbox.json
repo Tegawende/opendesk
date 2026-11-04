@@ -810,6 +810,13 @@
   },
   "links": {
     "title": "Verknüpft",
+    "states": {
+      "backlog": "Backlog",
+      "todo": "Zu erledigen",
+      "in_progress": "In Arbeit",
+      "done": "Erledigt",
+      "canceled": "Abgebrochen"
+    },
     "add": "Link hinzufügen",
     "addTitle": "Link hinzufügen",
     "addDescription": "Füge eine URL aus Linear oder einem anderen Tool zu diesem Ticket hinzu.",
