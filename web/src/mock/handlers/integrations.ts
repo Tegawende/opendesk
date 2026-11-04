@@ -119,7 +119,7 @@ function seedState(ws: WsData): State {
   const linear = connection("linear", "oauth", at);
   const st: State = { integrations: [linear], links: [] };
   const t = ws.tickets.find((x) => !ws.deletedTickets.has(x.id) && x.status === "open" && /bug|error|crash|broken|fail/i.test(x.subject));
-  if (t) st.links.push({ id: uuid(), ticket_id: t.id, integration_id: linear.id, provider: "linear", url: `https://linear.app/margin/issue/FN-${t.number - 940}`, title: "Crash when opening shared notebooks on iOS", actor_type: "ai", created_by: db.meId, created_at: at });
+  if (t) st.links.push({ id: uuid(), ticket_id: t.id, integration_id: linear.id, provider: "linear", url: `https://linear.app/margin/issue/FN-${t.number - 940}`, title: "Crash when opening shared notebooks on iOS", external_id: `FN-${t.number - 940}`, external_state: "in_progress", external_state_name: "In Progress", synced_at: at, actor_type: "ai", created_by: db.meId, created_at: at });
   return st;
 }
 
@@ -180,7 +180,7 @@ export function linkTicket(ws: WsData, t: Ticket, x: Integration | null, url: st
   const st = stateOf(ws);
   const existing = st.links.find((l) => l.ticket_id === t.id && l.url === url);
   if (existing) return existing;
-  const l: TicketLink = { id: uuid(), ticket_id: t.id, integration_id: x?.id ?? null, provider: x?.provider ?? "link", url, title: title || new URL(url).host, actor_type: actor, created_by: db.meId, created_at: nowIso() };
+  const l: TicketLink = { id: uuid(), ticket_id: t.id, integration_id: x?.id ?? null, provider: x?.provider ?? "link", url, title: title || new URL(url).host, external_id: null, external_state: null, external_state_name: null, synced_at: null, actor_type: actor, created_by: db.meId, created_at: nowIso() };
   st.links.push(l);
   save();
   publish(ws, "ticket_link.created", { ticket_id: t.id, link: l });

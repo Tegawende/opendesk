@@ -1328,6 +1328,10 @@ export type TicketLink = {
   provider: string;
   url: string;
   title: string;
+  external_id: string | null;
+  external_state: "backlog" | "todo" | "in_progress" | "done" | "canceled" | null;
+  external_state_name: string | null;
+  synced_at: string | null;
   actor_type: "user" | "ai" | "api";
   created_by: string | null;
   created_at: string;

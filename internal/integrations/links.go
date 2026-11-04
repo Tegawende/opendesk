@@ -23,25 +23,98 @@ import (
 // maxLinks bounds the links on one ticket.
 const maxLinks = 50
 
-// Link is something in another tool that a ticket points to: an issue, a task, a page.
-type Link struct {
-	ID            uuid.UUID  `json:"id"`
-	TicketID      uuid.UUID  `json:"ticket_id"`
-	IntegrationID *uuid.UUID `json:"integration_id"`
-	Provider      string     `json:"provider" doc:"Catalog key, custom, or link"`
-	URL           string     `json:"url"`
-	Title         string     `json:"title"`
-	ActorType     string     `json:"actor_type" enum:"user,ai,api"`
-	CreatedBy     *uuid.UUID `json:"created_by"`
-	CreatedAt     time.Time  `json:"created_at"`
+// LinkState is a provider-independent state for a linked issue or task.
+type LinkState string
+
+const (
+	LinkStateBacklog    LinkState = "backlog"
+	LinkStateTodo       LinkState = "todo"
+	LinkStateInProgress LinkState = "in_progress"
+	LinkStateDone       LinkState = "done"
+	LinkStateCanceled   LinkState = "canceled"
+)
+
+func (s LinkState) valid() bool {
+	switch s {
+	case LinkStateBacklog, LinkStateTodo, LinkStateInProgress, LinkStateDone, LinkStateCanceled:
+		return true
+	default:
+		return false
+	}
 }
 
-const linkSelect = `SELECT id, ticket_id, integration_id, provider, url, title, actor_type, created_by, created_at FROM ticket_links`
+// Link is something in another tool that a ticket points to: an issue, a task, a page.
+type Link struct {
+	ID                uuid.UUID  `json:"id"`
+	TicketID          uuid.UUID  `json:"ticket_id"`
+	IntegrationID     *uuid.UUID `json:"integration_id"`
+	Provider          string     `json:"provider" doc:"Catalog key, custom, or link"`
+	URL               string     `json:"url"`
+	Title             string     `json:"title"`
+	ExternalID        *string    `json:"external_id" nullable:"true"`
+	ExternalState     *LinkState `json:"external_state" enum:"backlog,todo,in_progress,done,canceled" nullable:"true"`
+	ExternalStateName *string    `json:"external_state_name" nullable:"true"`
+	SyncedAt          *time.Time `json:"synced_at" nullable:"true"`
+	ActorType         string     `json:"actor_type" enum:"user,ai,api"`
+	CreatedBy         *uuid.UUID `json:"created_by"`
+	CreatedAt         time.Time  `json:"created_at"`
+}
+
+const linkColumns = `id, ticket_id, integration_id, provider, url, title, external_id, external_state, external_state_name, synced_at, actor_type, created_by, created_at`
+const linkSelect = `SELECT ` + linkColumns + ` FROM ticket_links`
 
 func scanLink(r pgx.Row) (Link, error) {
 	var l Link
-	err := r.Scan(&l.ID, &l.TicketID, &l.IntegrationID, &l.Provider, &l.URL, &l.Title, &l.ActorType, &l.CreatedBy, &l.CreatedAt)
+	err := r.Scan(&l.ID, &l.TicketID, &l.IntegrationID, &l.Provider, &l.URL, &l.Title,
+		&l.ExternalID, &l.ExternalState, &l.ExternalStateName, &l.SyncedAt, &l.ActorType, &l.CreatedBy, &l.CreatedAt)
 	return l, err
+}
+
+func sameString(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func sameLinkState(a, b *LinkState) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+// updateLinkState stores a provider's latest state and tells viewers of the ticket what changed.
+// A timestamp-only refresh does not publish an event.
+func (s *Service) updateLinkState(ctx context.Context, tx pgx.Tx, wid, linkID uuid.UUID, externalID string, state LinkState, stateName string, syncedAt time.Time) (Link, error) {
+	if !state.valid() {
+		return Link{}, httpx.Validation("The linked issue has an unknown state.")
+	}
+	old, err := scanLink(tx.QueryRow(ctx, linkSelect+` WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, wid, linkID))
+	if db.IsNotFound(err) {
+		return Link{}, httpx.NotFound("Link")
+	}
+	if err != nil {
+		return Link{}, err
+	}
+	stateName = clip(strings.Join(strings.Fields(stateName), " "), 300)
+	var name *string
+	if stateName != "" {
+		name = &stateName
+	}
+	updated, err := scanLink(tx.QueryRow(ctx, `UPDATE ticket_links SET external_id = $3, external_state = $4,
+		external_state_name = $5, synced_at = $6 WHERE workspace_id = $1 AND id = $2 RETURNING `+linkColumns,
+		wid, linkID, externalID, state, name, syncedAt))
+	if err != nil {
+		return Link{}, err
+	}
+	if sameString(old.ExternalID, updated.ExternalID) && sameLinkState(old.ExternalState, updated.ExternalState) && sameString(old.ExternalStateName, updated.ExternalStateName) {
+		return updated, nil
+	}
+	if err := s.publishTicket(ctx, tx, "ticket_link.updated", wid, updated.TicketID, map[string]any{"ticket_id": updated.TicketID, "link": updated}); err != nil {
+		return Link{}, err
+	}
+	return updated, nil
 }
 
 func listLinks(ctx context.Context, q db.Querier, wid, ticketID uuid.UUID) ([]Link, error) {
@@ -125,7 +198,7 @@ func (s *Service) linkTicket(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID,
 	}
 	l, err := scanLink(tx.QueryRow(ctx, `INSERT INTO ticket_links (id, workspace_id, ticket_id, integration_id, provider, url, title,
 		created_by, actor_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-		RETURNING id, ticket_id, integration_id, provider, url, title, actor_type, created_by, created_at`,
+		RETURNING `+linkColumns,
 		ids.New(), wid, tid, iid, prov, link, title, by, actor))
 	if err != nil {
 		return Link{}, err
@@ -300,7 +373,7 @@ func (s *Service) registerLinks(api huma.API) {
 					return err
 				}
 				l, err := scanLink(tx.QueryRow(ctx, `DELETE FROM ticket_links WHERE workspace_id = $1 AND ticket_id = $2 AND id = $3
-					RETURNING id, ticket_id, integration_id, provider, url, title, actor_type, created_by, created_at`, p.WorkspaceID, tid, lid))
+					RETURNING `+linkColumns, p.WorkspaceID, tid, lid))
 				if db.IsNotFound(err) {
 					return httpx.NotFound("Link")
 				} else if err != nil {
