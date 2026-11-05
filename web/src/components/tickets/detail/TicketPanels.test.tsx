@@ -1,7 +1,7 @@
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { i18n, loadAgentCatalogs } from "@/i18n";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { __resetClientForTests, configureClient, setTransport } from "@/lib/api/client";
@@ -199,27 +199,29 @@ describe("URL ticket panel", () => {
 
   it("shows a card: its link, badges, fields, lines and footer, dates and money in the reader's locale", () => {
     const html = renderToStaticMarkup(
-      <PanelBody
-        data={httpData([
-          {
-            type: "card",
-            title: "Sales order S00042",
-            url: "https://erp.example.com/so/42",
-            subtitle: "Ships from Milan",
-            badges: [
-              { text: "Supplier late", tone: "warning" },
-              { text: "Paid", tone: "success" },
-              { text: "VIP", tone: "info" },
-            ],
-            fields: [
-              { label: "Supplier date", value: { type: "date", value: inDays(3), relative: true } },
-              { label: "Supplier", value: { type: "text", text: "Flos S.p.A." }, url: "https://erp.example.com/p/88" },
-            ],
-            lines: [{ quantity: 2, title: "Arco floor lamp", subtitle: "Marble", value: { type: "money", amount: "1890.00", currency: "EUR" } }],
-            footer: [{ label: "Total", value: { type: "money", amount: "3780", currency: "EUR" } }],
-          },
-        ])}
-      />,
+      <TooltipProvider>
+        <PanelBody
+          data={httpData([
+            {
+              type: "card",
+              title: "Sales order S00042",
+              url: "https://erp.example.com/so/42",
+              subtitle: "Ships from Milan",
+              badges: [
+                { text: "Supplier late", tone: "warning" },
+                { text: "Paid", tone: "success" },
+                { text: "VIP", tone: "info" },
+              ],
+              fields: [
+                { label: "Supplier date", value: { type: "date", value: inDays(3), relative: true } },
+                { label: "Supplier", value: { type: "text", text: "Flos S.p.A." }, url: "https://erp.example.com/p/88" },
+              ],
+              lines: [{ quantity: 2, title: "Arco floor lamp", subtitle: "Marble", value: { type: "money", amount: "1890.00", currency: "EUR" } }],
+              footer: [{ label: "Total", value: { type: "money", amount: "3780", currency: "EUR" } }],
+            },
+          ])}
+        />
+      </TooltipProvider>,
     );
     const t = text(html);
     expect(html).toMatch(/<article[^>]*aria-label="Sales order S00042"/);
@@ -370,7 +372,7 @@ describe("URL ticket panel", () => {
     await r.click(open.querySelector("dd")!);
     expect(open.textContent).toContain("Arco floor lamp");
     // A card with nothing under its header has nothing to fold.
-    expect(bare.querySelector("button")).toBeNull();
+    expect(bare.querySelector("button[aria-expanded]")).toBeNull();
     expect(bare.textContent).toContain("Header only");
     await r.unmount();
   });
@@ -390,6 +392,37 @@ describe("URL ticket panel", () => {
     expect(arrow(c).getAttribute("aria-expanded")).toBe("true");
     expect(c.textContent).toContain("Arco floor lamp");
     await r.unmount();
+  });
+
+  it("copies a card's title and each line as it shows, without folding the card", async () => {
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const r = await mount(
+      <PanelBody
+        data={httpData([card("Order #1042", { url: "https://erp.example.com/so/42", lines: [{ quantity: 2, title: "Arco floor lamp", subtitle: "Marble" }, { quantity: 1, title: "LED bulb E27" }] })])}
+      />,
+    );
+    try {
+      const [c] = r.cards();
+      // Each button is named by what it copies, shows on its row's hover or on focus, and is reached by Tab.
+      const title = c.querySelector<HTMLButtonElement>('button[aria-label="Copy Order #1042"]')!;
+      expect(title.getAttribute("type")).toBe("button");
+      expect(title.className).toContain("group-hover/copy:opacity-100");
+      expect(title.className).toContain("focus-visible:opacity-100");
+      await r.click(title);
+      expect(writeText).toHaveBeenLastCalledWith("Order #1042");
+      // A line copies with its subtitle, as the line reads.
+      await r.click(c.querySelector('button[aria-label="Copy Arco floor lamp - Marble"] svg')!);
+      expect(writeText).toHaveBeenLastCalledWith("Arco floor lamp - Marble");
+      await r.click(c.querySelector('button[aria-label="Copy LED bulb E27"]')!);
+      expect(writeText).toHaveBeenLastCalledWith("LED bulb E27");
+      // The header's button is not a click on the header: the card stays open.
+      expect(arrow(c).getAttribute("aria-expanded")).toBe("true");
+      expect(c.textContent).toContain("Arco floor lamp");
+    } finally {
+      await r.unmount();
+      Reflect.deleteProperty(navigator, "clipboard");
+    }
   });
 
   it("keeps the agent's choice when new data comes, the panel folds or the cards move, per ticket and panel", async () => {

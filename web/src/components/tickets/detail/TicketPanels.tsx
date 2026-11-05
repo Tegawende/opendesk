@@ -34,6 +34,7 @@ import { useId, useState, type MouseEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AppMark } from "@/components/appmark";
 import { Badge } from "@/components/ui/badge";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api } from "@/lib/api/endpoints";
@@ -557,7 +558,7 @@ function CardBlock({ block, foldScope, foldKey }: { block: Extract<PanelBlock, {
   return (
     <article className="rounded-md border border-line-soft px-2.5 py-2" aria-label={block.title}>
       <div onClick={onHeader} className={cn(foldable && "group/head cursor-pointer")}>
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="group/copy flex min-w-0 items-center gap-1.5">
           <h4 className="min-w-0 flex-1 text-[12px] font-medium text-fg">
             {block.url ? (
               <a
@@ -574,6 +575,8 @@ function CardBlock({ block, foldScope, foldKey }: { block: Extract<PanelBlock, {
               <span className="block truncate">{block.title}</span>
             )}
           </h4>
+          {/* The title is often a number to paste elsewhere (an order, an invoice). */}
+          <CopyButton value={block.title} label={t("panels.copyValue", { name: block.title })} className={COPY_ON_HOVER} />
           {links.length > 0 && <LinkButtons links={links} />}
           {foldable && (
             <button
@@ -683,16 +686,23 @@ function LinkButtons({ links }: { links: PanelLink[] }) {
   );
 }
 
+/** A copy button that shows on hover of its row (`group/copy`) and on keyboard focus. */
+const COPY_ON_HOVER = "size-5 opacity-0 outline-none group-hover/copy:opacity-100 focus-visible:opacity-100 focus-visible:shadow-[0_0_0_2px_var(--focus)]";
+
 function LineRow({ line }: { line: PanelLine }) {
+  const { t } = useTranslation("inbox");
+  const text = line.subtitle ? line.title + " - " + line.subtitle : line.title;
   return (
-    <li className="flex gap-1.5">
+    <li className="group/copy flex items-center gap-1.5">
       {line.quantity !== undefined && <span className="tabular-nums text-fg-4">{number(line.quantity)}×</span>}
-      <span className="min-w-0 flex-1 truncate" title={line.subtitle ? line.title + " - " + line.subtitle : line.title}>
+      <span className="min-w-0 flex-1 truncate" title={text}>
         <Out url={line.url}>
           {line.title}
           {line.subtitle ? <span className="text-fg-4"> - {line.subtitle}</span> : null}
         </Out>
       </span>
+      {/* An item copies as the line shows it, with its subtitle (a variant, a SKU). */}
+      <CopyButton value={text} label={t("panels.copyValue", { name: text })} className={cn(COPY_ON_HOVER, "size-4")} />
       {line.value && (
         <span className="shrink-0 text-fg-4">
           <PanelValueView value={line.value} />

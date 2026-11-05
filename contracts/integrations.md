@@ -368,6 +368,9 @@ type Value = string | number | boolean
   characters; longer is dropped, never cut), or by its title without one, so send an `id` when a
   card's title can change between answers (in another `locale`, with a status in it). The choice is
   kept in memory, never stored: after a reload the answer's `collapsed` applies again.
+- A card's title and each of its lines get a copy button, shown on hover of the row and on keyboard
+  focus: the title copies as sent (an order or invoice number), a line as it reads ("title -
+  subtitle"). Each is named by what it copies, and copying never folds or opens the card.
 - The app formats dates in the agent's locale and timezone (a day as it is, never shifted) and, with
   `relative`, adds "in 3 days" or "5 days ago"; money in the agent's locale; a badge's tone is the
   app's own colour (info blue, success green, warning amber, danger red).
