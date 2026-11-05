@@ -50,6 +50,7 @@ function filtersFrom(ctx: Ctx): ListFilters {
     view_id: q.get("view_id") ?? undefined,
     q: q.get("q") ?? undefined,
     spam: q.get("spam") === "true",
+    merged: q.get("merged") === "true" ? true : q.get("merged") === "false" ? false : undefined,
     fieldFilters: fieldFiltersFromQuery(ctx.ws, "ticket", q),
   };
 }
@@ -394,9 +395,19 @@ export function registerTickets() {
   });
   post("/v1/tickets/:id/merge", (ctx) => {
     const src = ticket(ctx);
-    const into = findTicket(ctx.ws, required(ctx, "into_id"));
+    let into = findTicket(ctx.ws, required(ctx, "into_id"));
     if (!into || !canSeeTicket(ctx.ws, into)) throw notFound("Target ticket");
+    if (ctx.ws.mergedInto.has(src.id)) throw new HttpError(409, "conflict", "this ticket was already merged");
+    // A target that was itself merged stands for the ticket it went into.
+    for (let i = 0; i < 20 && into && ctx.ws.mergedInto.has(into.id); i++) {
+      const next = ctx.ws.mergedInto.get(into.id)!;
+      if (next === src.id) throw new HttpError(409, "conflict", "the target ticket was merged into this one");
+      into = findTicket(ctx.ws, next);
+      if (!into || !canSeeTicket(ctx.ws, into)) throw invalid("the target ticket was merged into a ticket you cannot see");
+    }
+    if (!into) throw notFound("Target ticket");
     if (into.id === src.id) throw invalid("A ticket can't be merged into itself");
+    const reopen = !["solved", "closed"].includes(src.status) && ["solved", "closed"].includes(into.status);
     for (const m of ctx.ws.messages.filter((x) => x.ticket_id === src.id)) {
       ctx.ws.messages.push({ ...m, id: uuid(), ticket_id: into.id });
       into.message_count++;
@@ -408,6 +419,8 @@ export function registerTickets() {
     addActivity(ctx.ws, src, "merged", { into: { id: into.id, number: into.number, subject: into.subject } }, userRef(db.meId));
     addActivity(ctx.ws, into, "merged", { from: { id: src.id, number: src.number, subject: src.subject } }, userRef(db.meId));
     applyPatch(ctx.ws, src, { status: "closed" }, userRef(db.meId));
+    ctx.ws.mergedInto.set(src.id, into.id);
+    if (reopen) applyPatch(ctx.ws, into, { status: "open" }, userRef(db.meId));
     publishTicketUpdated(ctx.ws, into, ["message_count"]);
     return into;
   });

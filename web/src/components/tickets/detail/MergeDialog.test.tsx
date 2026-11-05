@@ -86,4 +86,16 @@ describe("MergeDialog", () => {
     await mergeFrom({ folder: "mine", ticketId: "t-1" });
     expect(navigate).toHaveBeenCalledWith({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "mine", ticketId: "t-42" }, search: true });
   });
+
+  it("lists the customer's other tickets, closed ones included, but none merged into another", async () => {
+    await mergeFrom({ folder: "open", ticketId: "t-1" });
+    expect(list).toHaveBeenCalledWith({ contact_id: undefined, limit: 10, merged: false, status: ["open", "pending", "on_hold", "solved", "closed"] });
+  });
+
+  it("opens the ticket the server merged into when the one picked was itself merged", async () => {
+    merge.mockResolvedValue(ticket("t-7", 7));
+    await mergeFrom({ folder: "mine", ticketId: "t-1" });
+    expect(merge).toHaveBeenCalledWith("t-1", "t-42");
+    expect(navigate).toHaveBeenCalledWith({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "mine", ticketId: "t-7" }, search: true });
+  });
 });

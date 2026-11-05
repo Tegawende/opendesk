@@ -100,6 +100,8 @@ export type WsData = {
   companies: Company[];
   tickets: Ticket[];
   deletedTickets: Set<string>;
+  /** Tickets merged into another: source id → the ticket it went into. */
+  mergedInto: Map<string, string>;
   messages: Message[];
   /** Third-party threads (contracts/api.md "Threads"). */
   threads: Thread[];

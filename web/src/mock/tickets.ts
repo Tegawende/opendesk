@@ -131,7 +131,7 @@ export function computeSla(ws: WsData, t: Ticket, keepPolicy = true): Ticket["sl
   };
 }
 
-export type ListFilters = TicketFilters & { contact_id?: string; spam?: boolean; view_id?: string; fieldFilters?: FieldFilterIn[] };
+export type ListFilters = TicketFilters & { contact_id?: string; spam?: boolean; merged?: boolean; view_id?: string; fieldFilters?: FieldFilterIn[] };
 
 export function resolveFilters(ws: WsData, f: ListFilters): ListFilters {
   if (!f.view_id) return f;
@@ -147,6 +147,7 @@ export function matches(ws: WsData, t: Ticket, raw: ListFilters, meId: string): 
   if (ws.deletedTickets.has(t.id)) return false;
   if (!canSeeTicket(ws, t, meId)) return false;
   if ((f.spam ?? false) !== t.spam) return false;
+  if (f.merged !== undefined && f.merged !== ws.mergedInto.has(t.id)) return false;
   if (f.status?.length && !f.status.includes(t.status)) return false;
   if (f.priority?.length && !f.priority.includes(t.priority)) return false;
   if (f.severity?.length && !f.severity.includes(t.severity ?? "none")) return false;

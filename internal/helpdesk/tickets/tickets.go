@@ -62,6 +62,7 @@ type listIn struct {
 	ViewID     string `query:"view_id" doc:"Apply a saved view's filters; explicit filters override it"`
 	Q          string `query:"q" maxLength:"200" doc:"Full text over tickets and contacts, exact ticket alias, or #number"`
 	Spam       string `query:"spam" enum:"true,false,any," doc:"Default false (spam hidden); true lists only spam"`
+	Merged     string `query:"merged" enum:"true,false,any," doc:"Default any; false leaves out tickets merged into another, true lists only those"`
 	Sort       string `query:"sort" maxLength:"60" doc:"last_message_at (default), created_at, priority, severity, due or field.<key>"`
 	Order      string `query:"order" enum:"asc,desc," doc:"Default desc, asc for due"`
 
@@ -94,6 +95,7 @@ type ticketBulkQuery struct {
 	ViewID     string           `json:"view_id,omitempty"`
 	Q          string           `json:"q,omitempty" maxLength:"200"`
 	Spam       string           `json:"spam,omitempty" enum:"true,false,any,"`
+	Merged     string           `json:"merged,omitempty" enum:"true,false,any,"`
 	Fields     []hd.FieldFilter `json:"fields,omitempty" maxItems:"20"`
 }
 
@@ -101,7 +103,7 @@ func (q ticketBulkQuery) listInput() listIn {
 	return listIn{Status: strings.Join(q.Status, ","), Priority: strings.Join(q.Priority, ","), Severity: strings.Join(q.Severity, ","), Assignee: q.Assignee,
 		TeamID: q.TeamID, TeamNot: q.TeamNot, MailboxID: q.MailboxID, MailboxNot: q.MailboxNot, ReceivedAt: q.ReceivedAt, BrandID: q.BrandID, WidgetID: q.WidgetID, Tag: q.Tag, TagNot: q.TagNot, Untagged: q.Untagged,
 		Channel: q.Channel, ChannelNot: strings.Join(q.ChannelNot, ","), ContactID: q.ContactID, ContactNot: q.ContactNot, CompanyNot: q.CompanyNot, ViewID: q.ViewID,
-		Q: q.Q, Spam: q.Spam, fields: q.Fields}
+		Q: q.Q, Spam: q.Spam, Merged: q.Merged, fields: q.Fields}
 }
 
 func ticketListQuery(ctx context.Context, q db.Querier, p *auth.Principal, in listIn) (listQuery, error) {
@@ -132,7 +134,7 @@ func ticketListQuery(ctx context.Context, q db.Querier, p *auth.Principal, in li
 	if f.ChannelNot, err = validEnum(f.ChannelNot, domain.Channels, "channel_not"); err != nil {
 		return listQuery{}, err
 	}
-	return forCaller(ctx, q, p, listQuery{TicketFilters: f, ContactID: in.ContactID, Spam: in.Spam})
+	return forCaller(ctx, q, p, listQuery{TicketFilters: f, ContactID: in.ContactID, Spam: in.Spam, Merged: in.Merged})
 }
 
 // Resolve reads the field.<key> and field.<key>[op] parameters (custom field filters).
@@ -573,7 +575,7 @@ func registerTickets(d *deps.Deps, api huma.API) {
 
 	huma.Register(api, huma.Operation{OperationID: "merge-ticket", Method: http.MethodPost, Path: "/v1/tickets/{id}/merge",
 		Summary: "Merge a ticket into another", Tags: tags,
-		Description: "Moves every message and label into into_id and closes this ticket. Returns the target."},
+		Description: "Moves every message and label into into_id and closes this ticket. A target that was itself merged stands for the ticket it went into. Returns the ticket merged into."},
 		func(ctx context.Context, in *struct {
 			ID   string `path:"id"`
 			Body struct {
@@ -593,6 +595,9 @@ func registerTickets(d *deps.Deps, api huma.API) {
 				dst, err := resolveVisible(ctx, tx, p, in.Body.IntoID)
 				if err != nil {
 					return httpx.Validation("into_id is not a ticket in this workspace")
+				}
+				if dst, err = liveMergeTarget(ctx, tx, p, src, dst); err != nil {
+					return err
 				}
 				if err := mergeTickets(ctx, tx, d, p.WorkspaceID, src, dst, actorOf(p)); err != nil {
 					return err
@@ -923,6 +928,33 @@ func MergeFromSource(ctx context.Context, tx pgx.Tx, wid, src, dst uuid.UUID) er
 	return merge(ctx, tx, nil, wid, src, dst, Actor{Type: "system", Meta: map[string]any{"via": "import"}}, true)
 }
 
+// maxMergeChain bounds how far liveMergeTarget follows merged tickets.
+const maxMergeChain = 20
+
+// liveMergeTarget is the ticket a merge into dst lands in: dst, or, when dst was itself merged,
+// the ticket it went into (following the chain), where its conversation now lives. A chain that
+// leads back to src is 409: src already holds that conversation. Every ticket on the way must be
+// one p may see, as dst is.
+func liveMergeTarget(ctx context.Context, tx pgx.Tx, p *auth.Principal, src, dst uuid.UUID) (uuid.UUID, error) {
+	for range maxMergeChain {
+		var next *uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT merged_into_id FROM tickets WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, dst).Scan(&next); err != nil {
+			return dst, err
+		}
+		if next == nil {
+			return dst, nil
+		}
+		if *next == src {
+			return dst, httpx.Conflict("the target ticket was merged into this one")
+		}
+		if _, err := resolveVisible(ctx, tx, p, next.String()); err != nil {
+			return dst, httpx.Validation("the target ticket was merged into a ticket you cannot see")
+		}
+		dst = *next
+	}
+	return dst, nil // merge refuses a target still merged this deep
+}
+
 func merge(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uuid.UUID, actor Actor, quiet bool) error {
 	if src == dst {
 		return httpx.Validation("a ticket cannot be merged into itself")
@@ -1061,6 +1093,15 @@ func merge(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uuid.UUID
 	}
 	if _, err := domain.LogActivity(ctx, tx, wid, dst, actor.Type, actor.UserID, "merged", from); err != nil {
 		return err
+	}
+	// A conversation still being worked, merged into a solved or closed ticket, reopens it as a
+	// person's status change would: otherwise what the source waited on would sit in a finished
+	// ticket that no open list shows. An import's merge mirrors its source and changes nothing.
+	if !quiet && !closing(srcState.Status) && closing(dstState.Status) {
+		open := domain.StatusOpen
+		if _, err := applyPatch(ctx, tx, d, wid, dst, actor, Patch{Status: &open}, applyOpts{}); err != nil {
+			return err
+		}
 	}
 	if err := domain.PublishTicketUpdated(ctx, tx, wid, src, srcChanged); err != nil {
 		return err

@@ -25,6 +25,7 @@ type listQuery struct {
 	hd.TicketFilters
 	ContactID string
 	Spam      string // "", "true", "false", "any"
+	Merged    string // "", "true", "false", "any"; "" is any
 	// Defs are the ticket field definitions (needed for Fields filters and field sorts).
 	Defs domain.FieldDefs
 	// Hidden are the private teams the caller may not see (domain.HiddenTeams); their
@@ -105,6 +106,15 @@ func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) erro
 		b.add("NOT t.spam")
 	default:
 		return httpx.Validation("spam must be true, false or any")
+	}
+	switch f.Merged {
+	case "", "any":
+	case "false":
+		b.add("t.merged_into_id IS NULL")
+	case "true":
+		b.add("t.merged_into_id IS NOT NULL")
+	default:
+		return httpx.Validation("merged must be true, false or any")
 	}
 	if len(f.Status) > 0 {
 		b.add("t.status = ANY(" + b.arg(f.Status) + ")")

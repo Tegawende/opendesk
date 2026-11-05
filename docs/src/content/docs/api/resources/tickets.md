@@ -81,6 +81,7 @@ curl "https://api.opendesk.sh/v1/tickets?status=open,pending&assignee=none&sort=
 | `channel_not` | comma-separated channels: tickets on none of them |
 | `q` | full-text search, an exact ticket alias, or a ticket number |
 | `spam` | `true` or `false` |
+| `merged` | `false` leaves out tickets merged into another, `true` lists only those; both by default |
 | `sort` | `last_message_at`, `created_at`, `priority`, `severity` (sev1 first, none last), `due`, `field.<key>` |
 | `order` | `asc` or `desc` |
 
@@ -182,6 +183,8 @@ curl https://api.opendesk.sh/v1/tickets/1042/merge \
   -H "Content-Type: application/json" \
   -d '{ "into_id": "1038" }'
 ```
+
+Every message, call, third-party thread and label moves to the target, and this ticket is closed. The answer is the ticket merged into. When `into_id` was itself merged, the merge goes into the ticket it went into, following the chain, and answers that ticket; `409` when that is this very ticket. A ticket that was open, pending or on hold, merged into a solved or closed one, reopens it, with a status change on its timeline.
 
 ## Activities
 

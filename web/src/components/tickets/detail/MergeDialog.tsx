@@ -38,13 +38,15 @@ export function MergeDialog({ ticket, open, onOpenChange }: { ticket: Ticket; op
   const navigate = useNavigate();
   const where = useParams({ strict: false }) as { folder?: string; viewId?: string; teamId?: string };
 
-  // Default to the same customer's other tickets; search everything when typing.
+  // Default to the same customer's other tickets, closed ones included (a new message often
+  // belongs with an old conversation), but not those already merged into another; search
+  // everything when typing.
   const results = useQuery({
     queryKey: qk.of("merge-search", ticket.id, deferred),
     queryFn: () =>
       deferred
         ? api.tickets.list({ q: deferred, limit: 10 })
-        : api.tickets.list({ contact_id: ticket.contact?.id, limit: 10, status: ["open", "pending", "on_hold", "solved"] }),
+        : api.tickets.list({ contact_id: ticket.contact?.id, limit: 10, merged: false, status: ["open", "pending", "on_hold", "solved", "closed"] }),
     enabled: open,
   });
   const list = (results.data?.data ?? []).filter((t) => t.id !== ticket.id);
@@ -55,10 +57,13 @@ export function MergeDialog({ ticket, open, onOpenChange }: { ticket: Ticket; op
     merge.mutate(
       { id: ticket.id, into: target.id },
       {
-        onSuccess: () => {
-          toast.success(tr("merge.done", { number: target.number }));
+        // The server answers with the ticket it merged into: the one picked, or, when that one
+        // was itself merged, the ticket it went into.
+        onSuccess: (into) => {
+          const dest = into?.id ? into : target;
+          toast.success(tr("merge.done", { number: dest.number }));
           onOpenChange(false);
-          void navigate(mergedTicketDest(where, target.id));
+          void navigate(mergedTicketDest(where, dest.id));
         },
         onError: (e) => setError(errorMessage(e)),
       },

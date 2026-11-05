@@ -40,6 +40,8 @@ export type TicketListQuery = ListQuery & {
   view_id?: string;
   q?: string;
   spam?: boolean | "any";
+  /** false leaves out tickets merged into another, true lists only those; both by default. */
+  merged?: boolean | "any";
   /** `field.<key>` sorts by a text, number, date, checkbox or select custom field. */
   sort?: "last_message_at" | "created_at" | "priority" | "severity" | "due" | `field.${string}`;
   order?: "asc" | "desc";
@@ -91,7 +93,7 @@ function listQuery<Q extends { fields?: T.FieldFilter[] }>(q: Q) {
 }
 
 function bulkQuery(q: TicketBulkQuery) {
-	return { ...q, spam: q.spam === true ? "true" : q.spam === false ? "false" : q.spam };
+	return { ...q, spam: q.spam === true ? "true" : q.spam === false ? "false" : q.spam, merged: q.merged === true ? "true" : q.merged === false ? "false" : q.merged };
 }
 
 export type ContactListQuery = ListQuery & { q?: string; company_id?: string; tag?: string; fields?: T.FieldFilter[] };
