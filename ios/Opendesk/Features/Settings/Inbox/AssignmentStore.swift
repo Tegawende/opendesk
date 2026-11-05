@@ -54,11 +54,13 @@ final class AssignmentStore {
         var rules: [AutoAssignRule]?
         var autoAwayMinutes: Int?
         var newTicketNotify: UnassignedNotify?
+        var followUpKeepsAssignee: Bool?
 
         enum CodingKeys: String, CodingKey {
             case mode, rules
             case autoAwayMinutes = "auto_away_minutes"
             case newTicketNotify = "new_ticket_notify"
+            case followUpKeepsAssignee = "followup_keeps_assignee"
         }
     }
 
@@ -87,6 +89,10 @@ final class AssignmentStore {
 
     func setNotify(_ value: UnassignedNotify) async throws {
         try await write(Patch(newTicketNotify: value)) { $0.newTicketNotify = value }
+    }
+
+    func setFollowUp(_ on: Bool) async throws {
+        try await write(Patch(followUpKeepsAssignee: on)) { $0.followUpKeepsAssignee = on }
     }
 
     func setAway(_ minutes: Int) async throws {

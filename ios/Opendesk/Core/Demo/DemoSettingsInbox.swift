@@ -63,6 +63,7 @@ struct DemoInboxSettings: Sendable {
     var rules: [Rule] = []
     var autoAwayMinutes = 0
     var newTicketNotify = "auto"
+    var followUpKeepsAssignee = false
     var caps: [String: Int] = [:]
     var skills: [Skill] = []
 
@@ -534,6 +535,7 @@ extension DemoBackend {
             "rules": .array(s.rules.map { .object(["target_type": .string($0.targetType), "target_id": .string($0.targetID), "mode": .string($0.mode)]) }),
             "auto_away_minutes": number(s.autoAwayMinutes),
             "new_ticket_notify": .string(s.newTicketNotify),
+            "followup_keeps_assignee": .bool(s.followUpKeepsAssignee),
         ])
     }
 
@@ -577,6 +579,10 @@ extension DemoBackend {
             if let notify = body["new_ticket_notify"]?.string {
                 guard ["auto", "everyone", "leads", "off"].contains(notify) else { throw invalid("new_ticket_notify must be auto, everyone, leads or off.") }
                 ws.settings.inbox.newTicketNotify = notify
+            }
+            if let keep = body["followup_keeps_assignee"] {
+                guard let on = keep.bool else { throw invalid("followup_keeps_assignee must be true or false.") }
+                ws.settings.inbox.followUpKeepsAssignee = on
             }
             if let rules = body["rules"]?.array {
                 ws.settings.inbox.rules = try rules.map { rule in

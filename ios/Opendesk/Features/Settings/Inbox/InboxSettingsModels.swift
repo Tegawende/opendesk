@@ -287,11 +287,14 @@ struct AutoAssignConfig: Decodable, Hashable, Sendable {
     /// 0 is off, else 10..1440.
     var autoAwayMinutes: Int
     var newTicketNotify: UnassignedNotify
+    /// A customer's follow-up of a closed ticket goes to that ticket's assignee.
+    var followUpKeepsAssignee: Bool
 
     enum CodingKeys: String, CodingKey {
         case mode, rules
         case autoAwayMinutes = "auto_away_minutes"
         case newTicketNotify = "new_ticket_notify"
+        case followUpKeepsAssignee = "followup_keeps_assignee"
     }
 
     init(from decoder: Decoder) throws {
@@ -300,6 +303,7 @@ struct AutoAssignConfig: Decodable, Hashable, Sendable {
         rules = c.lenient([AutoAssignRule].self, forKey: .rules) ?? []
         autoAwayMinutes = c.lenient(Int.self, forKey: .autoAwayMinutes) ?? 0
         newTicketNotify = c.lenient(UnassignedNotify.self, forKey: .newTicketNotify) ?? .auto
+        followUpKeepsAssignee = c.lenient(Bool.self, forKey: .followUpKeepsAssignee) ?? false
     }
 }
 

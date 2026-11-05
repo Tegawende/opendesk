@@ -62,6 +62,7 @@ struct AssignmentSettings: View {
                 if canEdit { skillsSection }
                 rulesSection(config)
                 notifySection(config)
+                followUpSection(config)
                 awaySection(config)
                 availabilitySection(config)
             }
@@ -363,6 +364,19 @@ struct AssignmentSettings: View {
                 }
                 .disabled(!canEdit)
             }
+        }
+    }
+
+    private func followUpSection(_ config: AutoAssignConfig) -> some View {
+        AccountSection(title: "Follow-ups of closed tickets", footer: "An email that answers a closed ticket opens a new ticket, linked to the closed one.") {
+            AccountToggleRow(
+                symbol: "arrow.uturn.backward",
+                tone: config.followUpKeepsAssignee ? .blue : .gray,
+                title: "Give follow-ups to the closed ticket\u{2019}s assignee",
+                subtitle: config.followUpKeepsAssignee ? "The follow-up goes to whoever had the closed ticket, while they are still on the team and can see it" : "Follow-ups arrive unassigned, like any new ticket",
+                isOn: Binding(get: { config.followUpKeepsAssignee }, set: { value in run { try await store.setFollowUp(value) } }),
+                disabled: !canEdit
+            )
         }
     }
 
