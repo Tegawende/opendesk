@@ -29,7 +29,7 @@ In dev the defaults match `go run ./cmd/opendesk serve`: the same development
 | `AUTH_SECRET` | dev default outside prod | HS256 key shared with the Go API. **Required in prod, at least 32 bytes, or the gateway refuses to boot.** |
 | `SECRET_KEY_BASE` | generated outside prod | Required in prod, at least 64 bytes (`openssl rand -base64 48`). |
 | `CHECK_ORIGINS` | any origin outside prod | **Required in prod.** Comma-separated browser origins allowed to open the agents' socket (`/socket`; the widget socket `/socket/widget` allows any origin), `scheme://host[:port]` (e.g. `https://app.opendesk.sh`), or `//host` for any scheme. Requests without an `Origin` (non-browser clients) are allowed; their token authorizes them. |
-| `NATS_URL` | `nats://127.0.0.1:4222` | `nats://host:port` or `tls://host:port`. |
+| `NATS_URL` | `nats://127.0.0.1:4222` | `nats://host:port` or `tls://host:port`. A host with no IPv4 address is reached over IPv6; an IPv6 literal goes in brackets (`nats://[fd12::1]:4222`). |
 | `NATS_TOKEN` | none | NATS auth token, if the server requires one. |
 | `CLUSTER_DNS` | none | DNS name with one A record per gateway task (ECS service discovery). Turns on clustering. |
 | `RELEASE_COOKIE` | none | Erlang distribution cookie. Required when `CLUSTER_DNS` is set; the same secret on every node. |

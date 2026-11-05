@@ -19,6 +19,34 @@ defmodule Realtime.Nats.ConsumerTest do
     end
   end
 
+  test "parses an IPv6 literal in NATS_URL" do
+    assert {:ok, %{host: "fd12::1", port: 4222}} = Consumer.settings("nats://[fd12::1]:4222", nil)
+  end
+
+  test "connects over IPv4 when the host has an IPv4 address, else over IPv6" do
+    assert Consumer.tcp_opts("127.0.0.1") == [:binary]
+    assert Consumer.tcp_opts("::1") == [:binary, :inet6]
+    assert Consumer.tcp_opts("fd12:12c0:9cb1:0:b000:143:315b:924b") == [:binary, :inet6]
+    # An unresolvable host stays on IPv4, so the error reported is the lookup's.
+    assert Consumer.tcp_opts("nats.invalid") == [:binary]
+  end
+
+  test "reaches a listener on an IPv6-only address" do
+    v6_only = [:binary, :inet6, ip: {0, 0, 0, 0, 0, 0, 0, 1}, ipv6_v6only: true]
+
+    case :gen_tcp.listen(0, v6_only) do
+      {:ok, listener} ->
+        {:ok, port} = :inet.port(listener)
+        assert {:ok, sock} = :gen_tcp.connect(~c"::1", port, Consumer.tcp_opts("::1"), 1_000)
+        :gen_tcp.close(sock)
+        :gen_tcp.close(listener)
+
+      {:error, _} ->
+        # No IPv6 loopback on this machine.
+        :ok
+    end
+  end
+
   test "backoff grows exponentially to 30 s" do
     assert Consumer.backoff(0) in 500..625
     assert Consumer.backoff(1) in 1_000..1_250
@@ -51,7 +79,7 @@ defmodule Realtime.Nats.ConsumerLiveTest do
     token = System.get_env("NATS_TEST_TOKEN")
     start_supervised!({Consumer, name: :live_consumer, nats: [url: url, token: token]})
     {:ok, settings} = Consumer.settings(url, token)
-    {:ok, pub} = Gnat.start_link(settings)
+    {:ok, pub} = Gnat.start_link(Map.put(settings, :tcp_opts, Consumer.tcp_opts(settings.host)))
     wait_connected(:live_consumer, 50)
     %{pub: pub}
   end

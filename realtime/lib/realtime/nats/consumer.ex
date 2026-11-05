@@ -78,8 +78,9 @@ defmodule Realtime.Nats.Consumer do
   @impl true
   def handle_info(:connect, state) do
     %{host: host, port: port} = state.settings
+    settings = Map.put(state.settings, :tcp_opts, tcp_opts(host))
 
-    with {:ok, conn} <- Gnat.start_link(state.settings),
+    with {:ok, conn} <- Gnat.start_link(settings),
          :ok <- subscribe(conn) do
       Logger.info("NATS connected to #{host}:#{port}")
       {:noreply, %{state | conn: conn, attempt: 0}}
@@ -141,6 +142,24 @@ defmodule Realtime.Nats.Consumer do
   def backoff(attempt) do
     exp = min(@max_backoff, @base_backoff * Integer.pow(2, min(attempt, 10)))
     exp + :rand.uniform(div(exp, 4) + 1) - 1
+  end
+
+  @doc """
+  TCP options for reaching `host`: IPv4 when it has an IPv4 address, else IPv6
+  when it has an IPv6 one, since `:gen_tcp` looks up one family only. Some
+  private networks are IPv6 only. Looked up on every connect, as the host's
+  addresses can change between attempts.
+  """
+  @spec tcp_opts(String.t()) :: [atom()]
+  def tcp_opts(host) do
+    name = String.to_charlist(host)
+
+    with {:error, _} <- :inet.getaddr(name, :inet),
+         {:ok, _} <- :inet.getaddr(name, :inet6) do
+      [:binary, :inet6]
+    else
+      _ -> [:binary]
+    end
   end
 
   defp reason({:error, %{__exception__: true} = e}), do: inspect(e.__struct__)
