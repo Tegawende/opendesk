@@ -353,11 +353,11 @@ final class TicketController {
     func merge(into target: Ticket) async -> Bool {
         guard let number = ticket?.number else { return false }
         do {
-            try await store.merge(into: target)
+            let into = try await store.merge(into: target)
             env.inbox.remove(store.resolvedID)
             Haptics.success()
-            env.toasts.show("Merged #\(number) into #\(target.number)", kind: .success)
-            go(to: target)
+            env.toasts.show("Merged #\(number) into #\(into.number)", kind: .success)
+            go(to: into)
             return true
         } catch {
             env.toasts.error(error)

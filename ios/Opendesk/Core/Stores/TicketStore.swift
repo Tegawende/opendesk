@@ -493,11 +493,15 @@ final class TicketStore {
     }
 
     /// Moves this ticket's conversation into another one; this ticket closes and points to it.
-    func merge(into target: Ticket) async throws {
+    /// Merges into target, or into the ticket target went into when it was itself merged, and
+    /// returns the ticket the server merged into.
+    @discardableResult
+    func merge(into target: Ticket) async throws -> Ticket {
         struct Body: Encodable, Sendable { let into_id: String }
-        let _: JSONValue? = try await api.post("v1/tickets/\(resolvedID)/merge", body: Body(into_id: target.id))
-        mergedInto = target.number
+        let into: Ticket = try await api.post("v1/tickets/\(resolvedID)/merge", body: Body(into_id: target.id))
+        mergedInto = into.number
         removed = true
+        return into
     }
 
     func delete() async throws {
