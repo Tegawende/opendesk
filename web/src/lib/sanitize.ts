@@ -176,9 +176,46 @@ export function emphasizeInlineStyles(html: string): string {
   return t.innerHTML;
 }
 
+// A web address written as text (a note posted through the API, an email sent without links)
+// becomes a link. Text inside a link, code, a script, a style, a text area or a button is left
+// as it is; a closing bracket or punctuation after the address stays text ("(see https://example.com/a).").
+const BARE_URL = /\bhttps?:\/\/[^\s<>"'()[\]{}]+[^\s<>"'()[\]{}.,;:!?]/gi;
+const NOT_LINKED = "a, code, script, style, textarea, button";
+
+/** html with every bare http(s) address in its text made a link (sanitizeProse's first pass; the sanitizer then opens it in a new tab). */
+export function linkBareAddresses(html: string): string {
+  if (!html || !/https?:\/\//i.test(html)) return html;
+  const t = document.createElement("template");
+  t.innerHTML = html;
+  const walker = document.createTreeWalker(t.content, NodeFilter.SHOW_TEXT);
+  const texts: Text[] = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    BARE_URL.lastIndex = 0;
+    if (BARE_URL.test(n.nodeValue ?? "") && !n.parentElement?.closest(NOT_LINKED)) texts.push(n as Text);
+  }
+  if (!texts.length) return html;
+  for (const n of texts) {
+    const s = n.nodeValue ?? "";
+    const parts = document.createDocumentFragment();
+    let at = 0;
+    BARE_URL.lastIndex = 0;
+    for (let m = BARE_URL.exec(s); m; m = BARE_URL.exec(s)) {
+      if (m.index > at) parts.append(s.slice(at, m.index));
+      const a = document.createElement("a");
+      a.setAttribute("href", m[0]);
+      a.textContent = m[0];
+      parts.append(a);
+      at = m.index + m[0].length;
+    }
+    if (at < s.length) parts.append(s.slice(at));
+    n.replaceWith(parts);
+  }
+  return t.innerHTML;
+}
+
 export function sanitizeProse(html: string, opts: SanitizeOptions = {}): Sanitized {
   const p: Pass = { keepClasses: false, blockRemote: !!opts.blockRemoteImages, blocked: 0 };
-  const out = run(emphasizeInlineStyles(html), p, { ALLOWED_TAGS, ALLOWED_ATTR: [...ALLOWED_ATTR, "loading", "referrerpolicy"], ALLOW_DATA_ATTR: false, ALLOWED_URI_REGEXP: URI });
+  const out = run(linkBareAddresses(emphasizeInlineStyles(html)), p, { ALLOWED_TAGS, ALLOWED_ATTR: [...ALLOWED_ATTR, "loading", "referrerpolicy"], ALLOW_DATA_ATTR: false, ALLOWED_URI_REGEXP: URI });
   return { html: out, held: p.blocked };
 }
 

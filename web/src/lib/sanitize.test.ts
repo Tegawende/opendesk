@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanSignatureHtml, emphasizeInlineStyles, isDesignedEmail, sanitizeEmailHtml, sanitizeHtml, sanitizeProse } from "./sanitize";
+import { cleanSignatureHtml, emphasizeInlineStyles, isDesignedEmail, linkBareAddresses, sanitizeEmailHtml, sanitizeHtml, sanitizeProse } from "./sanitize";
 
 describe("sanitize", () => {
   it("keeps only the app's own classes in the app's DOM", () => {
@@ -128,5 +128,30 @@ describe("emphasis set with inline styles", () => {
     const { html } = sanitizeProse(`<span style="font-weight:bold" onmouseover="alert(1)"><img src=x onerror="alert(1)">x</span><script>alert(1)</script>`);
     for (const bad of ["onmouseover", "onerror", "<script", "alert"]) expect(html).not.toContain(bad);
     expect(html).toContain("<strong>");
+  });
+});
+
+describe("linkBareAddresses", () => {
+  it("makes a bare address a link, keeping the text and punctuation around it", () => {
+    expect(linkBareAddresses("Order 1042 (https://shop.example.test/orders/1042).")).toBe(
+      'Order 1042 (<a href="https://shop.example.test/orders/1042">https://shop.example.test/orders/1042</a>).',
+    );
+  });
+
+  it("links every address in a text, query strings included", () => {
+    expect(linkBareAddresses("<p>see https://a.example.test/1, then http://b.example.test/2?x=1&amp;y=2!</p>")).toBe(
+      '<p>see <a href="https://a.example.test/1">https://a.example.test/1</a>, then <a href="http://b.example.test/2?x=1&amp;y=2">http://b.example.test/2?x=1&amp;y=2</a>!</p>',
+    );
+  });
+
+  it("leaves links, code, buttons and text without an address as they are", () => {
+    const html = '<p><a href="https://x.example.test/a">https://x.example.test/a</a> <code>https://x.example.test/b</code> <button>https://x.example.test/c</button> no address, ftp://x.example.test</p>';
+    expect(linkBareAddresses(html)).toBe(html);
+    expect(linkBareAddresses(`<p><a href="https://x.example.test/a"><strong>https://x.example.test/a</strong></a></p>`)).not.toContain("</a></strong>");
+  });
+
+  it("opens the new link in a new tab once sanitized", () => {
+    const { html } = sanitizeProse("<p>Tracking: https://track.example.test/abc</p>");
+    expect(html).toBe('<p>Tracking: <a href="https://track.example.test/abc" target="_blank" rel="noopener noreferrer nofollow">https://track.example.test/abc</a></p>');
   });
 });
