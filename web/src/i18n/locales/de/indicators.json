@@ -84,6 +84,7 @@
     "conversation": "Unterhaltung",
     "mentionTeammate": "Teammitglied erwähnen",
     "mergeSearch": "Nach Betreff, Kunde oder #Nummer suchen",
-    "remove": "{{name}} entfernen"
+    "remove": "{{name}} entfernen",
+    "openFile": "{{name}} öffnen"
   }
 }

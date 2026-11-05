@@ -29,6 +29,21 @@ export function openInNewTab(href: string): void {
   window.open(href, "_blank", "noopener");
 }
 
+/** A web address that opens as it is: http or https, not a template tag or a mail link. */
+export function openableLink(href: string | null | undefined): boolean {
+  return /^https?:\/\/\S/i.test(href?.trim() ?? "");
+}
+
+/**
+ * The web address a Ctrl/Cmd click (Cmd on a Mac) lands on in editable text, where a plain
+ * click only places the cursor: the link's href when it opens as it is, else null.
+ */
+export function modClickedLink(e: { target: EventTarget | null; ctrlKey: boolean; metaKey: boolean }): string | null {
+  if (!(e.ctrlKey || e.metaKey) || !(e.target instanceof Element)) return null;
+  const href = e.target.closest("a[href]")?.getAttribute("href")?.trim();
+  return href && openableLink(href) ? href : null;
+}
+
 /** The href of a router destination, for a link that navigates with that destination in place. */
 export function useHref(): (to: NavigateOptions) => string {
   const router = useRouter();

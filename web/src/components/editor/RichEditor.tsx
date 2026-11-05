@@ -3,12 +3,13 @@ import { EditorContent, useEditor, type Editor, type Extensions } from "@tiptap/
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
-import { Bold, Code, Heading2, Heading3, ImageIcon, Italic, Link2, List, ListOrdered, Quote, Strikethrough, Type, Underline } from "lucide-react";
+import { Bold, Code, ExternalLink, Heading2, Heading3, ImageIcon, Italic, Link2, List, ListOrdered, Quote, Strikethrough, Type, Underline } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from "react";
 import { Popover } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
+import { modClickedLink, openableLink } from "@/lib/links";
 import { Tooltip } from "@/components/ui/tooltip";
 
 export type RichEditorHandle = {
@@ -88,6 +89,14 @@ export const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function
         class: cn("tiptap prose-od min-h-[64px] px-3 py-2.5", contentClassName),
         "aria-label": ariaLabel ?? placeholder ?? "Editor",
         "data-ph-mask": "true",
+      },
+      // A plain click places the cursor in a link to edit it; Ctrl/Cmd+click opens it, to
+      // check where it goes before sending.
+      handleClick: (_view, _pos, e) => {
+        const href = modClickedLink(e);
+        if (!href) return false;
+        window.open(href, "_blank", "noopener,noreferrer");
+        return true;
       },
       handleKeyDown: (_view, e) => {
         if (onKeyDown?.(e)) return true;
@@ -302,6 +311,19 @@ function LinkButton({ editor }: { editor: Editor }) {
         }}
       >
         <TextInput autoFocus inputSize="sm" value={href} onChange={(e) => setHref(e.target.value)} placeholder="https://" aria-label={ui("linkAddress")} />
+        {openableLink(href) && (
+          <Tooltip content={ui("openLink")}>
+            <a
+              href={href.trim()}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={ui("openLink")}
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-fg-3 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]"
+            >
+              <ExternalLink className="size-3.5" aria-hidden />
+            </a>
+          </Tooltip>
+        )}
         <Button type="submit" size="sm" variant="primary">
           {href.trim() ? ui("apply") : ui("remove")}
         </Button>
