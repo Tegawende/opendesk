@@ -56,6 +56,9 @@ describe("mock pictures, assignment and onboarding", () => {
     expect(a.body.new_ticket_notify).toBe("auto");
     expect((await call("PATCH", "/v1/assignment", { new_ticket_notify: "leads" })).body.new_ticket_notify).toBe("leads");
     expect((await call("PATCH", "/v1/assignment", { new_ticket_notify: "nobody" })).status).toBe(422);
+    expect(a.body.followup_keeps_assignee).toBe(false);
+    expect((await call("PATCH", "/v1/assignment", { followup_keeps_assignee: true })).body.followup_keeps_assignee).toBe(true);
+    expect((await call("PATCH", "/v1/assignment", { followup_keeps_assignee: "yes" })).status).toBe(422);
     expect((await call("PATCH", "/v1/members/me/availability", { availability: "away" })).body.availability).toBe("away");
     const bh = (await call("GET", "/v1/business-hours")).body;
     expect((await call("PUT", "/v1/business-hours", { ...bh, schedule: { ...bh.schedule, mon: [{ start: "09:10", end: "17:00" }] } })).status).toBe(422);

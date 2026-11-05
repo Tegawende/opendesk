@@ -576,6 +576,13 @@
         }
       }
     },
+    "followUpTitle": "Suites de tickets fermés",
+    "followUpHint": "Un e-mail qui répond à un ticket fermé ouvre un nouveau ticket, lié au ticket fermé.",
+    "followUp": {
+      "label": "Attribuer la suite au responsable du ticket fermé",
+      "on": "La suite va à la personne qui avait le ticket fermé, tant qu’elle fait partie de l’équipe et peut le voir",
+      "off": "Les suites arrivent sans responsable, comme tout nouveau ticket"
+    },
     "awayTitle": "Absence",
     "awayHint": "Les collègues absents ne reçoivent plus de nouveaux tickets jusqu’à leur retour.",
     "away": {

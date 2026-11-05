@@ -141,6 +141,9 @@ type Settings struct {
 	AutoAwayMinutes int `json:"auto_away_minutes"`
 	// NewTicketNotifyRaw is settings.new_ticket_notify; read it with NewTicketNotify().
 	NewTicketNotifyRaw string `json:"new_ticket_notify"`
+	// FollowUpKeepsAssignee gives a follow-up of a closed ticket (an email answering it opens a
+	// new ticket) to the closed ticket's assignee. Default false.
+	FollowUpKeepsAssignee bool `json:"followup_keeps_assignee"`
 	// BusinessHoursRaw is settings.business_hours; read it with Hours().
 	BusinessHoursRaw json.RawMessage `json:"business_hours"`
 	// Locale is the default language (BCP 47) of customer-facing pages; "" = the visitor's browser.
@@ -237,6 +240,7 @@ func ParseSettings(raw []byte) Settings {
 	field("auto_assign", &s.AutoAssign)
 	field("auto_away_minutes", &s.AutoAwayMinutes)
 	field("new_ticket_notify", &s.NewTicketNotifyRaw)
+	field("followup_keeps_assignee", &s.FollowUpKeepsAssignee)
 	field("business_hours", &s.BusinessHoursRaw)
 	field("auto_close_days", &s.AutoCloseDays)
 	field("ai", &s.AIRaw)

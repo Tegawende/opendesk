@@ -290,12 +290,24 @@ func (s *service) processInbound(ctx context.Context, wid, inboundID uuid.UUID) 
 			if err != nil {
 				return err
 			}
+			// A customer's follow-up of a closed ticket may go to whoever had it.
+			var assignee *uuid.UUID
+			if match != nil && !internal && !authFailed {
+				if assignee, err = followUpAssignee(ctx, tx, wid, match.ticketID, route.TeamID); err != nil {
+					return err
+				}
+			}
 			// Replies go out from the address the ticket arrived at.
 			ticket, err = domain.CreateTicket(ctx, tx, domain.NewTicket{WorkspaceID: wid, Subject: subject, Channel: domain.ChannelEmail,
-				MailboxID: &m.ID, ContactID: &contactID, TeamID: route.TeamID, Routed: route.Routed, Custom: custom,
+				MailboxID: &m.ID, ContactID: &contactID, TeamID: route.TeamID, Routed: route.Routed, Custom: custom, AssigneeID: assignee,
 				BrandID: &brand, OriginMailboxID: &m.ID, ReceivedAt: receivedAt, RequiredSkillIDs: route.RequiredSkillIDs})
 			if err != nil {
 				return err
+			}
+			if assignee != nil {
+				if err := followUpAssigned(ctx, tx, wid, ticket.ID, match.ticketID, match.number, *assignee); err != nil {
+					return err
+				}
 			}
 			if rule := route.RuleID(); rule != nil {
 				if err := routing.Count(ctx, tx, *rule); err != nil {

@@ -569,6 +569,13 @@
         }
       }
     },
+    "followUpTitle": "Follow-ups of closed tickets",
+    "followUpHint": "An email that answers a closed ticket opens a new ticket, linked to the closed one.",
+    "followUp": {
+      "label": "Give follow-ups to the closed ticket’s assignee",
+      "on": "The follow-up goes to whoever had the closed ticket, while they are still on the team and can see it",
+      "off": "Follow-ups arrive unassigned, like any new ticket"
+    },
     "awayTitle": "Away",
     "awayHint": "Teammates who step away stop getting new tickets until they are back.",
     "away": {

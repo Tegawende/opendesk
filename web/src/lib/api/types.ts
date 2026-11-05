@@ -38,6 +38,8 @@ export type WorkspaceSettings = {
   auto_assign?: AssignMode;
   /** Who hears about a new ticket nobody is assigned to (read only here, set through Assignment). Default "auto". */
   new_ticket_notify?: NewTicketNotify;
+  /** Where Assignment's followup_keeps_assignee is stored; read and set it through Assignment. Default false. */
+  followup_keeps_assignee?: boolean;
   /** Look up contact pictures on Gravatar. Default false. */
   gravatar?: boolean;
   /** Fetch company logos from the company's website. Default true. */
@@ -667,6 +669,8 @@ export type Assignment = {
   /** 0 is off, else 10..1440. */
   auto_away_minutes: number;
   new_ticket_notify: NewTicketNotify;
+  /** settings.followup_keeps_assignee: an email that answers a closed ticket opens a follow-up assigned to that ticket's assignee. Default false. */
+  followup_keeps_assignee: boolean;
 };
 export type TriageField = "priority" | "severity" | "labels" | "team";
 /** The decision engine behind triage (contracts/api.md). Jev is TypeSafe's decision model. */

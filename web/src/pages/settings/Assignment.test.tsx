@@ -107,6 +107,25 @@ describe("assignment skill catalog", () => {
     expect(ws.skills.find((item) => item.id === skill.id)?.member_ids).toContain(target.id);
   });
 
+  it("turns on giving a closed ticket's follow-up to its assignee", async () => {
+    const before = ws.workspace.settings.followup_keeps_assignee;
+    try {
+      await mount();
+      const find = () => el.querySelector<HTMLButtonElement>('[aria-label="Give follow-ups to the closed ticket’s assignee"]');
+      for (let i = 0; i < 50 && !find(); i++) await settle();
+      const toggle = find();
+      expect(toggle).toBeTruthy();
+      expect(toggle!.getAttribute("aria-checked")).toBe("false");
+      expect(el.textContent).toContain("Follow-ups arrive unassigned, like any new ticket");
+      await act(async () => toggle!.click());
+      for (let i = 0; i < 30 && !ws.workspace.settings.followup_keeps_assignee; i++) await settle();
+      expect(ws.workspace.settings.followup_keeps_assignee).toBe(true);
+      expect(toggle!.getAttribute("aria-checked")).toBe("true");
+    } finally {
+      ws.workspace.settings = { ...ws.workspace.settings, followup_keeps_assignee: before };
+    }
+  });
+
   it("creates a skill and assigns it to eligible teammates through the mock API", async () => {
     ws.skills = [];
     const created = await call("POST", "/v1/skills", { name: "  Billing   support " });

@@ -125,6 +125,23 @@ export default function Assignment() {
         )}
       </Section>
 
+      <Section title={t("assignment.followUpTitle")} description={t("assignment.followUpHint")}>
+        {a ? (
+          <Row label={t("assignment.followUp.label")} description={t(a.followup_keeps_assignee ? "assignment.followUp.on" : "assignment.followUp.off")}>
+            <Switch
+              aria-label={t("assignment.followUp.label")}
+              checked={a.followup_keeps_assignee}
+              disabled={!canEdit}
+              onCheckedChange={(followup_keeps_assignee) => write.mutate({ followup_keeps_assignee })}
+            />
+          </Row>
+        ) : (
+          <div className="py-4">
+            <Skeleton className="h-5 w-1/2" />
+          </div>
+        )}
+      </Section>
+
       <Section title={t("assignment.awayTitle")} description={t("assignment.awayHint")}>
         {a ? (
           <AwayRow minutes={a.auto_away_minutes} disabled={!canEdit} onChange={(auto_away_minutes) => write.mutate({ auto_away_minutes })} />

@@ -89,6 +89,7 @@ function assignment(ws: WsData): Assignment {
     rules: ws.routing.rules,
     auto_away_minutes: ws.routing.autoAwayMinutes,
     new_ticket_notify: notify && NEW_TICKET_NOTIFY.includes(notify) ? notify : "auto",
+    followup_keeps_assignee: ws.workspace.settings.followup_keeps_assignee ?? false,
   };
 }
 
@@ -318,6 +319,10 @@ export function registerPictures() {
     if ("new_ticket_notify" in b) {
       if (!NEW_TICKET_NOTIFY.includes(b.new_ticket_notify as NewTicketNotify)) throw invalid("new_ticket_notify must be auto, everyone, leads or off");
       ctx.ws.workspace.settings = { ...ctx.ws.workspace.settings, new_ticket_notify: b.new_ticket_notify as NewTicketNotify };
+    }
+    if ("followup_keeps_assignee" in b) {
+      if (typeof b.followup_keeps_assignee !== "boolean") throw invalid("followup_keeps_assignee must be true or false");
+      ctx.ws.workspace.settings = { ...ctx.ws.workspace.settings, followup_keeps_assignee: b.followup_keeps_assignee };
     }
     if ("auto_away_minutes" in b) {
       const n = b.auto_away_minutes;

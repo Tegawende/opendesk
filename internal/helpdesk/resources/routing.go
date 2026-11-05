@@ -30,17 +30,19 @@ type AssignmentRule struct {
 
 // Assignment is GET /v1/assignment.
 type Assignment struct {
-	Mode            string           `json:"mode" enum:"none,round_robin,load_balanced" doc:"Workspace default (settings.auto_assign)"`
-	Rules           []AssignmentRule `json:"rules"`
-	AutoAwayMinutes int              `json:"auto_away_minutes" doc:"0 = off"`
-	NewTicketNotify string           `json:"new_ticket_notify" enum:"auto,everyone,leads,off" doc:"Who is notified of a new ticket nobody is assigned to (settings.new_ticket_notify)"`
+	Mode                  string           `json:"mode" enum:"none,round_robin,load_balanced" doc:"Workspace default (settings.auto_assign)"`
+	Rules                 []AssignmentRule `json:"rules"`
+	AutoAwayMinutes       int              `json:"auto_away_minutes" doc:"0 = off"`
+	NewTicketNotify       string           `json:"new_ticket_notify" enum:"auto,everyone,leads,off" doc:"Who is notified of a new ticket nobody is assigned to (settings.new_ticket_notify)"`
+	FollowUpKeepsAssignee bool             `json:"followup_keeps_assignee" doc:"A follow-up of a closed ticket goes to the closed ticket's assignee (settings.followup_keeps_assignee). Default false"`
 }
 
 type assignmentPatch struct {
-	Mode            *string           `json:"mode,omitempty" enum:"none,round_robin,load_balanced"`
-	Rules           *[]AssignmentRule `json:"rules,omitempty" maxItems:"200" doc:"Replaces every rule"`
-	AutoAwayMinutes *int              `json:"auto_away_minutes,omitempty" minimum:"0" maximum:"1440" doc:"0 or 10..1440"`
-	NewTicketNotify *string           `json:"new_ticket_notify,omitempty" enum:"auto,everyone,leads,off"`
+	Mode                  *string           `json:"mode,omitempty" enum:"none,round_robin,load_balanced"`
+	Rules                 *[]AssignmentRule `json:"rules,omitempty" maxItems:"200" doc:"Replaces every rule"`
+	AutoAwayMinutes       *int              `json:"auto_away_minutes,omitempty" minimum:"0" maximum:"1440" doc:"0 or 10..1440"`
+	NewTicketNotify       *string           `json:"new_ticket_notify,omitempty" enum:"auto,everyone,leads,off"`
+	FollowUpKeepsAssignee *bool             `json:"followup_keeps_assignee,omitempty"`
 }
 
 // TriageSettings is GET /v1/triage.
@@ -73,7 +75,8 @@ func loadAssignment(ctx context.Context, q db.Querier, wid uuid.UUID) (Assignmen
 	if err != nil {
 		return Assignment{}, err
 	}
-	a := Assignment{Mode: st.AutoAssign, AutoAwayMinutes: st.AutoAwayMinutes, NewTicketNotify: st.NewTicketNotify(), Rules: []AssignmentRule{}}
+	a := Assignment{Mode: st.AutoAssign, AutoAwayMinutes: st.AutoAwayMinutes, NewTicketNotify: st.NewTicketNotify(),
+		FollowUpKeepsAssignee: st.FollowUpKeepsAssignee, Rules: []AssignmentRule{}}
 	if !slices.Contains(assignModes, a.Mode) {
 		a.Mode = "none"
 	}
@@ -160,6 +163,9 @@ func registerRouting(d *deps.Deps, api huma.API) {
 				}
 				patch["new_ticket_notify"] = *b.NewTicketNotify
 			}
+			if b.FollowUpKeepsAssignee != nil {
+				patch["followup_keeps_assignee"] = *b.FollowUpKeepsAssignee
+			}
 			var a Assignment
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				if len(patch) > 0 {
@@ -179,7 +185,7 @@ func registerRouting(d *deps.Deps, api huma.API) {
 				}
 				return audit.Log(ctx, tx, p, p.WorkspaceID, "assignment.updated", "workspace", &p.WorkspaceID,
 					map[string]any{"mode": a.Mode, "rules": len(a.Rules), "auto_away_minutes": a.AutoAwayMinutes,
-						"new_ticket_notify": a.NewTicketNotify})
+						"new_ticket_notify": a.NewTicketNotify, "followup_keeps_assignee": a.FollowUpKeepsAssignee})
 			})
 			if err != nil {
 				return nil, httpx.Wrap(err)
