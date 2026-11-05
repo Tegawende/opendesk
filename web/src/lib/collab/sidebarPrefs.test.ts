@@ -8,6 +8,7 @@ import {
   DEFAULT_MAIL_TABS,
   defaultSidebarPrefs,
   hid,
+  isHidden,
   livePins,
   moveSection,
   sectionsOffered,
@@ -68,6 +69,16 @@ describe("sidebar prefs", () => {
     const p = setHidden(defaultSidebarPrefs(), hid.section("teams"), true);
     expect(visibleSections(p)).toEqual(["favorites", "inbox", "mail", "views", "workspace"]);
     expect(setHidden(p, hid.section("teams"), false).hidden).toEqual([]);
+  });
+
+  it("hides the waiting chats row like any other row, shown until the member hides it", () => {
+    expect(isHidden(defaultSidebarPrefs(), hid.waitingChats)).toBe(false);
+    const p = setHidden(defaultSidebarPrefs(), hid.waitingChats, true);
+    expect(p.hidden).toEqual(["row:waiting_chats"]);
+    // Saved and read back, it stays hidden; the sections are untouched.
+    expect(isHidden(normalizePrefs(JSON.parse(JSON.stringify(p))), hid.waitingChats)).toBe(true);
+    expect(visibleSections(p)).toEqual(visibleSections(defaultSidebarPrefs()));
+    expect(setHidden(p, hid.waitingChats, false).hidden).toEqual([]);
   });
 
   it("moves sections and keeps unknown ids", () => {

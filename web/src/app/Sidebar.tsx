@@ -366,7 +366,7 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
     case "inbox":
       return (
         <Section id="inbox" label={collab.enabled ? t("nav.tickets") : t("nav.inbox")} rail={rail} first={first}>
-          <WaitingChats rail={rail} />
+          {!hidden.has(hid.waitingChats) && <WaitingChats rail={rail} />}
           {folders.filter((f) => !hidden.has(hid.ticketFolder(f.id))).map((f) => {
             const key = hid.ticketFolder(f.id);
             const counted = f.id !== "solved" && f.id !== "spam";

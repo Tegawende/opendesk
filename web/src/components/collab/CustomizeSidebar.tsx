@@ -255,14 +255,18 @@ export function CustomizeSidebar() {
         return out;
       }
       case "inbox":
-        return ticketFolders.map((f) => ({
-          key: f.id,
-          label: tNav(f.labelKey),
-          icon: <Layers />,
-          hideId: hid.ticketFolder(f.id),
-          pin: { kind: "ticket_folder", id: f.id },
-          badge: f.id === "solved" || f.id === "spam" ? undefined : ticketBadge(hid.ticketFolder(f.id), "inbox"),
-        }));
+        return [
+          // Shown only while someone waits, so a member who does not take chats can leave it out.
+          { key: "waiting_chats", label: t("customize.waitingChats"), icon: <span className="size-2 rounded-full bg-tone-red-solid" />, hideId: hid.waitingChats, note: t("customize.waitingChatsNote") },
+          ...ticketFolders.map((f): Item => ({
+            key: f.id,
+            label: tNav(f.labelKey),
+            icon: <Layers />,
+            hideId: hid.ticketFolder(f.id),
+            pin: { kind: "ticket_folder", id: f.id },
+            badge: f.id === "solved" || f.id === "spam" ? undefined : ticketBadge(hid.ticketFolder(f.id), "inbox"),
+          })),
+        ];
       case "teams":
         return teams.teams
           .filter(teams.canSeeTeam)

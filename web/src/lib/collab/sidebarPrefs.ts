@@ -161,6 +161,8 @@ export const hid = {
   view: (id: string) => `view:${id}`,
   team: (id: string) => `team:${id}`,
   ticketFolder: (id: string) => `ticket_folder:${id}`,
+  /** The red row on top of Inbox while visitors wait in live chat with nobody on it. */
+  waitingChats: "row:waiting_chats",
 };
 
 // ── Numbers beside rows ──────────────────────────────────────────────────

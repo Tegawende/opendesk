@@ -66,6 +66,8 @@
     "done": "Done",
     "accountFolders": "Folders",
     "everyAccount": "In every account",
+    "waitingChats": "Waiting chats",
+    "waitingChatsNote": "While a visitor waits",
     "numbers": "Numbers",
     "numbersHint": "What the number beside each row counts.",
     "numberFor": "Number beside {{name}}",

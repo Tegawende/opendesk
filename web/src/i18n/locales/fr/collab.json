@@ -66,6 +66,8 @@
     "done": "Terminé",
     "accountFolders": "Dossiers",
     "everyAccount": "Dans chaque compte",
+    "waitingChats": "Chats en attente",
+    "waitingChatsNote": "Quand un visiteur attend",
     "numbers": "Nombres",
     "numbersHint": "Ce que compte le nombre à côté de chaque ligne.",
     "numberFor": "Nombre à côté de {{name}}",

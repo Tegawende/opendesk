@@ -831,7 +831,7 @@ interface CollabStatus {
 
 interface SidebarPrefs {
   order: string[]              // section ids, top to bottom: "favorites", "inbox", "mail", "teams", "views", "workspace" (the default)
-  hidden: string[]             // "section:<id>", "box:<box>", "account:<id>", "folder:<id>", "folder:<inbox|starred|...>", "view:<id>", "team:<id>", "ticket_folder:<id>"
+  hidden: string[]             // "section:<id>", "box:<box>", "account:<id>", "folder:<id>", "folder:<inbox|starred|...>", "view:<id>", "team:<id>", "ticket_folder:<id>", "row:waiting_chats"
   pinned: { kind: "box" | "folder" | "account" | "view" | "team" | "ticket_folder" | "view_section"; id: string }[]  // shown under Favorites, in order, at most 30
   expanded_accounts: string[]  // account ids whose folders show in the sidebar; folded by default (the mail page has every folder)
   mark_read_on_open: boolean   // default true
@@ -847,7 +847,8 @@ its own rows instead; a whole section in a Space follows these preferences.
 
 Every member has them, with or without Collab. Without Collab they arrange the ticket side: the
 order of Favorites, Inbox, Teams, Views and Workspace, hidden rows and sections, favorites of inbox
-folders, teams, views and view sections, and their numbers. The Mail section, mail rows and favorites, `unified_inbox`,
+folders, teams, views and view sections, and their numbers. `row:waiting_chats` hides the red row on top of
+Inbox that shows while visitors wait in live chat with nobody on it. The Mail section, mail rows and favorites, `unified_inbox`,
 `mark_read_on_open`, `mail_tabs` and `auto_pins` are Collab's: kept as saved, used once it is on.
 
 **View sections in Favorites.** A `view_section` favorite names a view section (contracts/api.md,
