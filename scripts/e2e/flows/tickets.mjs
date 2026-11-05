@@ -84,6 +84,8 @@ export async function run(t) {
     assert(merged, `merged source closed (${id})`);
     const msgs = await api("GET", `/v1/tickets/${t.ticketId}/messages`, { token: tok(), workspace: t.workspaceId });
     assert(msgs.json.data.some((m) => m.body_text.includes("export button")), "messages moved into the target");
+    // The target was solved above; the open ticket merged into it reopens it.
+    await until(async () => (await getTicket(t.ticketId)).status === "open", "solved target reopened");
   });
 
   await t.step("bulk: select two tickets and set priority", async () => {
