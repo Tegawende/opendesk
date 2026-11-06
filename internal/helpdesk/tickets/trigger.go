@@ -795,6 +795,10 @@ func resolveAssignMode(ctx context.Context, q pgx.Tx, wid uuid.UUID, team, mailb
 // (contracts/api.md "Assignment"). After Ollie triaged a new ticket and the workspace
 // turned assign_after_triage on, the assignment is attributed to ai.
 func autoAssign(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID, trigger string) error {
+	// A chat follows the workspace's chat rule when it has one.
+	if handled, err := autoAssignChat(ctx, tx, d, wid, tid); handled || err != nil {
+		return err
+	}
 	s, err := hd.LoadSettings(ctx, tx, wid)
 	if err != nil {
 		return err

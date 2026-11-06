@@ -487,7 +487,14 @@ func (s *Service) postReply(ctx context.Context, in agentInput, trigger uuid.UUI
 func (s *Service) decline(ctx context.Context, wid, tid, mid uuid.UUID) error {
 	_, err := s.d.DB.Pool.Exec(ctx, `INSERT INTO ai_widget_answers (message_id, workspace_id, ticket_id, answered) VALUES ($1, $2, $3, false)
 		ON CONFLICT DO NOTHING`, mid, wid, tid)
-	return err
+	if err != nil {
+		return err
+	}
+	// A chat the capped bot leaves goes to a member who takes chats.
+	return s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+		_, err := hd.AssignChat(ctx, tx, wid, tid)
+		return err
+	})
 }
 
 // handoffBot is the bot as a handoff records it.

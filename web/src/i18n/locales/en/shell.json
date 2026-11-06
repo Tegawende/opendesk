@@ -73,6 +73,11 @@
     "label": "Search"
   },
   "newTicket": "New ticket",
+  "chatPopup": {
+    "title": "New chat",
+    "open": "Open",
+    "close": "Close"
+  },
   "notifications": {
     "allow": {
       "title": "Get told about new tickets and replies.",
