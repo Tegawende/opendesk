@@ -9,6 +9,8 @@ import type { SavedReply } from "@/lib/api/types";
 import { api } from "@/lib/api/endpoints";
 import { bytes } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { isDesktop } from "@/lib/desktop";
+import { viewType } from "@/lib/fileView";
 import { tone } from "@/lib/tones";
 import { Picker } from "@/components/ui/picker";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -35,9 +37,22 @@ export function uploadFiles(files: FileList | File[], setUploads: Dispatch<SetSt
   }
 }
 
-/** Opens a file the composer holds in a new tab, to check it before sending (a PDF or an image shows in the browser). */
+/**
+ * Whether a file the composer holds opens from its name: not a type the browser would not
+ * show, and not in the desktop app, whose windows open only web addresses.
+ */
+export function canOpenFile(file: File) {
+  return !isDesktop && viewType(file.type) !== null;
+}
+
+/**
+ * Opens a file the composer holds in a new tab, to check it before sending (a PDF or an
+ * image shows in the browser; HTML, SVG and other active types show as their text).
+ */
 export function openFile(file: File) {
-  const url = URL.createObjectURL(file);
+  const type = viewType(file.type);
+  if (isDesktop || !type) return;
+  const url = URL.createObjectURL(type === file.type ? file : new Blob([file], { type }));
   window.open(url, "_blank", "noopener,noreferrer");
   // The new tab has read it by then; the composer keeps the file itself.
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
@@ -45,18 +60,27 @@ export function openFile(file: File) {
 
 export function UploadChip({ u, onRemove }: { u: Upload; onRemove: () => void }) {
   const { t } = useTranslation("inbox");
+  const label = (
+    <>
+      <span className="block truncate text-[11.5px] group-hover:underline">{u.file.name}</span>
+      <span className="mono block text-[10px] text-fg-4">{u.status === "uploading" ? t("composer.uploading") : u.status === "error" ? t("composer.failed") : bytes(u.file.size)}</span>
+    </>
+  );
   return (
     <span className={cn("flex h-8 max-w-[220px] items-center gap-2 rounded-md border bg-surface pl-1 pr-1 animate-pop-in motion-reduce:animate-none", u.status === "error" ? tone.red.line : "border-line")}>
       {u.preview ? <img src={u.preview} alt="" className="size-6 rounded-sm object-cover" /> : <span className="flex size-6 items-center justify-center rounded-sm bg-hover"><Paperclip className="size-3 text-fg-3" /></span>}
-      <button
-        type="button"
-        onClick={() => openFile(u.file)}
-        aria-label={i18n.t("indicators:tickets.openFile", { name: u.file.name })}
-        className="group min-w-0 rounded-sm text-left outline-none focus-visible:shadow-[0_0_0_2px_var(--focus)]"
-      >
-        <span className="block truncate text-[11.5px] group-hover:underline">{u.file.name}</span>
-        <span className="mono block text-[10px] text-fg-4">{u.status === "uploading" ? t("composer.uploading") : u.status === "error" ? t("composer.failed") : bytes(u.file.size)}</span>
-      </button>
+      {canOpenFile(u.file) ? (
+        <button
+          type="button"
+          onClick={() => openFile(u.file)}
+          aria-label={i18n.t("indicators:tickets.openFile", { name: u.file.name })}
+          className="group min-w-0 rounded-sm text-left outline-none focus-visible:shadow-[0_0_0_2px_var(--focus)]"
+        >
+          {label}
+        </button>
+      ) : (
+        <span className="min-w-0">{label}</span>
+      )}
       {u.status === "uploading" ? (
         <Loader2 className="size-3.5 shrink-0 animate-spin text-fg-4" />
       ) : (
