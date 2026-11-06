@@ -85,7 +85,10 @@
     "awaiting": "En attente d’une réponse",
     "severity": "{{severity}}",
     "receivedAt": "Envoyé à {{address}}",
-    "assignedTo": "Attribué à {{name}}"
+    "assignedTo": "Attribué à {{name}}",
+    "note": "Note interne",
+    "noteBy": "{{name}} :",
+    "noteFrom": "Note interne de {{name}}, {{when}}"
   },
   "waiting": {
     "label": "En attente depuis {{time}}",
@@ -633,7 +636,8 @@
     "replyToHint": "L’expéditeur a demandé que les réponses soient envoyées à cette adresse",
     "unverified": "Expéditeur non vérifié",
     "unverifiedHint": "Le domaine de l’expéditeur a échoué à la vérification d’authentification des e-mails. L’expéditeur n’est peut-être pas celui qu’il prétend être. Soyez prudent avec les liens et les demandes de ce message.",
-    "viaForm": "Envoyé via le formulaire à l’adresse <m>{{address}}</m>"
+    "viaForm": "Envoyé via le formulaire à l’adresse <m>{{address}}</m>",
+    "forward": "Transférer"
   },
   "merge": {
     "title": "Fusionner #{{number}} avec un autre ticket",
@@ -795,7 +799,18 @@
     "withBoth_one": "avec la conversation citée et 1 fichier du client",
     "withBoth_other": "avec la conversation citée et {{count}} fichiers du client",
     "withBoth_many": "avec la conversation citée et {{count}} fichiers du client",
-    "optionsHint": "Inclure la conversation ou les fichiers du client"
+    "optionsHint": "Inclure la conversation ou les fichiers du client",
+    "withForwarded": "E-mail transféré",
+    "forwarded": "E-mail transféré",
+    "forwardFrom": "De",
+    "forwardDate": "Date",
+    "forwardSubject": "Objet",
+    "forwardTo": "À",
+    "forwardRemove": "Retirer l’e-mail transféré",
+    "withForward": "avec l’e-mail transféré",
+    "withForwardAndFiles_one": "avec l’e-mail transféré et 1 fichier",
+    "withForwardAndFiles_other": "avec l’e-mail transféré et {{count}} fichiers",
+    "withForwardAndFiles_many": "avec l’e-mail transféré et {{count}} fichiers"
   },
   "links": {
     "title": "Liens",
@@ -974,5 +989,33 @@
     "refunded": "Remboursé : {{amount}}",
     "openLink": "Ouvrir {{name}}",
     "copyValue": "Copier {{name}}"
+  },
+  "print": {
+    "action": "Imprimer ou enregistrer en PDF",
+    "dialogTitle": "Imprimer la conversation",
+    "dialogDescription": "Ouvre le ticket sous forme de document à imprimer. Pour garder un fichier, choisissez Enregistrer au format PDF comme imprimante.",
+    "notes": "Inclure les notes internes",
+    "notesHint": "Les notes de votre équipe, que le client ne voit jamais.",
+    "side": "Inclure les conversations parallèles",
+    "sideHint": "Les e-mails échangés avec des personnes extérieures à votre équipe au sujet de ce ticket.",
+    "open": "Ouvrir l’aperçu",
+    "toolbar": "Aperçu avant impression",
+    "conversation": "Conversation",
+    "oneMessage": "Un message",
+    "close": "Fermer",
+    "print": "Imprimer",
+    "remoteImages": "Afficher les images distantes",
+    "remoteImagesHint": "Les images d’autres sites sont masquées. Les charger indique à l’expéditeur que l’e-mail a été ouvert.",
+    "requester": "Demandeur",
+    "status": "Statut",
+    "created": "Ouvert le",
+    "to": "À :",
+    "cc": "Cc :",
+    "sideConversation": "Conversation parallèle",
+    "sideConversationNamed": "Conversation parallèle : {{subject}}",
+    "imagesHidden": "Images distantes non affichées",
+    "attachments": "Pièces jointes",
+    "nothing": "Rien à imprimer",
+    "nothingHint": "Aucun message à imprimer avec ces options, ou le message n’est plus dans le ticket."
   }
 }

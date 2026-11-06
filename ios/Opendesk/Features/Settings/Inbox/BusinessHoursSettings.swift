@@ -19,10 +19,9 @@ struct BusinessHoursSettings: View {
             if let draft { page(draft) }
         }
         .accountTitle(SettingsPage.businessHours.title)
-        .safeAreaInset(edge: .bottom) {
-            if dirty && canEdit { saveBar.transition(.move(edge: .bottom).combined(with: .opacity)) }
+        .settingsSaveBar(dirty: dirty && canEdit, problem: invalid ? "Fix the hours marked in red to save." : nil, saving: saving, canSave: !invalid, save: save) {
+            draft = store.saved
         }
-        .motion(Motion.snappy, value: dirty)
         .sheet(isPresented: $pickingZone) {
             InboxOptionSheet(
                 title: "Time zone",
@@ -307,27 +306,6 @@ struct BusinessHoursSettings: View {
     }
 
     // MARK: Save
-
-    private var saveBar: some View {
-        HStack(spacing: 10) {
-            Text(invalid ? "Fix the hours marked in red to save." : "You have unsaved changes.")
-                .font(ODFont.sans(13.5))
-                .foregroundStyle(invalid ? Tone.red.text : Theme.fg2)
-                .lineLimit(2)
-            Spacer(minLength: 6)
-            Button("Discard") { draft = store.saved }
-                .buttonStyle(OutlineButtonStyle())
-                .fixedSize()
-            Button(action: save) { ButtonLabel(title: "Save", busy: saving) }
-                .buttonStyle(InkButtonStyle())
-                .fixedSize()
-                .disabled(invalid || saving)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(.bar)
-        .overlay(alignment: .top) { Hairline() }
-    }
 
     private func save() {
         guard let draft else { return }

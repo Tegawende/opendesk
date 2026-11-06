@@ -52,7 +52,7 @@
     "historyLast": "The previous message",
     "historyAll": "The whole conversation",
     "historyHeader": "Quote line",
-    "historyHeaderHint": "Above each quoted message. Use {{author}} and {{date}}."
+    "historyHeaderHint": "Above each quoted message. Use {{author}}, {{email}} (the sender's address) and {{date}}."
   },
   "csat": {
     "off": "Satisfaction surveys are off, so this email is not sent yet.",

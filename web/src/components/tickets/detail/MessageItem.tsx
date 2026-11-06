@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, ArrowDown, Check, CheckCheck, Download, FileText, Globe, ImageOff, Lock, Mail, MessagesSquare, MoreHorizontal, Pencil, Quote, Reply, RotateCcw, RotateCw, Send, ShieldAlert, Trash2, Undo2 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { AlertCircle, ArrowDown, Check, CheckCheck, Download, FileText, Forward, Globe, ImageOff, Lock, Mail, MessagesSquare, MoreHorizontal, Pencil, Printer, Quote, Reply, RotateCcw, RotateCw, Send, ShieldAlert, Trash2, Undo2 } from "lucide-react";
 import { memo, useMemo, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { tone } from "@/lib/tones";
@@ -8,8 +9,7 @@ import { api } from "@/lib/api/endpoints";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole, useSession } from "@/lib/session";
 import { isBlankHtml } from "@/lib/collab/html";
-import { isDesignedEmail, type Sanitized, sanitizeEmailHtml, sanitizeProse } from "@/lib/sanitize";
-import { useAlwaysShowImages } from "@/lib/alwaysShowImages";
+import { loadImagesFor, useAlwaysShowImages, useImagesLoadedFor } from "@/lib/alwaysShowImages";
 import { bytes, clock, fullDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Avatar } from "@/components/ui/avatar";
@@ -27,34 +27,18 @@ import { SentEmail } from "./SentEmail";
 import { RichEditor } from "@/components/editor/RichEditor";
 import { mentionExtension, useSuggest } from "./suggestions";
 import { useConfirm } from "@/components/ui/confirm";
-import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { toast } from "@/components/ui/toast";
 import { useNow } from "@/lib/useNow";
 import { messageAuthor, messageFrame } from "./messageFrame";
+import { authorName, messageHtml, sanitizeBody, type SanitizedBody } from "./messageBody";
 import { asNote, release, undo, useHeld } from "./outbox";
 import { showInTimeline } from "./Timeline";
+import { inConversation } from "./SideIncludes";
 
-function authorName(m: Message): string {
-  if (m.author.user) return m.author.user.name;
-  if (m.author.contact) return m.author.contact.name || m.author.contact.email || m.from_email;
-  if (m.author.type === "system") return "opendesk";
-  if (m.author.type === "api") return m.from_name || "API";
-  return m.from_name || m.from_email || "Unknown";
-}
-
-type SanitizedBody = Sanitized & { designed: boolean; note: boolean };
-
-/**
- * A message body, sanitized once. An inbound email holds back images from other sites
- * until the reader loads them; a designed one, received, sent or a note, renders in its own frame.
- * A note's frame follows the app's theme: it is ours, not a sender's layout to show as sent.
- */
+/** A message body, sanitized once (sanitizeBody). */
 function useBody(html: string, inbound: boolean, designable: boolean, remote: boolean, note = false): SanitizedBody {
-  return useMemo(() => {
-    const opts = { blockRemoteImages: inbound && !remote };
-    if (designable && isDesignedEmail(html)) return { designed: true, note, ...sanitizeEmailHtml(html, opts) };
-    return { designed: false, note, ...sanitizeProse(html, opts) };
-  }, [html, inbound, designable, remote, note]);
+  return useMemo(() => sanitizeBody(html, { inbound, designable, remote, note }), [html, inbound, designable, remote, note]);
 }
 
 function Body({ body, className }: { body: SanitizedBody; className?: string }) {
@@ -422,6 +406,16 @@ function ThreadBar({ thread, actions, first }: { thread: Thread; actions?: Threa
           {t("side.withHistory")}
         </span>
       )}
+      {first && thread.forward_message_id && (
+        <button
+          type="button"
+          onClick={() => showInTimeline(thread.forward_message_id!)}
+          className="flex shrink-0 items-center gap-1 rounded-sm bg-hover px-1.5 text-[10.5px] text-fg-3 outline-none transition-colors hover:bg-active hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]"
+        >
+          <Forward className="size-2.5" />
+          {t("side.withForwarded")}
+        </button>
+      )}
       {closed && <span className="shrink-0 rounded-sm bg-hover px-1.5 text-[10.5px] text-fg-3">{t("message.threadClosed")}</span>}
       {actions && (
         <span className="ml-auto flex items-center gap-1">
@@ -498,6 +492,7 @@ export const MessageItem = memo(function MessageItem({
   onRetry,
   onToReply,
   onRetract,
+  onForward,
   highlight,
   receivedAt,
   thread,
@@ -510,6 +505,8 @@ export const MessageItem = memo(function MessageItem({
   onToReply?: (m: Message) => void;
   /** Takes a sent chat reply back from the customer, as an internal note. */
   onRetract?: (m: Message) => void;
+  /** Starts a side conversation that forwards this email in full. */
+  onForward?: (m: Message) => void;
   highlight?: boolean;
   /** The ticket's first address, for inbound messages that don't record one; null when the ticket isn't email. */
   receivedAt?: string | null;
@@ -552,7 +549,11 @@ export const MessageItem = memo(function MessageItem({
   const deletable = !inThread && (admin || (m.author.type === "user" && (rule === "all" || (rule === "own" && mine && note))));
   // Only a chat reply that was not emailed as a follow-up (delivery "none") can be taken back.
   const retractable = !!onRetract && outbound && m.author.type === "user" && !m.ai && (mine || admin) && m.delivery_status === "none";
+  // An email of the conversation with the customer, as a side conversation may forward it.
+  const forwardable = !!onForward && inConversation(m);
   const [editing, setEditing] = useState(false);
+  const navigate = useNavigate();
+  const print = () => void navigate({ to: "/tickets/$ticketId/print", params: { ticketId: m.ticket_id }, search: { message: m.id } });
   const remove = () =>
     confirm.show(
       t(note ? "message.deleteConfirm" : m.direction === "inbound" ? "message.deleteInboundConfirm" : "message.deleteReplyConfirm"),
@@ -574,11 +575,12 @@ export const MessageItem = memo(function MessageItem({
     );
   const address = useMessageAddress(m, receivedAt);
   const inbound = m.direction === "inbound" && !note;
-  const [loaded, setRemote] = useState(false);
   // Loaded for this message, or for every email (Settings → Profile → Appearance).
+  const loaded = useImagesLoadedFor(m.id);
   const remote = useAlwaysShowImages() || loaded;
+  const setRemote = () => loadImagesFor(m.id);
   const translated = !!(tr.showing && tr.html);
-  const body = useBody(translated ? tr.html! : m.body_html || `<p>${m.body_text}</p>`, inbound, !translated, remote, note);
+  const body = useBody(translated ? tr.html! : messageHtml(m), inbound, !translated, remote, note);
   const replyTo = inbound && m.reply_to && m.reply_to.toLowerCase() !== m.from_email.toLowerCase() ? m.reply_to : null;
 
   // A note sent as a reply is hidden like a deleted message, and says where its words went.
@@ -636,7 +638,7 @@ export const MessageItem = memo(function MessageItem({
           </time>
         </Tooltip>
         {note && m.edited_at && <span className="shrink-0 text-[10.5px] text-fg-4">{t("message.edited")}</span>}
-        {(deletable || retractable || (editableNote && onToReply)) && !editing && !m.id.startsWith("tmp-") && (
+        {!editing && !m.id.startsWith("tmp-") && (
           <Menu>
             <MenuTrigger asChild>
               <button
@@ -662,15 +664,26 @@ export const MessageItem = memo(function MessageItem({
                   {t("message.edit")}
                 </MenuItem>
               )}
+              {forwardable && (
+                <MenuItem icon={<Forward />} onSelect={() => onForward(m)}>
+                  {t("message.forward")}
+                </MenuItem>
+              )}
               {retractable && (
                 <MenuItem icon={<Lock />} onSelect={() => onRetract(m)}>
                   {t("message.retract")}
                 </MenuItem>
               )}
+              <MenuItem icon={<Printer />} onSelect={print}>
+                {t("print.action")}
+              </MenuItem>
               {deletable && (
-                <MenuItem icon={<Trash2 />} danger onSelect={remove}>
-                  {t(note ? "message.delete" : "message.deleteMessage")}
-                </MenuItem>
+                <>
+                  <MenuSeparator />
+                  <MenuItem icon={<Trash2 />} danger onSelect={remove}>
+                    {t(note ? "message.delete" : "message.deleteMessage")}
+                  </MenuItem>
+                </>
               )}
             </MenuContent>
           </Menu>
@@ -701,7 +714,7 @@ export const MessageItem = memo(function MessageItem({
           </div>
         )}
         <TranslatedNote tr={tr} />
-        {body.held > 0 && <HeldImages onLoad={() => setRemote(true)} />}
+        {body.held > 0 && <HeldImages onLoad={setRemote} />}
         {editing ? <NoteEditor m={m} onDone={() => setEditing(false)} /> : <Body body={body} />}
         {/* An email we sent keeps the copy that went out: it opens as its recipients got it. */}
         {outbound && m.has_quoted && (
@@ -730,7 +743,7 @@ export const MessageItem = memo(function MessageItem({
                 <MoreHorizontal className="size-3.5" />
               </button>
             </Tooltip>
-            {showOriginal && <Original id={m.id} inbound={inbound} remote={remote} onLoadImages={() => setRemote(true)} />}
+            {showOriginal && <Original id={m.id} inbound={inbound} remote={remote} onLoadImages={setRemote} />}
           </div>
         )}
         <Attachments items={m.attachments} />

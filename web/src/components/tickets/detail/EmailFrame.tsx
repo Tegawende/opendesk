@@ -12,7 +12,7 @@ import { useTheme } from "@/lib/theme";
 // the dark theme, its colours are turned dark (inverted, hues kept; images turned back).
 
 const BASE = `
-:root { color-scheme: light; }
+:root { color-scheme: light; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 html, body { margin: 0; padding: 0; background: #fff; }
 body { color: #1f2328; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; overflow-wrap: break-word; -webkit-text-size-adjust: 100%; overflow: hidden; }
 #od-email { display: flow-root; }
@@ -39,11 +39,17 @@ export function frameDocument(html: string, themed = false, dark = false) {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light"><meta name="referrer" content="no-referrer"><base target="_blank"><style>${css}</style></head><body><div id="od-email">${html}</div></body></html>`;
 }
 
-/** html is the output of sanitizeEmailHtml. themed: an internal note, following the app's theme. */
-export function EmailFrame({ html, title, className, themed = false }: { html: string; title: string; className?: string; themed?: boolean }) {
+/**
+ * html is the output of sanitizeEmailHtml. themed: an internal note, following the app's theme.
+ * print: on a page to print, which is light whatever the theme, and where the frame takes its
+ * content's whole height (a frame does not scroll on paper).
+ */
+export function EmailFrame({ html, title, className, themed = false, print = false }: { html: string; title: string; className?: string; themed?: boolean; print?: boolean }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(0);
-  const { dark } = useTheme();
+  const theme = useTheme();
+  const dark = theme.dark && !print;
+  const max = print ? Infinity : MAX_HEIGHT;
   const doc = useMemo(() => frameDocument(html, themed, dark), [html, themed, dark]);
 
   useEffect(() => {
@@ -58,8 +64,8 @@ export function EmailFrame({ html, title, className, themed = false }: { html: s
       const avail = frame.clientWidth;
       if (avail > 0 && wide > avail + 1) root.style.zoom = String(Math.max(avail / wide, 0.4));
       const full = Math.ceil(root.getBoundingClientRect().height);
-      const h = Math.min(full, MAX_HEIGHT);
-      root.ownerDocument.body.style.overflowY = full > MAX_HEIGHT ? "auto" : "hidden";
+      const h = Math.min(full, max);
+      root.ownerDocument.body.style.overflowY = full > max ? "auto" : "hidden";
       setHeight((prev) => (Math.abs(prev - h) > 1 ? h : prev));
     };
     // Keyboard events inside a frame do not bubble to the reading pane.
@@ -89,7 +95,7 @@ export function EmailFrame({ html, title, className, themed = false }: { html: s
       observer?.disconnect();
       frameDoc?.removeEventListener("keydown", onKey);
     };
-  }, [doc]);
+  }, [doc, max]);
 
   // On a dark surface the light pane gets a margin of its own; a themed one has no pane.
   return (

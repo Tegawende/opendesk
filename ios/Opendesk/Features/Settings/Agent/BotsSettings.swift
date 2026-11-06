@@ -322,19 +322,11 @@ private struct BotBuilder: View {
                 .accessibilityLabel("Actions for \(bot.name)")
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            if dirty {
-                VStack(spacing: 6) {
-                    if needsPicture {
-                        Text("Upload a picture or pick another look").font(ODFont.footnote).foregroundStyle(Tone.red.text)
-                    }
-                    AgentSaveBar(busy: saving, canSave: !invalid, discard: {
-                        withAnimation(Motion.snappy) { draft = base }
-                    }, save: { Task { await save() } })
-                }
-            }
+        .settingsSaveBar(dirty: dirty, problem: needsPicture ? "Upload a picture or pick another look" : nil, saving: saving, canSave: !invalid) {
+            Task { await save() }
+        } discard: {
+            withAnimation(Motion.snappy) { draft = base }
         }
-        .motion(Motion.snappy, value: dirty)
         .accountConfirm($confirm)
         .onChange(of: BotDraft(bot)) { _, next in
             // Follow the server (realtime, another device) until the first edit.

@@ -17,6 +17,14 @@ const (
 	ThreadClosed = "closed"
 )
 
+// CustomerConversationSQL is the condition, on messages m, for what of the customer's
+// conversation may be quoted or forwarded (email history, a thread's include_history and
+// forward_message_id): public replies the customer wrote or that reached them. Never notes,
+// another thread's messages, deleted messages, mail that failed its sender checks or a reply
+// that did not go out.
+const CustomerConversationSQL = `m.kind = 'reply' AND m.thread_id IS NULL AND m.deleted_at IS NULL
+	AND ((m.direction = 'inbound' AND NOT m.auth_failed) OR (m.direction = 'outbound' AND m.delivery_status IN ('sent', 'none')))`
+
 // Thread is a third-party thread (contracts/api.md "Threads"): an email conversation on a
 // ticket with someone outside the team. Its messages are notes with ThreadID set.
 type Thread struct {
@@ -28,15 +36,17 @@ type Thread struct {
 	MailboxID *uuid.UUID `json:"mailbox_id"`
 	Status    string     `json:"status" enum:"open,closed"`
 	// IncludeHistory: the first message quoted the ticket's conversation with the customer.
-	IncludeHistory bool      `json:"include_history"`
-	CreatedBy      *UserRef  `json:"created_by"`
-	MessageCount   int       `json:"message_count"`
-	LastMessageAt  time.Time `json:"last_message_at"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	IncludeHistory bool `json:"include_history"`
+	// ForwardMessageID: the first message forwarded this email of the ticket in full.
+	ForwardMessageID *uuid.UUID `json:"forward_message_id"`
+	CreatedBy        *UserRef   `json:"created_by"`
+	MessageCount     int        `json:"message_count"`
+	LastMessageAt    time.Time  `json:"last_message_at"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
-const threadSelect = `SELECT th.id, th.ticket_id, th.subject, th.to_emails, th.cc_emails, th.mailbox_id, th.status, th.include_history,
+const threadSelect = `SELECT th.id, th.ticket_id, th.subject, th.to_emails, th.cc_emails, th.mailbox_id, th.status, th.include_history, th.forward_message_id,
 	u.id, u.name, u.email, u.avatar_url,
 	(SELECT count(*) FROM messages m WHERE m.thread_id = th.id),
 	th.last_message_at, th.created_at, th.updated_at
@@ -46,7 +56,7 @@ func scanThread(row pgx.Row) (Thread, error) {
 	var t Thread
 	var uID *uuid.UUID
 	var uName, uEmail, uAvatar *string
-	if err := row.Scan(&t.ID, &t.TicketID, &t.Subject, &t.To, &t.Cc, &t.MailboxID, &t.Status, &t.IncludeHistory,
+	if err := row.Scan(&t.ID, &t.TicketID, &t.Subject, &t.To, &t.Cc, &t.MailboxID, &t.Status, &t.IncludeHistory, &t.ForwardMessageID,
 		&uID, &uName, &uEmail, &uAvatar, &t.MessageCount, &t.LastMessageAt, &t.CreatedAt, &t.UpdatedAt); err != nil {
 		return t, err
 	}

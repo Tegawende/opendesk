@@ -1,10 +1,10 @@
 import { motion, useReducedMotion } from "motion/react";
-import { AlarmClock, Check, UserPlus } from "lucide-react";
+import { AlarmClock, Check, Lock, UserPlus } from "lucide-react";
 import { forwardRef, memo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { Ticket } from "@/lib/api/types";
+import type { Ticket, TicketLastNote } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
-import { relShort, fullDate } from "@/lib/format";
+import { relLong, relShort, fullDate } from "@/lib/format";
 import { ease } from "@/lib/motion";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -12,7 +12,8 @@ import { ChannelIcon, channelLabel, PriorityIcon, SeverityChip, severityLabel, S
 import { useDisplay } from "./fields";
 import { SetByOllie, useOllieNote } from "./ollie";
 import { aiDecisions } from "@/lib/decisions";
-import { useAssigneeDisplay } from "@/lib/listDisplay";
+import { useAssigneeDisplay, useShowLastNote } from "@/lib/listDisplay";
+import { tone } from "@/lib/tones";
 import { AssigneeMark, Viewers } from "./people";
 import { rowMotion } from "./motion";
 import { Labels } from "@/components/contacts/bits";
@@ -57,6 +58,57 @@ function SlaIfAtRisk({ ticket }: { ticket: Ticket }) {
   const s = slaState(ticket);
   if (!s || s.state === "on_track") return null;
   return <SlaPill ticket={ticket} />;
+}
+
+/** Who wrote a note, as a row names them: a member by first name, an API key by its name. */
+function noteAuthor(n: TicketLastNote) {
+  return (n.author.type === "user" && n.author.name.split(" ")[0]) || n.author.name;
+}
+
+/** The whole note, with who wrote it and when: the tooltip of the row's note. */
+function NoteTip({ note }: { note: TicketLastNote }) {
+  const { t: tr } = useTranslation("inbox");
+  return (
+    <span className="block max-w-[320px] py-0.5 font-normal">
+      <span className="block font-medium">{tr("row.noteFrom", { name: note.author.name, when: relLong(note.created_at) })}</span>
+      <span className="mt-0.5 block whitespace-normal break-words opacity-80" data-ph-mask>
+        {note.preview}
+      </span>
+    </span>
+  );
+}
+
+/** The ticket's latest internal note as a line under the preview, tinted like notes in the timeline. */
+function NoteLine({ note }: { note: TicketLastNote }) {
+  const { t: tr } = useTranslation("inbox");
+  return (
+    <Tooltip content={<NoteTip note={note} />} align="start">
+      <div className="mt-1 flex min-w-0 items-center gap-1.5 rounded-sm bg-note px-1.5 py-px text-xs">
+        <Lock aria-hidden className={cn("size-3 shrink-0", tone.amber.text)} />
+        <span className="min-w-0 truncate text-fg-3" data-ph-mask>
+          <span className="sr-only">{tr("row.note")}: </span>
+          <span className="font-medium text-fg-2">{tr("row.noteBy", { name: noteAuthor(note) })} </span>
+          {note.preview}
+        </span>
+      </div>
+    </Tooltip>
+  );
+}
+
+/** A one-line row's mark for the latest internal note; the note itself is in its tooltip. */
+function NoteMark({ note }: { note: TicketLastNote }) {
+  const { t: tr } = useTranslation("inbox");
+  return (
+    <Tooltip content={<NoteTip note={note} />}>
+      <span
+        role="img"
+        aria-label={`${tr("row.noteFrom", { name: note.author.name, when: relLong(note.created_at) })}: ${note.preview}`}
+        className="flex size-5 shrink-0 items-center justify-center rounded-sm border border-note-line bg-note"
+      >
+        <Lock aria-hidden className={cn("size-3", tone.amber.text)} />
+      </span>
+    </Tooltip>
+  );
 }
 
 function QuickButton({ label, shortcut, onClick, children }: { label: string; shortcut: string; onClick: () => void; children: ReactNode }) {
@@ -109,6 +161,7 @@ const Row = forwardRef<HTMLAnchorElement, RowProps>(function TicketRow(
   // Who it is assigned to sits at the row's end, as this browser chose; who is on it
   // right now shows live in green (./people), so the two never read alike.
   const assigneeMode = useAssigneeDisplay();
+  const lastNote = useShowLastNote() ? t.last_note : null;
   const named = !hideAssignee && assigneeMode === "name";
   const assignee = !hideAssignee && assigneeMode !== "none" && t.assignee;
   // A handled chat's wait pill already says who is on it: the live mark keeps to its avatars.
@@ -294,6 +347,7 @@ const Row = forwardRef<HTMLAnchorElement, RowProps>(function TicketRow(
               <NewCount count={newCount} urgent={urgent} />
               {wait ? <WaitPill wait={wait} compact /> : <SlaIfAtRisk ticket={t} />}
             </div>
+            {lastNote && <NoteLine note={lastNote} />}
           </div>
         </div>
       ) : (
@@ -322,6 +376,7 @@ const Row = forwardRef<HTMLAnchorElement, RowProps>(function TicketRow(
             <Viewers ticketId={t.id} bare={handledLive} />
             <NewCount count={newCount} urgent={urgent} />
             {wait ? <WaitPill wait={wait} /> : <SlaIfAtRisk ticket={t} />}
+            {lastNote && <NoteMark note={lastNote} />}
             <span className={cn("min-w-0 flex-1 truncate text-[12.5px]", urgent ? "text-fg-3" : "text-fg-4")} data-ph-mask>
               {botLast && <span className="font-medium text-tone-violet">{tr("waiting.botSaid", { name: bot })} </span>}
               {t.last_message_preview}

@@ -560,6 +560,33 @@ export function buildMessage(ws: WsData, t: Ticket, m: NewMessage): Message {
   return msg;
 }
 
+/** Whether a message is one Ticket.last_note shows: a member's or an API key's note on the ticket itself, not Ollie's. */
+function countsAsLastNote(m: Message): boolean {
+  return m.kind === "note" && !m.thread_id && !m.deleted_at && !m.sent_as_reply_id && (m.author.type === "user" || m.author.type === "api") && !m.ai;
+}
+
+/** Sets the ticket's last_note from its messages, as the API reads it each time. */
+export function refreshLastNote(ws: WsData, t: Ticket) {
+  let last: Message | null = null;
+  for (const m of ws.messages) {
+    if (m.ticket_id !== t.id || !countsAsLastNote(m)) continue;
+    if (!last || Date.parse(m.created_at) >= Date.parse(last.created_at)) last = m;
+  }
+  t.last_note = last
+    ? {
+        id: last.id,
+        preview: last.body_text.replace(/\s+/g, " ").trim().slice(0, 200),
+        author: {
+          type: last.author.type === "api" ? "api" : "user",
+          name: last.author.user?.name ?? last.author.bot?.name ?? (last.from_name || last.author.api_key?.name || ""),
+          user: last.author.user ?? null,
+        },
+        created_at: last.created_at,
+        edited_at: last.edited_at ?? null,
+      }
+    : null;
+}
+
 /** Store a message, update the ticket's derived fields, publish events. */
 export function addMessage(ws: WsData, t: Ticket, m: NewMessage, opts: { publish?: boolean; status?: TicketStatus; actor?: UserRef | null } = {}): Message {
   const doPublish = opts.publish ?? true;
@@ -601,6 +628,10 @@ export function addMessage(ws: WsData, t: Ticket, m: NewMessage, opts: { publish
     }
   }
   t.message_count += 1;
+  if (countsAsLastNote(msg)) {
+    refreshLastNote(ws, t);
+    changes.push("last_note");
+  }
   if (opts.status && opts.status !== t.status) {
     const r = applyPatch(ws, t, { status: opts.status }, opts.actor ?? null, doPublish);
     changes.push(...r.changes.filter((c) => !changes.includes(c)));
@@ -673,6 +704,7 @@ export function newTicket(
     waiting_since: null,
     unanswered_count: 0,
     last_message_preview: "",
+    last_note: null,
     message_count: 0,
     spam: false,
     csat: null,

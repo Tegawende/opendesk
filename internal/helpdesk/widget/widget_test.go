@@ -278,9 +278,14 @@ func TestConversations(t *testing.T) {
 	var convs struct {
 		Data []map[string]any `json:"data"`
 	}
-	e.Do("GET", "/v1/widget/conversations", va, nil).Want(t, 200).JSON(t, &convs)
+	cr := e.Do("GET", "/v1/widget/conversations", va, nil).Want(t, 200)
+	cr.JSON(t, &convs)
 	if len(convs.Data) != 1 || convs.Data[0]["id"] != tid.String() || convs.Data[0]["last_message_preview"] == "" {
 		t.Fatal(convs)
+	}
+	// The team's latest note (Ticket.last_note) is never the visitor's.
+	if _, ok := convs.Data[0]["last_note"]; ok || strings.Contains(string(cr.Body), "note body") {
+		t.Fatalf("note leaked to the widget: %s", cr.Body)
 	}
 
 	e.Do("POST", "/v1/widget/conversations/"+tid.String()+"/messages", va, map[string]any{"body": "Thanks"}).Want(t, 201)

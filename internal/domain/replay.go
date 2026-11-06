@@ -14,14 +14,13 @@ import (
 // RedactReplay hides, in replayed events (GET /v1/events), what messages deleted since
 // said: an event stored while it still read in full is replayed with the message as it is
 // now, its marker (Tombstone); a notification about it loses its preview; and a ticket
-// event about a ticket with a deleted reply carries the ticket's preview as it is now.
+// event about a ticket with a deleted reply carries the ticket's preview as it is now, and
+// one whose last_note was deleted since (or sent as a reply) the ticket's last_note as it
+// is now.
 func RedactReplay(ctx context.Context, q db.Querier, wid uuid.UUID, evs []events.Envelope) error {
-	type ref struct {
-		i   int
-		msg uuid.UUID
-	}
 	var refs []ref
 	var tickets []uuid.UUID
+	var notes []ref
 	for i, e := range evs {
 		switch e.Type {
 		case "message.created", "message.updated":
@@ -49,11 +48,17 @@ func RedactReplay(ctx context.Context, q db.Querier, wid uuid.UUID, evs []events
 		case "ticket.created", "ticket.updated":
 			var d struct {
 				Ticket struct {
-					ID uuid.UUID `json:"id"`
+					ID       uuid.UUID `json:"id"`
+					LastNote *struct {
+						ID uuid.UUID `json:"id"`
+					} `json:"last_note"`
 				} `json:"ticket"`
 			}
 			if json.Unmarshal(e.Data, &d) == nil && d.Ticket.ID != uuid.Nil {
 				tickets = append(tickets, d.Ticket.ID)
+				if d.Ticket.LastNote != nil && d.Ticket.LastNote.ID != uuid.Nil {
+					notes = append(notes, ref{i, d.Ticket.LastNote.ID})
+				}
 			}
 		}
 	}
@@ -98,6 +103,9 @@ func RedactReplay(ctx context.Context, q db.Querier, wid uuid.UUID, evs []events
 			}
 			evs[r.i].Data = raw
 		}
+	}
+	if err := redactLastNotes(ctx, q, wid, evs, notes); err != nil {
+		return err
 	}
 	if len(tickets) > 0 {
 		rows, err := q.Query(ctx, `SELECT t.id, t.last_message_preview FROM tickets t WHERE t.workspace_id = $1 AND t.id = ANY($2)
@@ -152,6 +160,70 @@ func RedactReplay(ctx context.Context, q db.Querier, wid uuid.UUID, evs []events
 		}
 	}
 	return nil
+}
+
+// redactLastNotes gives the ticket events in notes whose last_note is hidden now (deleted,
+// or sent as a reply) the ticket's last_note as it is now.
+func redactLastNotes(ctx context.Context, q db.Querier, wid uuid.UUID, evs []events.Envelope, notes []ref) error {
+	if len(notes) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, len(notes))
+	for i, n := range notes {
+		ids[i] = n.msg
+	}
+	// For each hidden note, its ticket's last_note now.
+	rows, err := q.Query(ctx, `SELECT m.id, (SELECT `+LastNoteSQL+` FROM tickets t WHERE t.workspace_id = m.workspace_id AND t.id = m.ticket_id)
+		FROM messages m WHERE m.workspace_id = $1 AND m.id = ANY($2) AND `+HiddenMessageSQL, wid, ids)
+	if err != nil {
+		return err
+	}
+	now := map[uuid.UUID]*LastNote{}
+	for rows.Next() {
+		var id uuid.UUID
+		var raw []byte
+		if err := rows.Scan(&id, &raw); err != nil {
+			rows.Close()
+			return err
+		}
+		n, err := scanLastNote(raw)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		now[id] = n
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, n := range notes {
+		current, ok := now[n.msg]
+		if !ok {
+			continue
+		}
+		var data map[string]any
+		if err := json.Unmarshal(evs[n.i].Data, &data); err != nil {
+			continue
+		}
+		t, ok := data["ticket"].(map[string]any)
+		if !ok {
+			continue
+		}
+		t["last_note"] = current
+		raw, err := json.Marshal(data)
+		if err != nil {
+			return err
+		}
+		evs[n.i].Data = raw
+	}
+	return nil
+}
+
+// ref is the message an event at index i of a replay names.
+type ref struct {
+	i   int
+	msg uuid.UUID
 }
 
 func asString(v any) string {

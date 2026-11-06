@@ -85,7 +85,10 @@
     "awaiting": "Waiting for a reply",
     "severity": "{{severity}}",
     "receivedAt": "Sent to {{address}}",
-    "assignedTo": "Assigned to {{name}}"
+    "assignedTo": "Assigned to {{name}}",
+    "note": "Internal note",
+    "noteBy": "{{name}}:",
+    "noteFrom": "Internal note from {{name}}, {{when}}"
   },
   "waiting": {
     "label": "Waiting {{time}}",
@@ -653,7 +656,8 @@
     "sentAsReplyLabel": "Note from {{name}}, sent as a reply",
     "showReply": "Show reply",
     "showNote": "Show note",
-    "hideNote": "Hide note"
+    "hideNote": "Hide note",
+    "forward": "Forward"
   },
   "merge": {
     "title": "Merge #{{number}} into another ticket",
@@ -810,7 +814,17 @@
     "withFiles_other": "with {{count}} of the customer's files",
     "withBoth_one": "with the conversation quoted and 1 of the customer's files",
     "withBoth_other": "with the conversation quoted and {{count}} of the customer's files",
-    "optionsHint": "Include the conversation or the customer's files"
+    "optionsHint": "Include the conversation or the customer's files",
+    "withForwarded": "Email forwarded",
+    "forwarded": "Forwarded email",
+    "forwardFrom": "From",
+    "forwardDate": "Date",
+    "forwardSubject": "Subject",
+    "forwardTo": "To",
+    "forwardRemove": "Remove the forwarded email",
+    "withForward": "with the email forwarded",
+    "withForwardAndFiles_one": "with the email forwarded and 1 file",
+    "withForwardAndFiles_other": "with the email forwarded and {{count}} files"
   },
   "links": {
     "title": "Linked",
@@ -993,5 +1007,33 @@
     "refunded": "{{amount}} refunded",
     "openLink": "Open {{name}}",
     "copyValue": "Copy {{name}}"
+  },
+  "print": {
+    "action": "Print or save as PDF",
+    "dialogTitle": "Print conversation",
+    "dialogDescription": "Opens the ticket as a document to print. To keep a file, choose Save as PDF as the printer.",
+    "notes": "Include internal notes",
+    "notesHint": "Notes your team wrote, which the customer never sees.",
+    "side": "Include side conversations",
+    "sideHint": "Emails with people outside your team about this ticket.",
+    "open": "Open print view",
+    "toolbar": "Print view",
+    "conversation": "Conversation",
+    "oneMessage": "One message",
+    "close": "Close",
+    "print": "Print",
+    "remoteImages": "Show remote images",
+    "remoteImagesHint": "Images from other sites are hidden. Loading them tells the sender the email was opened.",
+    "requester": "Requester",
+    "status": "Status",
+    "created": "Opened",
+    "to": "To:",
+    "cc": "Cc:",
+    "sideConversation": "Side conversation",
+    "sideConversationNamed": "Side conversation: {{subject}}",
+    "imagesHidden": "Remote images not shown",
+    "attachments": "Attachments",
+    "nothing": "Nothing to print",
+    "nothingHint": "There are no messages to print with these options, or the message is no longer on the ticket."
   }
 }

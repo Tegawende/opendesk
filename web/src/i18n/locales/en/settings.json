@@ -300,6 +300,10 @@
       "name": "First name",
       "none": "Nothing"
     },
+    "lastNote": {
+      "label": "Show latest internal note",
+      "hint": "Each ticket in the list shows its newest internal note, so you can read it without opening the ticket."
+    },
     "theme": {
       "label": "Theme",
       "light": "Light",

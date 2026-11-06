@@ -400,6 +400,9 @@ func PostMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 		if err := domain.PublishMessageUpdated(ctx, tx, wid, *fromNote); err != nil {
 			return domain.Message{}, err
 		}
+		if err := publishLastNote(ctx, tx, wid, tid); err != nil {
+			return domain.Message{}, err
+		}
 	}
 	if b.Kind == "note" {
 		if err := notifyMentions(ctx, tx, wid, tid, msg, actor.UserID); err != nil {
