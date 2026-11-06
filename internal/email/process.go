@@ -305,7 +305,7 @@ func (s *service) processInbound(ctx context.Context, wid, inboundID uuid.UUID) 
 				return err
 			}
 			if assignee != nil {
-				if err := followUpAssigned(ctx, tx, wid, ticket.ID, match.ticketID, match.number, *assignee); err != nil {
+				if err := followUpAssigned(ctx, tx, wid, ticket.ID, ticket.TeamID, match.ticketID, match.number, *assignee); err != nil {
 					return err
 				}
 			}

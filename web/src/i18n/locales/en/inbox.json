@@ -427,6 +427,7 @@
     "took": "<b>{{who}}</b> took this ticket",
     "assigned": "<b>{{who}}</b> assigned this to <b>{{to}}</b>",
     "assignedFollowUp": "Assigned to <b>{{to}}</b>, who had <m>#{{number}}</m>",
+    "assignedFollowUpHidden": "Assigned to <b>{{to}}</b>, who had the closed ticket",
     "unassigned": "<b>{{who}}</b> unassigned this ticket",
     "team": "<b>{{who}}</b> moved this to <b>{{team}}</b>",
     "contactChanged": "<b>{{who}}</b> changed the contact from <b>{{from}}</b> to <b>{{to}}</b>",

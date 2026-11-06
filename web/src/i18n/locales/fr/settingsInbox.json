@@ -580,7 +580,7 @@
     "followUpHint": "Un e-mail qui répond à un ticket fermé ouvre un nouveau ticket, lié au ticket fermé.",
     "followUp": {
       "label": "Attribuer la suite au responsable du ticket fermé",
-      "on": "La suite va à la personne qui avait le ticket fermé, tant qu’elle fait partie de l’équipe et peut le voir",
+      "on": "La suite va à la personne qui avait le ticket fermé, si elle peut encore recevoir des tickets et, pour une équipe privée, en fait partie",
       "off": "Les suites arrivent sans responsable, comme tout nouveau ticket"
     },
     "awayTitle": "Absence",

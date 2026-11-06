@@ -423,6 +423,7 @@
     "took": "<b>{{who}}</b> hat dieses Ticket übernommen",
     "assigned": "<b>{{who}}</b> hat dies <b>{{to}}</b> zugewiesen",
     "assignedFollowUp": "<b>{{to}}</b> zugewiesen, wie zuvor <m>#{{number}}</m>",
+    "assignedFollowUpHidden": "<b>{{to}}</b> zugewiesen, wie zuvor beim geschlossenen Ticket",
     "unassigned": "<b>{{who}}</b> hat die Zuweisung dieses Tickets aufgehoben",
     "team": "<b>{{who}}</b> hat dies nach <b>{{team}}</b> verschoben",
     "contactChanged": "<b>{{who}}</b> hat den Kontakt von <b>{{from}}</b> zu <b>{{to}}</b> geändert",

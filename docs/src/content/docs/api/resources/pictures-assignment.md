@@ -141,7 +141,7 @@ curl -X PATCH https://api.opendesk.sh/v1/assignment \
         "rules": [{ "target_type": "team", "target_id": "TEAM_ID", "mode": "load_balanced" }] }'
 ```
 
-`rules` replaces the whole list. `new_ticket_notify` decides who gets the `new_ticket` notification: `auto` (everyone on small teams, the leads on bigger ones), `everyone`, `leads` or `off`. `followup_keeps_assignee: true` gives the new ticket an email opens when it answers a closed ticket to the closed ticket's assignee, while they are still a member who is not a viewer and, for a private team, on that team. The ticket's activity then has an `assigned` entry with `via: "previous_ticket"` and the closed ticket's `previous_ticket_id` and `previous_ticket_number`. See [Triage and assignment](/guides/triage-and-assignment/) for how a ticket's mode and assignee are chosen.
+`rules` replaces the whole list. `new_ticket_notify` decides who gets the `new_ticket` notification: `auto` (everyone on small teams, the leads on bigger ones), `everyone`, `leads` or `off`. `followup_keeps_assignee: true` gives the new ticket an email opens when it answers a closed ticket to the closed ticket's assignee, while they are still an owner, admin or agent who is not suspended and, for a private team, on that team. The ticket's activity then has an `assigned` entry with `via: "previous_ticket"` and the closed ticket's `previous_ticket_id` and `previous_ticket_number`, both `null` when the closed ticket is in another, private team. See [Triage and assignment](/guides/triage-and-assignment/) for how a ticket's mode and assignee are chosen.
 
 ## Configure triage
 

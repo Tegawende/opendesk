@@ -447,6 +447,7 @@
     "took": "<b>{{who}}</b> a pris ce ticket en charge",
     "assigned": "<b>{{who}}</b> a attribué ce ticket à <b>{{to}}</b>",
     "assignedFollowUp": "Attribué à <b>{{to}}</b>, qui avait <m>#{{number}}</m>",
+    "assignedFollowUpHidden": "Attribué à <b>{{to}}</b>, qui avait le ticket fermé",
     "unassigned": "<b>{{who}}</b> a retiré le responsable de ce ticket",
     "team": "<b>{{who}}</b> a déplacé ce ticket vers <b>{{team}}</b>",
     "contactChanged": "<b>{{who}}</b> a remplacé le contact <b>{{from}}</b> par <b>{{to}}</b>",

@@ -373,7 +373,7 @@ struct AssignmentSettings: View {
                 symbol: "arrow.uturn.backward",
                 tone: config.followUpKeepsAssignee ? .blue : .gray,
                 title: "Give follow-ups to the closed ticket\u{2019}s assignee",
-                subtitle: config.followUpKeepsAssignee ? "The follow-up goes to whoever had the closed ticket, while they are still on the team and can see it" : "Follow-ups arrive unassigned, like any new ticket",
+                subtitle: config.followUpKeepsAssignee ? "The follow-up goes to whoever had the closed ticket, if they can still take tickets and, when it goes to a private team, are on that team" : "Follow-ups arrive unassigned, like any new ticket",
                 isOn: Binding(get: { config.followUpKeepsAssignee }, set: { value in run { try await store.setFollowUp(value) } }),
                 disabled: !canEdit
             )

@@ -557,7 +557,7 @@
     "followUpHint": "Eine E-Mail, die auf ein geschlossenes Ticket antwortet, eröffnet ein neues Ticket, das mit dem geschlossenen verknüpft ist.",
     "followUp": {
       "label": "Folgetickets der zuständigen Person des geschlossenen Tickets zuweisen",
-      "on": "Das Folgeticket geht an die Person, die das geschlossene Ticket hatte, solange sie im Team ist und es sehen kann",
+      "on": "Das Folgeticket geht an die Person, die das geschlossene Ticket hatte, wenn sie noch Tickets übernehmen kann und, bei einem privaten Team, dazugehört",
       "off": "Folgetickets kommen ohne Zuweisung an, wie jedes neue Ticket"
     },
     "awayTitle": "Abwesend",
