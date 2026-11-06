@@ -62,7 +62,7 @@ async function render(report: ReportsAgents) {
   });
 }
 
-const names = () => [...container.querySelectorAll("tbody tr")].map((tr) => tr.querySelector("td span.truncate")?.textContent);
+const names = () => [...container.querySelectorAll("tbody tr")].map((tr) => tr.querySelector("td span.font-medium")?.textContent);
 const header = (label: string) => [...container.querySelectorAll("th")].find((th) => th.textContent === label)!;
 
 describe("AgentWorkTable", () => {
@@ -77,6 +77,16 @@ describe("AgentWorkTable", () => {
     await act(async () => header("Online").querySelector("button")!.click());
     expect(names()).toEqual(["Anna", "Bea", "Carl"]);
     expect(container.querySelector("tbody tr:last-child")?.textContent).toContain("–");
+  });
+
+  it("reads each name in full, in a column that stays in view", async () => {
+    await render({ data: [row("Maria Fernanda Albuquerque-Santos", { solved: 1 })], online_time: "all" });
+    const cell = container.querySelector("tbody td")!;
+    expect(cell.querySelector("span.font-medium")?.textContent).toBe("Maria Fernanda Albuquerque-Santos");
+    expect(cell.querySelector(".truncate")).toBeNull();
+    expect(cell.className).toContain("whitespace-nowrap");
+    expect(cell.className).toContain("sticky");
+    expect(header("Agent").className).toContain("sticky");
   });
 
   it("leaves online time out when the caller sees nobody's", async () => {

@@ -33,6 +33,9 @@ const ratio = (n: number | null) => (n === null ? "–" : n.toLocaleString(undef
 
 type Column = { key: Exclude<AgentSortKey, "name">; label: string; hint: string; show: (r: ReportsAgentRow) => string };
 
+/** The name column: each name in full on one line, kept in view (on the card's background) when the figures scroll sideways. */
+const nameCell = "sticky left-0 z-[1] whitespace-nowrap bg-surface pl-4 pr-3";
+
 /** Each member's work in the period, sortable by any column. */
 export function AgentWorkTable({ report }: { report: ReportsAgents }) {
   const { t } = useTranslation("reports");
@@ -74,7 +77,7 @@ export function AgentWorkTable({ report }: { report: ReportsAgents }) {
         key={key}
         scope="col"
         aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
-        className={cn("whitespace-nowrap py-2 font-normal", right ? "pl-3 text-right last:pr-4" : "pl-4")}
+        className={cn("whitespace-nowrap py-2 font-normal", right ? "pl-3 text-right last:pr-4" : nameCell)}
       >
         {hint ? <Tooltip content={hint}>{button}</Tooltip> : button}
       </th>
@@ -92,11 +95,11 @@ export function AgentWorkTable({ report }: { report: ReportsAgents }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.user.id} className="border-b border-line-soft transition-colors last:border-0 hover:bg-sunken">
-              <td className="max-w-0 py-2 pl-4 pr-3">
-                <span className="flex min-w-0 items-center gap-2.5">
+            <tr key={r.user.id} className="group border-b border-line-soft transition-colors last:border-0 hover:bg-sunken">
+              <td className={cn(nameCell, "py-2 transition-colors group-hover:bg-sunken")}>
+                <span className="flex items-center gap-2.5">
                   <Avatar name={r.user.name} src={r.user.avatar_url} size="sm" />
-                  <span className="truncate font-medium">{r.user.name}</span>
+                  <span className="font-medium">{r.user.name}</span>
                 </span>
               </td>
               {columns.map((c) => (
