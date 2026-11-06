@@ -10,7 +10,7 @@ import { api, type SendMessageBody } from "@/lib/api/endpoints";
 import { q, qk, upsertInList } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { realtime } from "@/lib/realtime/manager";
-import { SideIncludedChips, useSideInclude } from "./SideIncludes";
+import { ForwardedEmail, SideIncludedChips, useSideInclude } from "./SideIncludes";
 import { cn } from "@/lib/cn";
 import { keyName } from "@/lib/hotkeys";
 import { findPlaceholders } from "@/lib/placeholders";
@@ -50,7 +50,8 @@ type Mode = "reply" | "note" | "thread";
  * null: the ticket's address, chosen over the one I last answered this ticket from.
  * thread*: a third-party thread (contracts/api.md "Threads"): threadId writes in an existing one,
  * else threadTo, threadCc and threadSubject start a new one, with the customer's conversation
- * (threadHistory) and the files picked from it (threadFiles) if asked for.
+ * (threadHistory) and the files picked from it (threadFiles) if asked for, or one email of it
+ * forwarded in full (threadForward, a message id) in the conversation's place.
  */
 type Draft = {
   mode: Mode;
@@ -66,6 +67,7 @@ type Draft = {
   threadSubject: string;
   threadHistory: boolean;
   threadFiles: string[];
+  threadForward?: string;
   /** The note this reply is written from: it is removed once the reply is sent. */
   fromNote?: string;
 };
@@ -93,6 +95,8 @@ export type ComposerHandle = {
   inThread: (thread: Thread) => void;
   /** Puts a note in the reply box, to go to the customer instead. */
   fromNote: (m: Message) => void;
+  /** Starts a side conversation that forwards this email in full, with its files picked. */
+  forward: (m: Message) => void;
 };
 
 /** The optimistic copy of a reply or note this agent writes, shown until the server's arrives. */
@@ -156,6 +160,7 @@ function useSendThread(ticket: Ticket) {
       attachment_ids: string[];
       include_history: boolean;
       forward_attachment_ids: string[];
+      forward_message_id?: string;
       /** Set on the ticket once sent ("on hold" while waiting on the third party). */
       status?: TicketStatus;
     }): Promise<{ message: Message; thread?: Thread }> => {
@@ -168,6 +173,7 @@ function useSendThread(ticket: Ticket) {
         attachment_ids: v.attachment_ids,
         include_history: v.include_history || undefined,
         forward_attachment_ids: v.forward_attachment_ids.length ? v.forward_attachment_ids : undefined,
+        forward_message_id: v.forward_message_id,
       });
     },
     onSuccess: (r, v) => {
@@ -175,7 +181,7 @@ function useSendThread(ticket: Ticket) {
       // Back to replying: the next thing typed here must not go to the third party by
       // mistake. Writing in the side conversation again starts from its message.
       useDrafts.setState((s) => ({
-        [ticket.id]: { ...(s[ticket.id] ?? emptyDraft), mode: "reply", html: "", threadId: undefined, threadTo: [], threadCc: [], threadSubject: "", threadHistory: false, threadFiles: [] },
+        [ticket.id]: { ...(s[ticket.id] ?? emptyDraft), mode: "reply", html: "", threadId: undefined, threadTo: [], threadCc: [], threadSubject: "", threadHistory: false, threadFiles: [], threadForward: undefined },
       }));
       if (v.status) updateTicket.mutate({ id: ticket.id, patch: { status: v.status } });
       const to = r.message.to.join(", ");
@@ -218,7 +224,8 @@ export const Composer = forwardRef<
   const thread = draft.threadId ? threads?.find((x) => x.id === draft.threadId) : undefined;
   // Starting a side conversation: what of the customer's conversation goes along.
   const starting = draft.mode === "thread" && !thread;
-  const include = useSideInclude(ticket.id, draft.threadHistory, draft.threadFiles, setDraft);
+  const include = useSideInclude(ticket.id, draft.threadHistory, draft.threadFiles, setDraft, draft.threadForward);
+  const forwarding = starting ? include.forward : undefined;
   const { data: allReplies } = useQuery(q.savedReplies());
   // Replies for everyone, plus the ticket team's own.
   const replies = useMemo(() => (allReplies ?? []).filter((r) => !r.team_id || r.team_id === ticket.team_id), [allReplies, ticket.team_id]);
@@ -360,6 +367,20 @@ export const Composer = forwardRef<
       editor.current?.setHtml(html);
       setTimeout(() => editor.current?.focus(), 0);
     },
+    forward: (m) => {
+      const cur = useDrafts.getState()[ticket.id] ?? emptyDraft;
+      const subject = m.subject || ticket.subject;
+      setDraft({
+        mode: "thread",
+        threadId: undefined,
+        threadForward: m.id,
+        threadHistory: false,
+        // Its own files go along unless taken out; its inline images go in their places.
+        threadFiles: [...new Set([...cur.threadFiles, ...m.attachments.filter((a) => !a.inline).map((a) => a.id)])],
+        threadSubject: /^fwd?:/i.test(subject) ? subject : `Fwd: ${subject}`,
+      });
+      setTimeout(() => editor.current?.focus(), 0);
+    },
   }));
 
   // The ticket's shared draft goes into the reply box; discarding it takes it back out.
@@ -389,7 +410,8 @@ export const Composer = forwardRef<
     (mode === "reply" && ticket.channel === "email" && !personalSender && teams.mailbox(draft.mailboxId ?? ticket.mailbox_id)?.sending === "system_off") ||
     (mode === "thread" && teams.mailbox(thread?.mailbox_id ?? ticket.mailbox_id)?.sending === "system_off");
   const threadReady = mode !== "thread" || !!thread || (draft.threadTo.length > 0 && !!draft.threadSubject.trim());
-  const canSend = !!draft.html && !busyUploads && !disabled && !ai.busy && !noSender && !filling && threadReady && !sendThread.isPending;
+  // A forwarded email can go without words of its own.
+  const canSend = (!!draft.html || !!forwarding) && !busyUploads && !disabled && !ai.busy && !noSender && !filling && threadReady && !sendThread.isPending;
 
   // The send button's moment: a check once it is out, or once a reply is on hold (its toast
   // and the timeline count down from there).
@@ -438,6 +460,7 @@ export const Composer = forwardRef<
         attachment_ids: attachments,
         include_history: !thread && include.history,
         forward_attachment_ids: thread ? [] : include.picked,
+        forward_message_id: forwarding?.id,
         status,
       },
       {
@@ -826,7 +849,18 @@ export const Composer = forwardRef<
               onKeyDown={onKeyDown}
               editable={!disabled && !ai.busy}
               contentClassName={cn("max-h-[40vh] transition-[min-height] duration-200 ease-out motion-reduce:transition-none", open ? "min-h-[96px]" : "min-h-[44px]")}
-              afterContent={open && signature?.trim() ? <ReplySignature html={signature} /> : null}
+              afterContent={
+                forwarding ? (
+                  <ForwardedEmail
+                    m={forwarding}
+                    onRemove={() =>
+                      setDraft({ threadForward: undefined, threadFiles: draft.threadFiles.filter((id) => !forwarding.attachments.some((a) => a.id === id)) })
+                    }
+                  />
+                ) : open && signature?.trim() ? (
+                  <ReplySignature html={signature} />
+                ) : null
+              }
               ariaLabel={note ? t("composer.note") : threadMode ? t("composer.thread") : t("composer.reply")}
               toolbarFolded={foldTools}
               toolbarEnd={

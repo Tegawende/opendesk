@@ -91,6 +91,13 @@ func SanitizeEmailHTML(raw string) string {
 	return body
 }
 
+// SanitizeForwardedEmail is SanitizeEmailHTML for an email placed inside another (a forward):
+// the same policy, without the email's style sheets, which would restyle the message, the
+// signature and the layout around it. Its inline styles and layout attributes stay.
+func SanitizeForwardedEmail(raw string) string {
+	return dropEscapedStyles(strings.TrimSpace(emailPolicy.Sanitize(raw)))
+}
+
 // SanitizeSignature cleans a signature, auto-reply or other designed email part with the
 // design allowlist, keeping its template tags (contracts/templates.md).
 func SanitizeSignature(raw string) string { return templates.SanitizeDesign(raw) }

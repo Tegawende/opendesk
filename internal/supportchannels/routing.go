@@ -327,6 +327,19 @@ type ticketUpdatedEvent struct {
 	Changes []string      `json:"changes"`
 }
 
+// noteOnly is a ticket.updated that says only that the ticket's last_note changed: the
+// note's own message event reaches the thread, so the card has nothing new to show.
+func noteOnly(typ string, data []byte) bool {
+	if typ != "ticket.updated" {
+		return false
+	}
+	var ev struct {
+		Changes []string `json:"changes"`
+	}
+	return json.Unmarshal(data, &ev) == nil && len(ev.Changes) > 0 &&
+		!slices.ContainsFunc(ev.Changes, func(c string) bool { return c != "last_note" })
+}
+
 // activityText is the line a ticket.updated event posts in a thread whose mirror
 // asks for its changes, read from the event's own ticket so a late delivery says
 // what changed then. Empty when there is nothing to post.

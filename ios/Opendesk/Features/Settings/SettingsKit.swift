@@ -63,6 +63,163 @@ extension Router {
     }
 }
 
+/// Unsaved changes on a settings page, in the tab bar's place and shape (`settingsSaveBar`): a wide
+/// Save and a round glass Discard beside it, where Ollie's button sits. What stops it saving
+/// floats above them.
+struct SettingsSaveBar: View {
+    var saveTitle = "Save changes"
+    /// Why it can't save yet.
+    var problem: String?
+    let saving: Bool
+    var canSave = true
+    let save: () -> Void
+    let discard: () -> Void
+
+    var body: some View {
+        VStack(spacing: 10) {
+            if let problem {
+                Label(problem, systemImage: "exclamationmark.circle.fill")
+                    .font(ODFont.sans(13, weight: .medium))
+                    .foregroundStyle(Tone.red.text)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .glassEffect(.regular.tint(Theme.glassTint), in: Capsule())
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            GlassEffectContainer(spacing: 14) {
+                HStack(spacing: 10) {
+                    Button(action: save) {
+                        ButtonLabel(title: saveTitle, busy: saving)
+                            .font(ODFont.sans(16, weight: .semibold))
+                            .foregroundStyle(Theme.inverseFg)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(Theme.inverse.opacity(canSave ? 1 : 0.35), in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(TapScaleStyle(scale: 0.97))
+                    .disabled(!canSave || saving)
+
+                    Button(action: discard) {
+                        Image(systemName: "arrow.uturn.backward")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(Theme.fg)
+                            .frame(width: 56, height: 56)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(TapScaleStyle(scale: 0.9))
+                    .glassEffect(.regular.tint(Theme.glassTint).interactive(), in: Circle())
+                    .disabled(saving)
+                    .accessibilityLabel("Discard changes")
+                }
+            }
+        }
+        .motion(Motion.snappy, value: problem)
+    }
+}
+
+/// Under the save bar the page blurs and fades into the chrome, from clear at the top to most of
+/// the way at the buttons, so the bar never sits on a hard line.
+private struct SettingsSaveBarFade: View {
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.45)], startPoint: .top, endPoint: .bottom))
+            LinearGradient(stops: [.init(color: Theme.chrome.opacity(0), location: 0), .init(color: Theme.chrome.opacity(0.85), location: 0.6)], startPoint: .top, endPoint: .bottom)
+        }
+        .ignoresSafeArea(edges: .bottom)
+        .allowsHitTesting(false)
+    }
+}
+
+private struct SettingsSaveBarModifier: ViewModifier {
+    let dirty: Bool
+    let guarded: Bool
+    let bar: SettingsSaveBar
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppEnvironment.self) private var env
+    @State private var confirm: AccountConfirm?
+    @State private var leaving = false
+
+    func body(content: Content) -> some View {
+        content
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if dirty {
+                    bar
+                        .padding(.horizontal, 18)
+                        .padding(.top, 30)
+                        .padding(.bottom, 4)
+                        .background { SettingsSaveBarFade() }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .motion(Motion.snappy, value: dirty)
+            .tabBarHidden(dirty)
+            .navigationBarBackButtonHidden(guarded)
+            .toolbar {
+                if guarded {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            Haptics.tap()
+                            askToLeave()
+                        } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .accessibilityLabel("Back")
+                    }
+                }
+            }
+            .sheet(item: $confirm, onDismiss: {
+                guard leaving else { return }
+                leaving = false
+                dismiss()
+            }) { confirm in AccountConfirmSheet(confirm: confirm) }
+            #if DEBUG
+            // The QA harness's `/demo/settings-back`: the back button on a page with changes.
+            .onChange(of: env.router.demoAction) { _, action in
+                guard action == "settings-back", guarded else { return }
+                env.router.demoAction = nil
+                askToLeave()
+            }
+            #endif
+    }
+
+    private func askToLeave() {
+        confirm = AccountConfirm(
+            title: "Discard your changes?",
+            message: "What you changed on this page isn't saved yet.",
+            confirmTitle: "Discard"
+        ) {
+            bar.discard()
+            leaving = true
+        }
+    }
+}
+
+extension View {
+    /// While `dirty`, the save bar takes the tab bar's place under the page, and going back asks
+    /// before throwing the changes away. `guarded` turns that question off for a page whose draft
+    /// outlives it.
+    func settingsSaveBar(
+        dirty: Bool,
+        guarded: Bool? = nil,
+        saveTitle: String = "Save changes",
+        problem: String? = nil,
+        saving: Bool,
+        canSave: Bool = true,
+        save: @escaping () -> Void,
+        discard: @escaping () -> Void
+    ) -> some View {
+        modifier(SettingsSaveBarModifier(
+            dirty: dirty,
+            guarded: guarded ?? dirty,
+            bar: SettingsSaveBar(saveTitle: saveTitle, problem: problem, saving: saving, canSave: canSave, save: save, discard: discard)
+        ))
+    }
+}
+
 /// A note at the top of a page a member can read but only admins change.
 struct SettingsReadOnlyNote: View {
     var text = "Only admins can change these settings."

@@ -6,6 +6,7 @@ import (
 	"html"
 	"net/mail"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -473,10 +474,11 @@ func (s *service) composeAndSend(ctx context.Context, wid, mid, ticketID uuid.UU
 		wid, mid, msgID); err != nil && !db.IsUniqueViolation(err, "") {
 		return "", nil, err
 	}
-	atts, html, err := s.outboundAttachments(ctx, wid, mid, bodyHTML)
+	atts, parts, err := s.outboundAttachments(ctx, wid, mid, bodyHTML)
 	if err != nil {
 		return "", nil, err
 	}
+	html := parts[0]
 	if strings.TrimSpace(bodyText) == "" {
 		bodyText = htmlToText(bodyHTML)
 	}
@@ -522,7 +524,7 @@ func (s *service) composeAndSend(ctx context.Context, wid, mid, ticketID uuid.UU
 // composeAndSendThread emails a message of a third-party thread (contracts/api.md
 // "Threads") to the thread's recipients, from the thread's address. It threads with the
 // thread's own messages only. Only a first message started with include_history quotes the
-// conversation with the customer.
+// conversation with the customer, and only one started with forward_message_id forwards that email.
 func (s *service) composeAndSendThread(ctx context.Context, wid, mid, ticketID, threadID uuid.UUID, bodyHTML, bodyText string,
 	to, cc []string, authorID *uuid.UUID) (string, *sentAs, error) {
 	t, err := loadTicketInfo(ctx, s.d.DB.Pool, wid, ticketID)
@@ -534,16 +536,24 @@ func (s *service) composeAndSendThread(ctx context.Context, wid, mid, ticketID, 
 	}
 	var subject string
 	var mailboxID *uuid.UUID
-	var withHistory bool
-	err = s.d.DB.Pool.QueryRow(ctx, `SELECT th.subject, th.mailbox_id, COALESCE(th.include_history AND
-			(SELECT e.id FROM messages e WHERE e.workspace_id = th.workspace_id AND e.thread_id = th.id ORDER BY e.created_at, e.id LIMIT 1) = $3, false)
+	var withHistory, first bool
+	var forwardID *uuid.UUID
+	err = s.d.DB.Pool.QueryRow(ctx, `SELECT th.subject, th.mailbox_id, th.include_history, th.forward_message_id,
+			COALESCE((SELECT e.id FROM messages e WHERE e.workspace_id = th.workspace_id AND e.thread_id = th.id ORDER BY e.created_at, e.id LIMIT 1) = $3, false)
 		FROM ticket_threads th WHERE th.workspace_id = $1 AND th.id = $2`, wid, threadID, mid).
-		Scan(&subject, &mailboxID, &withHistory)
+		Scan(&subject, &mailboxID, &withHistory, &forwardID, &first)
 	if db.IsNotFound(err) {
 		return "", nil, permanent("The thread no longer exists.")
 	}
 	if err != nil {
 		return "", nil, err
+	}
+	withHistory = withHistory && first
+	var forwarded *templates.Forwarded
+	if forwardID != nil && first {
+		if forwarded, err = loadForwarded(ctx, s.d.DB.Pool, wid, ticketID, *forwardID, mid); err != nil {
+			return "", nil, err
+		}
 	}
 	m, err := s.sendingMailbox(ctx, wid, t, mailboxID)
 	if err != nil {
@@ -573,9 +583,16 @@ func (s *service) composeAndSendThread(ctx context.Context, wid, mid, ticketID, 
 		wid, mid, msgID); err != nil && !db.IsUniqueViolation(err, "") {
 		return "", nil, err
 	}
-	atts, html, err := s.outboundAttachments(ctx, wid, mid, bodyHTML)
+	htmls := []string{bodyHTML}
+	if forwarded != nil {
+		htmls = append(htmls, forwarded.HTML)
+	}
+	atts, htmls, err := s.outboundAttachments(ctx, wid, mid, htmls...)
 	if err != nil {
 		return "", nil, err
+	}
+	if forwarded != nil {
+		forwarded.HTML = htmls[1]
 	}
 	if strings.TrimSpace(bodyText) == "" {
 		bodyText = htmlToText(bodyHTML)
@@ -595,7 +612,7 @@ func (s *service) composeAndSendThread(ctx context.Context, wid, mid, ticketID, 
 		return "", nil, err
 	}
 	// The conversation with the customer goes to the third party only when asked for.
-	parts := templates.Parts{Content: html, ContentText: bodyText, Signature: tc.Signature(), Forward: withHistory}
+	parts := templates.Parts{Content: htmls[0], ContentText: bodyText, Signature: tc.Signature(), Forward: withHistory, Forwarded: forwarded}
 	if withHistory {
 		if parts.History, err = loadHistory(ctx, s.d.DB.Pool, wid, ticketID, &mid, 10); err != nil {
 			return "", nil, err
@@ -673,13 +690,14 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-// outboundAttachments loads the message's files. Inline images the HTML references by
-// their attachment URL are sent as cid: parts so they keep working in the mail client.
-func (s *service) outboundAttachments(ctx context.Context, wid, mid uuid.UUID, bodyHTML string) ([]outAttachment, string, error) {
+// outboundAttachments loads the message's files. Inline images the HTML parts reference by
+// their attachment URL are sent as cid: parts so they keep working in the mail client; the
+// parts come back in order, rewritten.
+func (s *service) outboundAttachments(ctx context.Context, wid, mid uuid.UUID, htmls ...string) ([]outAttachment, []string, error) {
 	rows, err := s.d.DB.Pool.Query(ctx, `SELECT id, filename, content_type, storage_key, size_bytes, inline FROM attachments
 		WHERE workspace_id = $1 AND message_id = $2 ORDER BY created_at`, wid, mid)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	type row struct {
 		id       uuid.UUID
@@ -693,33 +711,39 @@ func (s *service) outboundAttachments(ctx context.Context, wid, mid uuid.UUID, b
 		return x, r.Scan(&x.id, &x.filename, &x.ct, &x.key, &x.size, &x.inline)
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
+	out := slices.Clone(htmls)
 	if len(list) == 0 {
-		return nil, bodyHTML, nil
+		return nil, out, nil
 	}
 	var total int64
 	for _, a := range list {
 		total += a.size
 	}
 	if total > maxOutboundBytes {
-		return nil, "", permanent("Attachments are limited to 25 MB per message.")
+		return nil, nil, permanent("Attachments are limited to 25 MB per message.")
 	}
-	doc := parseFragment(bodyHTML)
 	referenced := map[uuid.UUID]string{}
-	if doc != nil {
+	for i, part := range out {
+		doc := parseFragment(part)
+		if doc == nil {
+			continue
+		}
+		found := false
 		var walk func(*xhtml.Node)
 		walk = func(n *xhtml.Node) {
 			if n.Type == xhtml.ElementNode && n.DataAtom == atom.Img {
-				for i, a := range n.Attr {
+				for j, a := range n.Attr {
 					if !strings.EqualFold(a.Key, "src") {
 						continue
 					}
 					for _, att := range list {
 						if att.inline && strings.Contains(a.Val, "/v1/attachments/"+att.id.String()) {
 							cid := att.id.String() + "@opendesk"
-							n.Attr[i].Val = "cid:" + cid
+							n.Attr[j].Val = "cid:" + cid
 							referenced[att.id] = cid
+							found = true
 						}
 					}
 				}
@@ -729,19 +753,19 @@ func (s *service) outboundAttachments(ctx context.Context, wid, mid uuid.UUID, b
 			}
 		}
 		walk(doc)
-		if len(referenced) > 0 {
-			bodyHTML = render(doc)
+		if found {
+			out[i] = render(doc)
 		}
 	}
-	out := make([]outAttachment, 0, len(list))
+	atts := make([]outAttachment, 0, len(list))
 	for _, a := range list {
 		data, err := s.readObject(ctx, a.key, maxAttachmentBytes)
 		if err != nil {
-			return nil, "", err
+			return nil, nil, err
 		}
-		out = append(out, outAttachment{Filename: a.filename, ContentType: a.ct, Data: data, ContentID: referenced[a.id]})
+		atts = append(atts, outAttachment{Filename: a.filename, ContentType: a.ct, Data: data, ContentID: referenced[a.id]})
 	}
-	return out, bodyHTML, nil
+	return atts, out, nil
 }
 
 // sentCID is the content id an inline image of ours goes out as (outboundAttachments).

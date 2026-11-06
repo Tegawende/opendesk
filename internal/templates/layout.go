@@ -12,6 +12,7 @@ import (
 // HistoryItem is an earlier public reply quoted under a new one.
 type HistoryItem struct {
 	Author string
+	Email  string // the address it was sent from, or ""
 	At     time.Time
 	HTML   string // sanitized
 	Text   string
@@ -32,6 +33,22 @@ type Parts struct {
 	// Forward quotes all of History (up to 10), whatever the design's history setting,
 	// and also under a custom layout without a history slot.
 	Forward bool
+	// Forwarded is one email forwarded whole in place of the history.
+	Forwarded *Forwarded
+}
+
+// Forwarded is an email forwarded in full under a new message (a side conversation's first,
+// contracts/api.md "Threads"): its header, then its own layout and images, not the words alone.
+type Forwarded struct {
+	FromName  string
+	FromEmail string
+	At        time.Time
+	Subject   string
+	To, Cc    []string
+	// HTML is sanitized with the email policy by the caller, its inline images already
+	// pointing at the parts they go out as (cid:).
+	HTML string
+	Text string
 }
 
 var fonts = map[string]string{
@@ -80,6 +97,10 @@ func (c *Context) RenderEmail(d Design, p Parts) Email {
 		}
 	}
 	historyHTML, historyText := c.renderHistory(o, hist)
+	if p.Forwarded != nil {
+		historyHTML, historyText = c.renderForwarded(*p.Forwarded)
+	}
+	whole := p.Forward || p.Forwarded != nil
 	// A custom layout writes its own footer.
 	custom := o.Mode == "custom" && strings.TrimSpace(d.CustomHTML) != ""
 	footer := ""
@@ -95,7 +116,7 @@ func (c *Context) RenderEmail(d Design, p Parts) Email {
 		if !Parse(d.CustomHTML).Uses("content") {
 			body += p.Content
 		}
-		if p.Forward && !Parse(d.CustomHTML).Uses("history") {
+		if whole && !Parse(d.CustomHTML).Uses("history") {
 			body += historyHTML
 		}
 	} else {
@@ -223,6 +244,7 @@ func (c *Context) renderHistory(o LayoutOptions, items []HistoryItem) (string, s
 	for _, it := range items {
 		vals := &Values{Text: map[string]string{
 			"message.author": it.Author,
+			"message.email":  it.Email,
 			"message.date":   it.At.In(c.Location).Format("Mon, 2 Jan 2006 at 15:04"),
 		}}
 		line := strings.Join(strings.Fields(t.Render(vals, Text)), " ")
@@ -240,6 +262,41 @@ func (c *Context) renderHistory(o LayoutOptions, items []HistoryItem) (string, s
 		txt.WriteString("\n")
 	}
 	h.WriteString(`</div>`)
+	return h.String(), strings.TrimSpace(txt.String())
+}
+
+// ForwardedLine opens a forwarded email, as mail clients write it.
+const ForwardedLine = "---------- Forwarded message ---------"
+
+// renderForwarded is a forwarded email: the conventional header (From, Date, Subject, To,
+// Cc), then the email as it was, in its own layout.
+func (c *Context) renderForwarded(f Forwarded) (string, string) {
+	from := f.FromEmail
+	if name := strings.TrimSpace(f.FromName); name != "" && !strings.EqualFold(name, f.FromEmail) {
+		from = name
+		if f.FromEmail != "" {
+			from += " <" + f.FromEmail + ">"
+		}
+	}
+	lines := [][2]string{{"From", from}, {"Date", f.At.In(c.Location).Format("Mon, 2 Jan 2006 at 15:04")}, {"Subject", f.Subject},
+		{"To", strings.Join(f.To, ", ")}, {"Cc", strings.Join(f.Cc, ", ")}}
+	var h, txt strings.Builder
+	h.WriteString(`<div class="od-forwarded"><div style="margin:0 0 16px;font-size:12px;line-height:1.6;color:#737373">` + ForwardedLine)
+	txt.WriteString(ForwardedLine + "\n")
+	for _, l := range lines {
+		v := strings.Join(strings.Fields(l[1]), " ")
+		if v == "" {
+			continue
+		}
+		h.WriteString("<br>" + l[0] + ": " + html.EscapeString(v))
+		txt.WriteString(l[0] + ": " + v + "\n")
+	}
+	h.WriteString(`</div>` + f.HTML + `</div>`)
+	body := f.Text
+	if strings.TrimSpace(body) == "" {
+		body = TextOf(f.HTML)
+	}
+	txt.WriteString("\n" + strings.TrimSpace(body))
 	return h.String(), strings.TrimSpace(txt.String())
 }
 

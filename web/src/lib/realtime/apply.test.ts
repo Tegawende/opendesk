@@ -229,6 +229,7 @@ describe("third-party threads", () => {
     ticket_id: "t1",
     subject: "Payout for order 1182",
     include_history: false,
+    forward_message_id: null,
     to: ["ops@acquirer.test"],
     cc: [],
     mailbox_id: "mb1",

@@ -19,7 +19,7 @@ Every conversation in opendesk is a **ticket**. Email, live chat, the API and th
 1. **Folders**: Unassigned, My tickets, All open, Pending, Solved and Spam, each with a live count.
 2. **Views**: saved filters your team shares, like Urgent or Billing queue. See [Saved replies and views](/guides/saved-replies-and-views/).
 3. **Ticket list**: the tickets in the folder or view, with search, filter and sort at the top.
-4. **Ticket actions**: **Solve**, **Snooze**, and the **⋯** menu to assign to yourself, merge, copy a link, mark as spam or delete.
+4. **Ticket actions**: **Solve**, **Snooze**, and the **⋯** menu to assign to yourself, merge, copy a link, print or save as PDF, mark as spam or delete.
 5. **Timeline**: the customer's messages, your replies, internal notes and every change, in order.
 6. **Reply box**: write to the customer, or switch to **Note** to write only for your team.
 7. **Details**: status, priority, severity, assignee, team, brand, the address replies go out from, and labels.
@@ -106,9 +106,37 @@ An admin can change the times the menu offers in **Settings → Workspace**, und
 
 <Screenshot src="/guides/inbox/snooze" alt="The Snooze button ringed as 1 and its menu ringed as 2: In 1 hour, In 4 hours, Tomorrow, Next week, or a date" />
 
-The **⋯** menu holds the rest: **Merge into another ticket**, **Copy link**, **Hide ticket history** (or **Show**), **Mark as spam** and **Delete ticket**.
+The **⋯** menu holds the rest: **Merge into another ticket**, **Copy link**, **Hide ticket history** (or **Show**), **Print or save as PDF**, **Mark as spam** and **Delete ticket**.
 
 <Screenshot src="/guides/inbox/more-actions" alt="The More actions button ringed as 1 and its menu ringed as 2: Merge into another ticket, Copy link, Mark as spam and Delete ticket" />
+
+## Print or save as PDF
+
+You can print a ticket's conversation or a single message, or keep it as a PDF file. Any member can do this, viewers included.
+
+<Steps>
+<Step title="Open the menu">
+
+For the whole conversation, open the **⋯** menu at the top of the ticket and choose **Print or save as PDF**. For one message, open the **⋯** menu on that message instead.
+
+</Step>
+<Step title="Choose what to include">
+
+For the conversation, choose what to include. **Include internal notes** and **Include side conversations** are off by default, so the printout holds only what the customer and your team said to each other. Click **Open print view**.
+
+</Step>
+<Step title="Print or save the file">
+
+A print view opens and the print dialog follows once it has loaded. To keep a file, choose **Save as PDF** as the printer. The file is named after the ticket, like *#1234 Refund for order*.
+
+</Step>
+</Steps>
+
+The print view is a plain, light page whatever your theme: the ticket's number, subject, requester and status, then each message with its author, date, recipients, text and the names of its attachments. Pictures pasted into a message print with it. A deleted message prints as the marker the timeline shows. **Print** in the bar at the top prints again, and **Close** (or <kbd>Esc</kbd>) takes you back to the ticket.
+
+Remote images in a customer's email stay hidden in the print view too, unless you loaded them in the ticket or turned on **Always show images**. To print them, turn on **Show remote images** in the bar at the top. The sender's server can then tell the email was opened.
+
+In the [desktop app](/guides/desktop-app/) the system's print dialog opens. To keep a PDF there, use **PDF → Save as PDF** on macOS, the **Microsoft Print to PDF** printer on Windows, or **Print to File** on Linux.
 
 ## Work on many tickets at once
 
@@ -194,6 +222,8 @@ It is emailed from the ticket's support address, with your signature and only wh
 - The ticket's assignee is notified.
 - A ticket waiting on the customer or on hold opens again, so you can pick it up.
 - Nothing counts as a customer reply: SLA targets, response times, reports and automations are not affected, and no auto-reply goes out.
+
+To pass on one email as it is, choose **Forward** in the menu of that message (an email from the customer, or a reply your team sent). A side conversation starts with the email below what you write: a header with who sent it, when, its subject and who it was to, then the email with its formatting and its images where they were. Its files are already added next to your attachments; take out any that should not go. You can send it without writing anything. A forwarded email replaces **The conversation** for that message.
 
 **Reply** from the latest message of a side conversation to write in it again. **Close** it when you have what you need; a new message opens it again.
 

@@ -151,14 +151,38 @@ type Ticket struct {
 	// WaitingSince is when the customer's unanswered messages began; nil once replied to.
 	WaitingSince *time.Time `json:"waiting_since"`
 	// UnansweredCount is how many public messages the customer sent since the last reply.
-	UnansweredCount    int            `json:"unanswered_count"`
-	LastMessagePreview string         `json:"last_message_preview"`
-	MessageCount       int            `json:"message_count"`
-	Spam               bool           `json:"spam"`
-	CSAT               *CSAT          `json:"csat"`
-	Custom             map[string]any `json:"custom"`
-	CreatedAt          time.Time      `json:"created_at"`
-	UpdatedAt          time.Time      `json:"updated_at"`
+	UnansweredCount    int    `json:"unanswered_count"`
+	LastMessagePreview string `json:"last_message_preview"`
+	// LastNote is the newest internal note on the ticket (see LastNote); nil when none.
+	LastNote     *LastNote      `json:"last_note"`
+	MessageCount int            `json:"message_count"`
+	Spam         bool           `json:"spam"`
+	CSAT         *CSAT          `json:"csat"`
+	Custom       map[string]any `json:"custom"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+}
+
+// LastNote is the newest internal note a member or an API key wrote on the ticket itself:
+// not a side conversation's message, an automation's or Ollie's note, a deleted note or one
+// sent as a reply. It is read from the messages each time (LastNoteSQL), so edits,
+// deletions and merges show at once. Only the team reads it: it is never in what a customer
+// receives.
+type LastNote struct {
+	ID uuid.UUID `json:"id"`
+	// Preview is the start of the note's text, whitespace collapsed, up to 200 characters.
+	Preview   string         `json:"preview"`
+	Author    LastNoteAuthor `json:"author"`
+	CreatedAt time.Time      `json:"created_at"`
+	EditedAt  *time.Time     `json:"edited_at"`
+}
+
+// LastNoteAuthor is who wrote a LastNote: Name is what to show (the member, or the API
+// key's bot or sender name); User is the member, null for an API key or a removed member.
+type LastNoteAuthor struct {
+	Type string   `json:"type" enum:"user,api"`
+	Name string   `json:"name"`
+	User *UserRef `json:"user"`
 }
 
 // TicketSkill is a required skill resolved from the workspace catalog.

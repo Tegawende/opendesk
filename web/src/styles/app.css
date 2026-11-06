@@ -732,3 +732,17 @@
     font-size: max(16px, 1em);
   }
 }
+
+/*
+ * Paper (the ticket print page, pages/inbox/TicketPrintPage.tsx): white, with margins that
+ * leave the page's 672px column whole on A4 and Letter, so an email frame sized on screen
+ * keeps its height. A message's header stays with what follows it; images, code and blocks
+ * marked print-keep are not cut across pages.
+ */
+.print-keep { break-inside: avoid; }
+@media print {
+  @page { margin: 16mm 14mm; }
+  html, body { background: #fff !important; }
+  header.print-keep { break-after: avoid; }
+  .prose-od :is(img, pre, blockquote, tr) { break-inside: avoid; }
+}

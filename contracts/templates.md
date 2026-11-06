@@ -168,7 +168,7 @@ type EmailLayoutOptions = {
   font: "system" | "sans" | "serif";
   footer_html: string;              // design allowlist, takes variables; "" = none
   history: "none" | "last" | "all"; // quote the previous message, or the whole conversation (up to 10)
-  history_header: string;           // text; {{ message.author }} and {{ message.date }}; "" = "On {{ message.date }}, {{ message.author }} wrote:"
+  history_header: string;           // text; {{ message.author }}, {{ message.email }} and {{ message.date }}; "" = "On {{ message.date }}, {{ message.author }} wrote:"
 };
 type EmailTemplate = {
   brand_id: string; kind: "layout" | "csat";
@@ -185,7 +185,9 @@ type EmailTemplate = {
 - The CSAT body must contain `{{ survey }}`, the five score buttons in the accent colour.
   The default reads "How did {{ team.name }} do?" with the request's number and subject.
 - Quoted history holds earlier public replies of the ticket (never notes), newest first, without
-  their images. Only replies carry history; auto-replies and CSAT emails do not.
+  their images. The quote line's `message.author` is who wrote one, `message.email` the address it
+  was sent from (the customer's From, or the address a reply went out from; for a customer's message
+  without one, such as chat, their contact's address; else empty) and `message.date` when. Only replies carry history; auto-replies and CSAT emails do not.
 - The plain-text part follows the same parts: content, signature, footer, then quoted history as
   `> ` lines.
 
