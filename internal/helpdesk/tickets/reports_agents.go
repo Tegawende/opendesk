@@ -89,7 +89,7 @@ func agentsReport(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS s
 	rows, err := q.Query(ctx, `WITH
 		-- Tickets created in the range: first assignees and first response.
 		c AS MATERIALIZED (
-			SELECT t.id, t.assignee_id, t.created_at, t.first_responded_at FROM tickets t
+			SELECT t.id, t.assignee_id, t.created_at, `+firstResponseSQL+` AS first_responded_at FROM tickets t
 			WHERE `+live+` AND t.created_at >= $2 AND t.created_at < $3),
 		-- A ticket's first assigned activity names in from whom it was created assigned to (null:
 		-- nobody); a ticket without one still has that first assignee. Activities never predate

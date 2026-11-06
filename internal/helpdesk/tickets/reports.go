@@ -59,11 +59,35 @@ type reportFilter struct {
 	Brand string
 }
 
-// sql binds the filter as $n and $n+1.
+// sql binds the filter as $n and $n+1. Merged tickets count nowhere: a merge moved their
+// messages, calls and threads to the ticket they went into and closed what was left, so they
+// would make one conversation two tickets created, and the merge a solve.
 func (f reportFilter) sql(n int) string {
 	return fmt.Sprintf(` AND ($%[1]d = '' OR ($%[1]d = 'none' AND t.team_id IS NULL) OR t.team_id::text = $%[1]d)
-		AND ($%[2]d = '' OR t.brand_id::text = $%[2]d)`, n, n+1)
+		AND ($%[2]d = '' OR t.brand_id::text = $%[2]d) AND t.merged_into_id IS NULL`, n, n+1)
 }
+
+// firstResponseSQL is a ticket's first response as the reports measure it (alias t): how long
+// a customer waited for a person. It is first_responded_at, except:
+//   - none on a ticket the team started (a reply of the team's within a minute of the ticket's
+//     creation, before any customer message: an outbound email, a chat an agent opened), whose
+//     own first message would count as a first response of 0 minutes;
+//   - when the reply at first_responded_at names no member (an imported helpdesk's bot or
+//     auto-reply), the first reply a member wrote from then on, none without one.
+//
+// Each check reads messages_ticket_idx on a few rows, for tickets with a first response only.
+const firstResponseSQL = `(CASE WHEN t.first_responded_at IS NULL THEN NULL
+	WHEN t.first_responded_at <= t.created_at + interval '1 minute' AND EXISTS (SELECT 1 FROM messages fm
+		WHERE fm.ticket_id = t.id AND fm.created_at <= t.created_at + interval '1 minute' AND fm.kind = 'reply'
+			AND fm.direction = 'outbound' AND fm.deleted_at IS NULL
+			AND NOT EXISTS (SELECT 1 FROM messages fi WHERE fi.ticket_id = t.id AND fi.created_at <= fm.created_at
+				AND fi.kind = 'reply' AND fi.direction = 'inbound' AND fi.deleted_at IS NULL)) THEN NULL
+	WHEN EXISTS (SELECT 1 FROM messages fb WHERE fb.ticket_id = t.id AND fb.created_at = t.first_responded_at AND fb.kind = 'reply'
+		AND fb.direction = 'outbound' AND fb.author_type = 'user' AND fb.author_user_id IS NULL AND fb.deleted_at IS NULL)
+		THEN (SELECT min(fr.created_at) FROM messages fr WHERE fr.ticket_id = t.id AND fr.created_at >= t.first_responded_at
+			AND fr.kind = 'reply' AND fr.direction = 'outbound' AND fr.author_type = 'user' AND fr.author_user_id IS NOT NULL
+			AND fr.deleted_at IS NULL AND fr.thread_id IS NULL)
+	ELSE t.first_responded_at END)`
 
 func (f reportFilter) validate() (reportFilter, error) {
 	f.Team, f.Brand = strings.TrimSpace(f.Team), strings.TrimSpace(f.Brand)
@@ -185,7 +209,7 @@ func overview(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS strin
 		(SELECT count(*) `+base+` AND t.created_at >= $2 AND t.created_at < $3),
 		(SELECT count(*) `+base+` AND t.solved_at >= $2 AND t.solved_at < $3),
 		(SELECT count(*) `+base+` AND t.status IN ('open', 'pending', 'on_hold')),
-		(SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM t.first_responded_at - t.created_at) / 60) `+base+`
+		(SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM `+firstResponseSQL+` - t.created_at) / 60) `+base+`
 			AND t.created_at >= $2 AND t.created_at < $3 AND t.first_responded_at IS NOT NULL),
 		(SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM t.solved_at - t.created_at) / 60) `+base+`
 			AND t.solved_at >= $2 AND t.solved_at < $3),
@@ -267,7 +291,7 @@ func overview(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS strin
 
 	rows, err = q.Query(ctx, `SELECT u.id, u.name, u.email, u.avatar_url,
 			count(*) FILTER (WHERE t.solved_at >= $2 AND t.solved_at < $3),
-			percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM t.first_responded_at - t.created_at) / 60)
+			percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM `+firstResponseSQL+` - t.created_at) / 60)
 				FILTER (WHERE t.first_responded_at IS NOT NULL AND t.created_at >= $2 AND t.created_at < $3)
 		FROM tickets t JOIN users u ON u.id = t.assignee_id
 		JOIN members m ON m.workspace_id = t.workspace_id AND m.user_id = u.id
@@ -298,7 +322,7 @@ func overview(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS strin
 			count(*) FILTER (WHERE t.created_at >= $2 AND t.created_at < $3),
 			count(*) FILTER (WHERE t.solved_at >= $2 AND t.solved_at < $3),
 			count(*) FILTER (WHERE t.status IN ('open', 'pending', 'on_hold')),
-			percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM t.first_responded_at - t.created_at) / 60)
+			percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM ` + firstResponseSQL + ` - t.created_at) / 60)
 				FILTER (WHERE t.first_responded_at IS NOT NULL AND t.created_at >= $2 AND t.created_at < $3)
 			` + base + ` AND ((t.created_at >= $2 AND t.created_at < $3) OR (t.solved_at >= $2 AND t.solved_at < $3)
 				OR t.status IN ('open', 'pending', 'on_hold'))
@@ -438,7 +462,7 @@ func registerInsights(d *deps.Deps, api huma.API) {
 
 	huma.Register(api, huma.Operation{OperationID: "report-overview", Method: http.MethodGet, Path: "/v1/reports/overview",
 		Summary: "Helpdesk overview report", Tags: []string{"Reports"},
-		Description: "from and to are YYYY-MM-DD (days in the workspace timezone, to inclusive) or RFC 3339. Default: the last 30 days. Spam and deleted tickets are excluded. team_id (or none) and brand_id narrow every figure."},
+		Description: "from and to are YYYY-MM-DD (days in the workspace timezone, to inclusive) or RFC 3339. Default: the last 30 days. Spam, deleted and merged tickets are excluded. First response is how long a customer waited for a member's reply: none on tickets the team started. team_id (or none) and brand_id narrow every figure."},
 		func(ctx context.Context, in *struct {
 			From    string `query:"from"`
 			To      string `query:"to"`
