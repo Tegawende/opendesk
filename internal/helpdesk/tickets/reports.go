@@ -68,25 +68,20 @@ func (f reportFilter) sql(n int) string {
 }
 
 // firstResponseSQL is a ticket's first response as the reports measure it (alias t): how long
-// a customer waited for a person. It is first_responded_at, except:
-//   - none on a ticket the team started (a reply of the team's within a minute of the ticket's
-//     creation, before any customer message: an outbound email, a chat an agent opened), whose
-//     own first message would count as a first response of 0 minutes;
-//   - when the reply at first_responded_at names no member (an imported helpdesk's bot or
-//     auto-reply), the first reply a member wrote from then on, none without one.
+// a customer waited for a person. It is first_responded_at, which only a person's public reply
+// sets (author_type 'user': a member's, one whose account is gone, an imported agent's; Ollie,
+// bots and automations write as 'system'), except none on a ticket the team started (a reply
+// of the team's within a minute of the ticket's creation, before any customer message: an
+// outbound email, a chat an agent opened), whose own first message would count as a first
+// response of 0 minutes.
 //
-// Each check reads messages_ticket_idx on a few rows, for tickets with a first response only.
+// The check reads messages_ticket_idx on a few rows, for tickets answered within a minute only.
 const firstResponseSQL = `(CASE WHEN t.first_responded_at IS NULL THEN NULL
 	WHEN t.first_responded_at <= t.created_at + interval '1 minute' AND EXISTS (SELECT 1 FROM messages fm
 		WHERE fm.ticket_id = t.id AND fm.created_at <= t.created_at + interval '1 minute' AND fm.kind = 'reply'
 			AND fm.direction = 'outbound' AND fm.deleted_at IS NULL
 			AND NOT EXISTS (SELECT 1 FROM messages fi WHERE fi.ticket_id = t.id AND fi.created_at <= fm.created_at
 				AND fi.kind = 'reply' AND fi.direction = 'inbound' AND fi.deleted_at IS NULL)) THEN NULL
-	WHEN EXISTS (SELECT 1 FROM messages fb WHERE fb.ticket_id = t.id AND fb.created_at = t.first_responded_at AND fb.kind = 'reply'
-		AND fb.direction = 'outbound' AND fb.author_type = 'user' AND fb.author_user_id IS NULL AND fb.deleted_at IS NULL)
-		THEN (SELECT min(fr.created_at) FROM messages fr WHERE fr.ticket_id = t.id AND fr.created_at >= t.first_responded_at
-			AND fr.kind = 'reply' AND fr.direction = 'outbound' AND fr.author_type = 'user' AND fr.author_user_id IS NOT NULL
-			AND fr.deleted_at IS NULL AND fr.thread_id IS NULL)
 	ELSE t.first_responded_at END)`
 
 func (f reportFilter) validate() (reportFilter, error) {
@@ -462,7 +457,7 @@ func registerInsights(d *deps.Deps, api huma.API) {
 
 	huma.Register(api, huma.Operation{OperationID: "report-overview", Method: http.MethodGet, Path: "/v1/reports/overview",
 		Summary: "Helpdesk overview report", Tags: []string{"Reports"},
-		Description: "from and to are YYYY-MM-DD (days in the workspace timezone, to inclusive) or RFC 3339. Default: the last 30 days. Spam, deleted and merged tickets are excluded. First response is how long a customer waited for a member's reply: none on tickets the team started. team_id (or none) and brand_id narrow every figure."},
+		Description: "from and to are YYYY-MM-DD (days in the workspace timezone, to inclusive) or RFC 3339. Default: the last 30 days. Spam, deleted and merged tickets are excluded. First response is how long a customer waited for a person's reply, never a bot's or an automation's: none on tickets the team started. team_id (or none) and brand_id narrow every figure."},
 		func(ctx context.Context, in *struct {
 			From    string `query:"from"`
 			To      string `query:"to"`
