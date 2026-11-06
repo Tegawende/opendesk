@@ -87,7 +87,8 @@ export function ViewSectionGroup({
       aria-controls={listId}
       onClick={onToggle}
       title={name}
-      className={cn(rowBase, rowShape(rail), rowIdle, current && "font-medium text-fg")}
+      // Semibold: a section's header stands apart from the views under it.
+      className={cn(rowBase, rowShape(rail), rowIdle, "font-semibold", current && "text-fg")}
     >
       <ChevronRight className={cn("transition-transform duration-150 motion-reduce:transition-none", !shut && "rotate-90")} />
       <Label rail={rail}>{name}</Label>

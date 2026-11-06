@@ -86,6 +86,13 @@ describe("a view section in the sidebar", () => {
     expect(header().textContent).toContain("contains the open view");
   });
 
+  it("names the section in semibold, apart from its views", async () => {
+    await render(<Pinned />);
+    expect(header().className).toContain("font-semibold");
+    expect(header().className).not.toContain("font-medium");
+    for (const a of host.querySelectorAll("a")) expect(a.className).not.toContain("font-semibold");
+  });
+
   it("puts its menu around the header", async () => {
     await render(<Pinned menu={(h) => <div data-menu="">{h}</div>} />);
     expect(host.querySelector("[data-menu] > button[aria-expanded]")).not.toBeNull();
