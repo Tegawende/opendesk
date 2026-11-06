@@ -52,7 +52,7 @@
     "historyLast": "Le message précédent",
     "historyAll": "Toute la conversation",
     "historyHeader": "Ligne d’introduction de la citation",
-    "historyHeaderHint": "Au-dessus de chaque message cité. Utilisez {{author}} et {{date}}."
+    "historyHeaderHint": "Au-dessus de chaque message cité. Utilisez {{author}}, {{email}} (l’adresse de l’expéditeur) et {{date}}."
   },
   "csat": {
     "off": "Les enquêtes de satisfaction sont désactivées. Cet e-mail n’est donc pas encore envoyé.",

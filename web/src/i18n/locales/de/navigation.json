@@ -82,7 +82,8 @@
     "myTeams": "Meine Teams",
     "newTicket": "Neues Ticket",
     "mailCategories": "Posteingangskategorien",
-    "phone": "Telefon"
+    "phone": "Telefon",
+    "print": "Drucken"
   },
   "folders": {
     "unassigned": "Nicht zugewiesen",

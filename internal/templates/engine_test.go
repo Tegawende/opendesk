@@ -178,6 +178,98 @@ func TestRenderEmail(t *testing.T) {
 	}
 }
 
+// The quote line reads each quoted message's author, address and date, filled in one pass.
+func TestHistoryHeaderEmail(t *testing.T) {
+	c := &Context{Values: vals(nil), Location: time.UTC, BrandColor: "#2563EB"}
+	at := time.Date(2026, 10, 17, 14, 3, 0, 0, time.UTC)
+	d := DefaultDesign()
+	d.Layout.History = "all"
+	d.Layout.HistoryHeader = `On {{ message.date }}, {{ message.author }}{% if message.email %} <{{ message.email }}>{% endif %} wrote:`
+	parts := Parts{Content: "<p>Thanks!</p>", ContentText: "Thanks!", History: []HistoryItem{
+		{Author: "Jana Nováková", Email: "jana@firma.cz", At: at, HTML: "<p>Help</p>"},
+		{Author: "{{ message.author }}", Email: "{{ message.date }}@x.cz", At: at, HTML: "<p>Odd</p>"},
+		{Author: "Chat visitor", At: at, HTML: "<p>No address</p>"},
+	}}
+	e := c.RenderEmail(d, parts)
+	for _, want := range []string{
+		"On Sat, 17 Oct 2026 at 14:03, Jana Nováková &lt;jana@firma.cz&gt; wrote:",
+		"On Sat, 17 Oct 2026 at 14:03, Chat visitor wrote:",
+	} {
+		if !strings.Contains(e.HTML, want) {
+			t.Errorf("html missing %q in %s", want, e.HTML)
+		}
+	}
+	if !strings.Contains(e.Text, "Jana Nováková <jana@firma.cz> wrote:\n> Help") {
+		t.Errorf("text: %q", e.Text)
+	}
+	// A value that looks like a tag is never read again as one.
+	if strings.Contains(e.HTML, "Sat, 17 Oct 2026 at 14:03@x.cz") {
+		t.Errorf("filled twice: %s", e.HTML)
+	}
+	// The default quote line stays as it was.
+	if e := c.RenderEmail(DefaultDesign(), parts); !strings.Contains(e.HTML, "On Sat, 17 Oct 2026 at 14:03, Jana Nováková wrote:") || strings.Contains(e.HTML, "jana@firma.cz") {
+		t.Errorf("default: %s", e.HTML)
+	}
+}
+
+// A forwarded email goes whole under the message: the conventional header, then its own
+// layout and images, in place of the quoted history and whatever the design quotes.
+func TestRenderForwarded(t *testing.T) {
+	c := &Context{Values: vals(map[string]string{"brand.name": "Acme"}), Location: time.UTC, BrandColor: "#2563EB"}
+	f := &Forwarded{FromName: "Jana Nováková", FromEmail: "jana@firma.cz", At: time.Date(2026, 10, 17, 14, 3, 0, 0, time.UTC),
+		Subject: "Objednávka <1182>", To: []string{"support@acme.test"},
+		HTML: `<table width="600"><tr><td style="padding: 8px"><img src="cid:abc@opendesk" width="200"> Hello</td></tr></table>`}
+	d := DefaultDesign()
+	d.Layout.History = "none"
+	e := c.RenderEmail(d, Parts{Content: "<p>Can you check?</p>", ContentText: "Can you check?", Signature: "<p>Alex</p>", Forwarded: f,
+		History: []HistoryItem{{Author: "Old", HTML: "<p>quoted reply</p>"}}})
+	for _, want := range []string{
+		ForwardedLine,
+		"From: Jana Nováková &lt;jana@firma.cz&gt;",
+		"Date: Sat, 17 Oct 2026 at 14:03",
+		"Subject: Objednávka &lt;1182&gt;",
+		"To: support@acme.test",
+		`<img src="cid:abc@opendesk" width="200">`,
+		`<td style="padding: 8px">`,
+	} {
+		if !strings.Contains(e.HTML, want) {
+			t.Errorf("html missing %q in %s", want, e.HTML)
+		}
+	}
+	if strings.Contains(e.HTML, "Cc:") || strings.Contains(e.HTML, "quoted reply") {
+		t.Errorf("no Cc line without one, and no history beside the forward: %s", e.HTML)
+	}
+	if !strings.Contains(e.Text, "Can you check?\n\n-- \nAlex\n\n"+ForwardedLine+"\nFrom: Jana Nováková <jana@firma.cz>\n") ||
+		!strings.Contains(e.Text, "To: support@acme.test\n\nHello") {
+		t.Errorf("text: %q", e.Text)
+	}
+
+	// A custom layout without a history slot still carries it, after the message.
+	d.Layout.Mode = "custom"
+	d.CustomHTML = SanitizeDesign(`<div>{{ content }}</div>`)
+	if e := c.RenderEmail(d, Parts{Content: "<p>Can you check?</p>", Forwarded: f}); !strings.Contains(e.HTML, "<p>Can you check?</p></div><div class=\"od-forwarded\">") {
+		t.Errorf("custom: %s", e.HTML)
+	}
+}
+
+func TestCheckHistoryHeader(t *testing.T) {
+	if p := Check(`{{ message.author }} <{{ message.email | downcase }}> {{ message.date }}{% if message.email %}!{% endif %}`, KindHistoryHeader, nil); len(p) != 0 {
+		t.Fatalf("history variables: %+v", p)
+	}
+	for _, src := range []string{"{{ contact.email }}", "{{ message.from }}", "{{ agent.name }}"} {
+		p := Check(src, KindHistoryHeader, nil)
+		if len(p) != 1 || p[0].Message != "Use {{ message.author }}, {{ message.email }} and {{ message.date }} here." || p[0].Token != src {
+			t.Errorf("%s: %+v", src, p)
+		}
+	}
+	// Saving a layout checks its quote line.
+	o := DefaultDesign().Layout
+	o.HistoryHeader = "{{ message.email }} {{ ticket.subject }}"
+	if _, _, p := CleanLayout(o, "", nil); len(p) != 1 || p[0].Token != "{{ ticket.subject }}" {
+		t.Errorf("layout: %+v", p)
+	}
+}
+
 func TestSurveyButtons(t *testing.T) {
 	h, txt := SurveyButtons("https://app.test/csat/tok?score=", "#2563EB")
 	if !strings.Contains(h, `href="https://app.test/csat/tok?score=5"`) || !strings.Contains(txt, "5 (Great): https://app.test/csat/tok?score=5") {

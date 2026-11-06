@@ -408,7 +408,15 @@ struct RoutingRuleEditor: View {
                 form
             }
         }
-        .channelSaveButton(visible: env.session.isAdmin, enabled: (draft != base || rule == nil) && !saving, saving: saving, save: save)
+        .settingsSaveBar(
+            dirty: env.session.isAdmin && (ruleID == nil || draft != base),
+            guarded: draft != base,
+            saveTitle: ruleID == nil ? "Create rule" : "Save changes",
+            saving: saving,
+            save: save
+        ) {
+            if ruleID == nil { env.router.accountPath.removeLast() } else { draft = base }
+        }
         .accountConfirm($confirm)
         .onAppear {
             store.attach(env.session.api)

@@ -149,6 +149,8 @@ export type StartThreadBody = {
   include_history?: boolean;
   /** Attachments of the customer's conversation to send along. */
   forward_attachment_ids?: string[];
+  /** One email of the ticket to forward in full (header, layout, inline images); not with include_history. */
+  forward_message_id?: string;
 };
 
 /** How a Google or Microsoft connection receives mail. */

@@ -46,7 +46,15 @@ struct GeneralSettings: View {
             store.attach(env.session.api)
             await store.load()
         }
-        .wsSaveBar(dirty: store.dirty && admin, saving: store.saving, disabled: !store.valid, save: save) { store.discard() }
+        .settingsSaveBar(dirty: store.dirty && admin, saving: store.saving, canSave: store.valid, save: save) { store.discard() }
+        #if DEBUG
+        // The QA harness's `/demo/settings-edit`: a name not saved yet, for the save bar.
+        .onChange(of: env.router.demoAction, initial: true) { _, action in
+            guard action == "settings-edit", store.info != nil else { return }
+            env.router.demoAction = nil
+            store.draft.name += " HQ"
+        }
+        #endif
         .sheet(isPresented: $pickingZone) {
             WSTimeZonePicker(title: "Timezone", selection: store.draft.timezone) { store.draft.timezone = $0 }
         }

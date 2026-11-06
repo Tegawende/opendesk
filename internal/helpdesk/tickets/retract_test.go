@@ -56,6 +56,10 @@ func TestRetractChatReply(t *testing.T) {
 	if preview != first.BodyText {
 		t.Fatalf("preview %q, want the customer's message", preview)
 	}
+	// The team's note now, the newest one.
+	if tk := getTicket(t, e, ws, tk.ID); tk.LastNote == nil || tk.LastNote.ID != reply.ID {
+		t.Fatalf("last_note after retract: %+v", tk.LastNote)
+	}
 	msgs, err := domain.ListMessages(e.Ctx, e.D.DB.Pool, ws.ID, tk.ID, true)
 	if err != nil {
 		t.Fatal(err)

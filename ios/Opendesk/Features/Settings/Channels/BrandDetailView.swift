@@ -35,7 +35,7 @@ struct BrandDetailView: View {
                 }
             }
         }
-        .channelSaveButton(visible: env.session.isAdmin && draft != base, enabled: canSave, saving: saving, save: save)
+        .settingsSaveBar(dirty: env.session.isAdmin && draft != base, saving: saving, canSave: canSave, save: save) { draft = base }
         .accountConfirm($confirm)
         .channelTypedConfirm($typed)
         .channelWebSheet($web) { reload() }

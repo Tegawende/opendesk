@@ -33,6 +33,7 @@ type threadCreateBody struct {
 	// What of the customer's conversation goes along; nothing unless asked for.
 	IncludeHistory       bool     `json:"include_history,omitempty" doc:"Quote the ticket's conversation with the customer (its last 10 public replies, never notes) under the first message"`
 	ForwardAttachmentIDs []string `json:"forward_attachment_ids,omitempty" maxItems:"20" doc:"Attachments of the ticket's public replies to send along with the first message"`
+	ForwardMessageID     string   `json:"forward_message_id,omitempty" doc:"Forward one public email of the ticket in full under the first message: its header, layout and inline images. Not with include_history"`
 }
 
 type threadMessageBody struct {
@@ -126,7 +127,7 @@ func registerThreads(d *deps.Deps, api huma.API) {
 				if err != nil {
 					return err
 				}
-				msg, err = addThreadMessage(ctx, tx, d, p, tid, th, in.Body)
+				msg, err = addThreadMessage(ctx, tx, d, p, tid, th, in.Body, carried{})
 				return err
 			})
 			if err != nil {
@@ -202,6 +203,9 @@ func startThread(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 	if subject == "" {
 		return threadCreated{}, httpx.Validation("a thread needs a subject")
 	}
+	if b.IncludeHistory && strings.TrimSpace(b.ForwardMessageID) != "" {
+		return threadCreated{}, httpx.Validation("forward one email or quote the conversation, not both")
+	}
 	to, err := cleanEmails(b.To)
 	if err != nil {
 		return threadCreated{}, err
@@ -253,12 +257,17 @@ func startThread(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 	}
 	actor := actorOf(p)
 	id := ids.New()
-	forwarded, err := forwardAttachments(ctx, tx, p, tid, b.ForwardAttachmentIDs)
+	var carry carried
+	if carry.files, err = forwardAttachments(ctx, tx, p, tid, b.ForwardAttachmentIDs); err != nil {
+		return threadCreated{}, err
+	}
+	forward, inline, err := forwardEmail(ctx, tx, p, tid, b.ForwardMessageID)
 	if err != nil {
 		return threadCreated{}, err
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO ticket_threads (id, workspace_id, ticket_id, subject, to_emails, cc_emails, mailbox_id, created_by, include_history)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, id, wid, tid, subject, to, cc, *from, actor.UserID, b.IncludeHistory); err != nil {
+	carry.inline, carry.email = inline, forward != nil
+	if _, err := tx.Exec(ctx, `INSERT INTO ticket_threads (id, workspace_id, ticket_id, subject, to_emails, cc_emails, mailbox_id, created_by, include_history, forward_message_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, id, wid, tid, subject, to, cc, *from, actor.UserID, b.IncludeHistory, forward); err != nil {
 		return threadCreated{}, err
 	}
 	th, err := domain.PublishThread(ctx, tx, wid, tid, id, "thread.created")
@@ -269,7 +278,7 @@ func startThread(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 		map[string]any{"thread_id": id.String(), "subject": th.Subject, "to": th.To}); err != nil {
 		return threadCreated{}, err
 	}
-	msg, err := addThreadMessage(ctx, tx, d, p, tid, th, threadMessageBody{BodyHTML: b.BodyHTML, AttachmentIDs: b.AttachmentIDs}, forwarded...)
+	msg, err := addThreadMessage(ctx, tx, d, p, tid, th, threadMessageBody{BodyHTML: b.BodyHTML, AttachmentIDs: b.AttachmentIDs}, carry)
 	if err != nil {
 		return threadCreated{}, err
 	}
@@ -321,10 +330,66 @@ func forwardAttachments(ctx context.Context, tx pgx.Tx, p *auth.Principal, tid u
 	return out, nil
 }
 
-// addThreadMessage writes the team's message in a thread and queues its email, with the
-// attachments forwarded from the customer's conversation, if any.
+// forwardEmail checks the email a thread forwards (forward_message_id): an email of this
+// ticket's conversation with the customer, by the rule of what may be quoted, so never a note,
+// another thread's message, mail that failed its sender checks or a reply that did not go out.
+// Its inline images are copied as the caller's uploads, inline and sharing the stored file
+// (as forwardAttachments), to go out in their places.
+func forwardEmail(ctx context.Context, tx pgx.Tx, p *auth.Principal, tid uuid.UUID, raw string) (*uuid.UUID, []uuid.UUID, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil, nil
+	}
+	id, err := hd.ParseRef(raw, "forward_message_id")
+	if err != nil {
+		return nil, nil, err
+	}
+	var ok bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM messages m WHERE m.workspace_id = $1 AND m.ticket_id = $2 AND m.id = $3 AND `+
+		domain.CustomerConversationSQL+`)`, p.WorkspaceID, tid, id).Scan(&ok); err != nil {
+		return nil, nil, err
+	}
+	if !ok {
+		return nil, nil, httpx.Validation("forward_message_id must be an email of this ticket's conversation with the customer")
+	}
+	rows, err := tx.Query(ctx, `SELECT filename, content_type, size_bytes, storage_key, content_id FROM attachments
+		WHERE workspace_id = $1 AND message_id = $2 AND inline ORDER BY created_at`, p.WorkspaceID, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	type file struct {
+		name, ct, key, cid string
+		size               int64
+	}
+	files, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (file, error) {
+		var f file
+		return f, r.Scan(&f.name, &f.ct, &f.size, &f.key, &f.cid)
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	inline := make([]uuid.UUID, 0, len(files))
+	for _, f := range files {
+		cp := ids.New()
+		if _, err := tx.Exec(ctx, `INSERT INTO attachments (id, workspace_id, filename, content_type, size_bytes, storage_key, content_id, inline, uploaded_by, uploaded_by_api_key_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9)`, cp, p.WorkspaceID, f.name, f.ct, f.size, f.key, f.cid, p.ActorUserID(), p.ActorAPIKeyID()); err != nil {
+			return nil, nil, err
+		}
+		inline = append(inline, cp)
+	}
+	return &id, inline, nil
+}
+
+// carried is what a thread's first message takes along from the customer's conversation.
+type carried struct {
+	files  []uuid.UUID // copies of attachments (forward_attachment_ids)
+	inline []uuid.UUID // copies of the forwarded email's inline images
+	email  bool        // it forwards an email (forward_message_id)
+}
+
+// addThreadMessage writes the team's message in a thread and queues its email, with what it
+// takes along from the customer's conversation, if anything.
 func addThreadMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal, tid uuid.UUID, th domain.Thread, b threadMessageBody,
-	forwarded ...uuid.UUID) (domain.Message, error) {
+	carry carried) (domain.Message, error) {
 	wid := p.WorkspaceID
 	if th.MailboxID == nil {
 		return domain.Message{}, httpx.Validation("this thread's address was removed; start a new thread")
@@ -344,13 +409,15 @@ func addThreadMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Prin
 	if err != nil {
 		return domain.Message{}, err
 	}
-	attIDs = append(attIDs, forwarded...)
+	attIDs = append(attIDs, carry.files...)
 	if len(attIDs) > 20 {
 		return domain.Message{}, httpx.Validation("at most 20 attachments per message")
 	}
-	if bodyText == "" && len(attIDs) == 0 && !strings.Contains(bodyHTML, "<img") {
+	// A forwarded email can go on its own; its images go in their places, not as files.
+	if bodyText == "" && len(attIDs) == 0 && !carry.email && !strings.Contains(bodyHTML, "<img") {
 		return domain.Message{}, httpx.Validation("the message is empty")
 	}
+	attIDs = append(attIDs, carry.inline...)
 	if err := hd.CheckAttachments(ctx, tx, wid, attIDs, hd.Uploader{User: p.ActorUserID(), APIKey: p.ActorAPIKeyID()}); err != nil {
 		return domain.Message{}, err
 	}

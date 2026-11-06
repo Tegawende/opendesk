@@ -300,6 +300,10 @@
       "name": "Prénom",
       "none": "Rien"
     },
+    "lastNote": {
+      "label": "Afficher la dernière note interne",
+      "hint": "Chaque ticket de la liste affiche sa note interne la plus récente, pour la lire sans ouvrir le ticket."
+    },
     "theme": {
       "label": "Thème",
       "light": "Clair",

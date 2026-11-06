@@ -226,10 +226,11 @@ function renderEmail(o: EmailLayoutOptions, custom: string, parts: { content: st
   );
 }
 
-function historyHTML(o: EmailLayoutOptions, author: string): string {
+function historyHTML(o: EmailLayoutOptions, author: string, email: string): string {
   if (o.history === "none") return "";
   const when = new Date(Date.now() - 3600_000).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-  const header = (o.history_header || "On {{ message.date }}, {{ message.author }} wrote:").replace(/\{\{\s*message\.date\s*\}\}/g, when).replace(/\{\{\s*message\.author\s*\}\}/g, author);
+  const values: Record<string, string> = { date: when, author, email };
+  const header = (o.history_header || "On {{ message.date }}, {{ message.author }} wrote:").replace(/\{\{\s*message\.(date|author|email)\s*\}\}/g, (_, k: string) => values[k]);
   return (
     `<div><div style="margin:0 0 6px;font-size:12px;color:#737373">${esc(header)}</div>` +
     `<blockquote style="margin:0 0 16px;padding:0 0 0 12px;border-left:2px solid #D4D4D4;color:#525252"><p>Hi, I can't sign in to my account since this morning. Could you take a look?</p></blockquote></div>`
@@ -272,7 +273,7 @@ function preview(ws: WsData, b: Record<string, unknown>): TemplatePreview {
   let content = fill(SAMPLE_CONTENT, vals);
   let signature = vals.html["agent.signature"];
   let probs: TemplateProblem[];
-  let history = historyHTML(o, vals.text["contact.name"]);
+  let history = historyHTML(o, vals.text["contact.name"], vals.text["contact.email"]);
   switch (kind) {
     case "reply":
       probs = problems(body, kind);
@@ -296,7 +297,7 @@ function preview(ws: WsData, b: Record<string, unknown>): TemplatePreview {
       if (isRecord(b.options)) o = { ...o, ...(b.options as Partial<EmailLayoutOptions>) };
       if (body.trim()) custom = body;
       probs = o.mode === "custom" ? problems(custom, "layout") : [];
-      history = historyHTML(o, vals.text["contact.name"]);
+      history = historyHTML(o, vals.text["contact.name"], vals.text["contact.email"]);
       break;
     case "csat": {
       const src = body.trim() ? body : csat.body_html;

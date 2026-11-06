@@ -25,6 +25,7 @@ import { productHome, requireTickets, TICKET_SETTINGS } from "./lib/products";
 import { folderById, listQuery, parseInboxSearch, teamQuery } from "./lib/folders";
 import { withRememberedSort } from "./lib/listSort";
 import { isMailRouteBox, mailListQuery, parseMailSearch } from "./lib/collab/boxes";
+import { parsePrintSearch } from "./lib/ticketPrint";
 
 export type RouterContext = { queryClient: QueryClient };
 
@@ -393,6 +394,24 @@ function prefetchTicket(qc: QueryClient, id: string) {
   void qc.prefetchQuery(q.savedReplies());
   void qc.prefetchQuery(q.slaPolicies());
 }
+
+// Print or save as PDF: a ticket's conversation or one of its messages as a document, without
+// the app's chrome; it opens the browser's print dialog once loaded.
+const ticketPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tickets/$ticketId/print",
+  validateSearch: parsePrintSearch,
+  beforeLoad: ({ location }) => requireWorkspace(location.href),
+  loader: async ({ context, params }) => {
+    const qc = context.queryClient;
+    await requireTickets(qc);
+    const t = await qc.ensureQueryData(q.ticket(params.ticketId));
+    void qc.prefetchQuery(q.messages(t.id));
+    void qc.prefetchQuery(q.threads(t.id));
+  },
+  component: page(() => import("./pages/inbox/TicketPrintPage")),
+  staticData: { title: "print" },
+});
 
 // A new ticket on a full page (the dialog's "Open full page"), with the ticket page's details column.
 const newTicketRoute = createRoute({
@@ -983,6 +1002,7 @@ const routeTree = rootRoute.addChildren([
   csatRoute,
   csatLegacyRoute,
   portalRoute, portalForgotRoute, portalResetRoute, portalTicketRoute,
+  ticketPrintRoute,
   authLayout.addChildren([
     loginRoute,
     registerRoute,

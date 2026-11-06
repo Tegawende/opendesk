@@ -390,7 +390,12 @@ function LayoutForm({
       {o.history !== "none" && (
         <Field
           label={t("layout.historyHeader")}
-          hint={t("layout.historyHeaderHint", { author: "{{ message.author }}", date: "{{ message.date }}", interpolation: { escapeValue: false } })}
+          hint={t("layout.historyHeaderHint", {
+            author: "{{ message.author }}",
+            email: "{{ message.email }}",
+            date: "{{ message.date }}",
+            interpolation: { escapeValue: false },
+          })}
         >
           <TextInput
             aria-label={t("layout.historyHeader")}

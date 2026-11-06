@@ -33,7 +33,10 @@ struct MailAccountDetailView: View {
                 }
             }
         }
-        .channelSaveButton(visible: item?.account.canManage == true, enabled: canSave, saving: saving, save: save)
+        .settingsSaveBar(dirty: item?.account.canManage == true && !patch.isEmpty, saving: saving, canSave: canSave, save: save) {
+            draft = base
+            imap = imapBase
+        }
         .accountConfirm($confirm)
         .channelWebSheet($web) { reload() }
         .refreshable { await load() }

@@ -498,7 +498,13 @@ func AddMessage(ctx context.Context, tx pgx.Tx, jc Jobs, nm NewMessage) (Message
 		}
 	}
 	if len(changes) > 0 || nm.Kind == "reply" {
-		if err := PublishTicketUpdated(ctx, tx, nm.WorkspaceID, nm.TicketID, append(changes, "last_message_at")); err != nil {
+		changes = append(changes, "last_message_at")
+	}
+	if CountsAsLastNote(nm.Kind, nm.ThreadID, nm.AuthorType, nm.AI) {
+		changes = append(changes, "last_note")
+	}
+	if len(changes) > 0 {
+		if err := PublishTicketUpdated(ctx, tx, nm.WorkspaceID, nm.TicketID, changes); err != nil {
 			return Message{}, err
 		}
 	}
@@ -538,6 +544,12 @@ func AddMessage(ctx context.Context, tx pgx.Tx, jc Jobs, nm NewMessage) (Message
 		}
 	}
 	return msg, nil
+}
+
+// CountsAsLastNote is whether a message is one Ticket.last_note can show (LastNoteSQL): an
+// internal note a member or an API key wrote on the ticket itself, not Ollie's.
+func CountsAsLastNote(kind string, thread *uuid.UUID, authorType string, ai bool) bool {
+	return kind == "note" && thread == nil && (authorType == "user" || authorType == "api") && !ai
 }
 
 // PublishTicketUpdated reloads the ticket and publishes ticket.updated with the changed fields.

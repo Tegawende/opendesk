@@ -323,12 +323,19 @@ Slots are places in an email layout or the satisfaction email that opendesk fill
 | `{{ history }}` | A custom layout | The quoted earlier messages, when the layout quotes them. |
 | `{{ survey }}` | The satisfaction email (required) | The five rating buttons, in the accent colour. |
 
-The quote line above each quoted message has two variables of its own, and takes no others:
+The quote line above each quoted message has three variables of its own, and takes no others:
 
 | Variable | What it is | Example |
 | --- | --- | --- |
 | `message.author` | Who wrote the quoted message. | Jane Cooper |
+| `message.email` | The address it was sent from: the customer's own address for their messages, the address a reply went out from for your team's. Empty when there is none. | jane@acme.com |
 | `message.date` | When it was written. | Sat, 17 Oct 2026 at 14:03 |
+
+To show who wrote each quoted message with their address, when it has one:
+
+```liquid
+On {{ message.date }}, {{ message.author }}{% if message.email %} <{{ message.email }}>{% endif %} wrote:
+```
 
 <Fold>
 

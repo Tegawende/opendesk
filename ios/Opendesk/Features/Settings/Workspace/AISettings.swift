@@ -38,7 +38,7 @@ struct AISettings: View {
         .onChange(of: env.directory.ai) { _, _ in
             if !store.dirty { Task { await store.load(admin: admin) } }
         }
-        .wsSaveBar(dirty: store.dirty && admin, saving: store.saving, disabled: !store.valid, save: save) { store.discard() }
+        .settingsSaveBar(dirty: store.dirty && admin, saving: store.saving, canSave: store.valid, save: save) { store.discard() }
         .sheet(isPresented: $editingKey) {
             WSProviderKeySheet(current: store.provider?.key) {
                 await store.load(admin: admin)

@@ -48,6 +48,18 @@ type messageMutationTarget struct {
 	// delivery is the reply's email delivery_status (a chat reply's follow-up email too).
 	delivery  string
 	createdAt time.Time
+	ai        bool
+}
+
+// lastNote is whether the message is one Ticket.last_note can show, so changing it may
+// change the ticket's last_note.
+func (t messageMutationTarget) lastNote() bool {
+	return domain.CountsAsLastNote(t.kind, t.threadID, t.authorType, t.ai)
+}
+
+// publishLastNote tells the team the ticket's last_note may have changed (ticket.updated).
+func publishLastNote(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID) error {
+	return domain.PublishTicketUpdated(ctx, tx, wid, tid, []string{"last_note"})
 }
 
 // EditNote applies the same note mutation as the HTTP API for another trusted
@@ -101,7 +113,15 @@ func EditNote(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal, t
 	if err := notifyNewMentions(ctx, tx, p.WorkspaceID, tid, edited, actor.UserID, target.bodyHTML, target.bodyText); err != nil {
 		return domain.Message{}, err
 	}
-	return edited, domain.PublishMessageUpdated(ctx, tx, p.WorkspaceID, mid)
+	if err := domain.PublishMessageUpdated(ctx, tx, p.WorkspaceID, mid); err != nil {
+		return domain.Message{}, err
+	}
+	if target.lastNote() {
+		if err := publishLastNote(ctx, tx, p.WorkspaceID, tid); err != nil {
+			return domain.Message{}, err
+		}
+	}
+	return edited, nil
 }
 
 // DeleteMessage applies the normal ticket deletion policy for another trusted
@@ -149,7 +169,13 @@ func DeleteMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Princip
 	if _, err := domain.LogActivity(ctx, tx, p.WorkspaceID, tid, actor.Type, actor.UserID, typ, map[string]any{"message_id": mid}); err != nil {
 		return err
 	}
-	return publishDeletion(ctx, tx, p.WorkspaceID, tid, mid, target.kind == "reply")
+	if err := publishDeletion(ctx, tx, p.WorkspaceID, tid, mid, target.kind == "reply"); err != nil {
+		return err
+	}
+	if target.lastNote() {
+		return publishLastNote(ctx, tx, p.WorkspaceID, tid)
+	}
+	return nil
 }
 
 func registerMessageMutations(d *deps.Deps, api huma.API, tags []string) {
@@ -260,6 +286,11 @@ func registerMessageMutations(d *deps.Deps, api huma.API, tags []string) {
 				}
 				if err := domain.PublishMessageUpdated(ctx, tx, p.WorkspaceID, mid); err != nil {
 					return err
+				}
+				if target.lastNote() {
+					if err := publishLastNote(ctx, tx, p.WorkspaceID, tid); err != nil {
+						return err
+					}
 				}
 				msg, err = domain.LoadMessage(ctx, tx, p.WorkspaceID, mid)
 				return err
@@ -629,7 +660,8 @@ func registerRetract(d *deps.Deps, api huma.API, tags []string) {
 				if err := domain.PublishMessageUpdated(ctx, tx, p.WorkspaceID, mid); err != nil {
 					return err
 				}
-				if err := domain.PublishTicketUpdated(ctx, tx, p.WorkspaceID, tid, []string{"last_message_preview"}); err != nil {
+				// It is the team's note now, and may be the ticket's last_note.
+				if err := domain.PublishTicketUpdated(ctx, tx, p.WorkspaceID, tid, []string{"last_message_preview", "last_note"}); err != nil {
 					return err
 				}
 				msg, err = domain.LoadMessage(ctx, tx, p.WorkspaceID, mid)
@@ -644,10 +676,10 @@ func registerRetract(d *deps.Deps, api huma.API, tags []string) {
 func lockMessageMutationTarget(ctx context.Context, tx pgx.Tx, wid, ticketID, messageID uuid.UUID) (messageMutationTarget, error) {
 	var target messageMutationTarget
 	err := tx.QueryRow(ctx, `SELECT author_type, author_user_id, kind, direction, thread_id, body_html, body_text, deleted_at IS NOT NULL, purged_at IS NOT NULL,
-		sent_as_reply_id IS NOT NULL, delivery_status, created_at FROM messages
+		sent_as_reply_id IS NOT NULL, delivery_status, created_at, ai FROM messages
 		WHERE workspace_id = $1 AND ticket_id = $2 AND id = $3 FOR UPDATE`, wid, ticketID, messageID).
 		Scan(&target.authorType, &target.authorID, &target.kind, &target.direction, &target.threadID, &target.bodyHTML, &target.bodyText,
-			&target.deleted, &target.purged, &target.sentAsReply, &target.delivery, &target.createdAt)
+			&target.deleted, &target.purged, &target.sentAsReply, &target.delivery, &target.createdAt, &target.ai)
 	if db.IsNotFound(err) {
 		return target, httpx.NotFound("Message")
 	}

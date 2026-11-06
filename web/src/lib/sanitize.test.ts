@@ -70,6 +70,17 @@ describe("sanitize", () => {
       expect(held).toBe(1);
       expect(html).not.toContain("t.example");
     });
+
+    it("loads images at once for a page about to print, still holding back other sites'", () => {
+      expect(sanitizeProse(`<img src="${ours}">`).html).toContain(`loading="lazy"`);
+      for (const run of [sanitizeProse, sanitizeEmailHtml]) {
+        const { html, held } = run(`<img src="${ours}"><img src="https://t.example/open.gif">`, { blockRemoteImages: true, eagerImages: true });
+        expect(html).toContain(`loading="eager"`);
+        expect(html).not.toContain(`loading="lazy"`);
+        expect(html).not.toContain("t.example");
+        expect(held).toBe(1);
+      }
+    });
   });
 });
 

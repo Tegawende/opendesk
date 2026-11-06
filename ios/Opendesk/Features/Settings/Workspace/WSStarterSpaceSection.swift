@@ -22,28 +22,27 @@ struct WSStarterSpaceSection: View {
                 AccountRow(title: "Loading")
                     .redacted(reason: .placeholder)
             } else if let starter {
-                AccountRow(title: starter.name, subtitle: summary(starter)) {
-                    HStack(spacing: 8) {
-                        Button("Edit") { edit(starter) }
-                            .buttonStyle(OutlineButtonStyle(fullWidth: false, height: 32))
-                        Button {
-                            confirm = AccountConfirm(
-                                title: "Remove the starter Space?",
-                                message: "New members get the workspace's own sections instead. Copies people already made stay theirs.",
-                                confirmTitle: "Remove starter"
-                            ) { await remove() }
-                        } label: {
-                            Image(systemName: "trash")
-                        }
-                        .buttonStyle(OutlineButtonStyle(fullWidth: false, height: 32, tint: Tone.red.text))
-                        .accessibilityLabel("Remove the starter Space")
-                    }
-                }
-                .overlay(alignment: .leading) {
+                HStack(spacing: 0) {
                     SpaceMark(name: starter.name, icon: starter.icon, color: starter.color, size: 30)
                         .padding(.leading, 14)
+                    AccountRow(title: starter.name, subtitle: summary(starter)) {
+                        HStack(spacing: 8) {
+                            Button("Edit") { edit(starter) }
+                                .buttonStyle(OutlineButtonStyle(fullWidth: false, height: 32))
+                            Button {
+                                confirm = AccountConfirm(
+                                    title: "Remove the starter Space?",
+                                    message: "New members get the workspace's own sections instead. Copies people already made stay theirs.",
+                                    confirmTitle: "Remove starter"
+                                ) { await remove() }
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(OutlineButtonStyle(fullWidth: false, height: 32, tint: Tone.red.text))
+                            .accessibilityLabel("Remove the starter Space")
+                        }
+                    }
                 }
-                .padding(.leading, 42)
             } else {
                 AccountRow(title: "No starter Space", subtitle: "Members start with the workspace's own sections.") {
                     Button("Set up") { edit(nil) }

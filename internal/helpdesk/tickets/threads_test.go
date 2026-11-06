@@ -254,3 +254,95 @@ func TestThreadReplyNotifiesAssignee(t *testing.T) {
 		t.Fatal("a thread reply is not a customer reply")
 	}
 }
+
+// forward_message_id forwards one email of the customer's conversation in full: the thread
+// names it, and its first message carries copies of its inline images, sharing the stored file.
+func TestThreadForwardsEmail(t *testing.T) {
+	e := hdtest.New(t, tickets.Register, widget.Register)
+	ws := e.NewWorkspace()
+	mb := addMailbox(t, e, ws)
+	tk := createTicket(t, e, ws, map[string]any{"channel": "email", "mailbox_id": mb.String(), "kind": "note",
+		"contact": map[string]any{"email": "carla@customer.test", "name": "Carla"}})
+	agent := ws.Agent.As(ws)
+	upload := func(name string) domain.Attachment {
+		var a domain.Attachment
+		e.Upload("/v1/attachments", agent, name, []byte("file "+name)).Want(t, 201).JSON(t, &a)
+		return a
+	}
+	// An email from the customer; the first of its files is an image in its text.
+	inbound := func(ticket domain.Ticket, authFailed bool, files ...domain.Attachment) domain.Message {
+		var m domain.Message
+		if err := e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
+			var err error
+			m, err = domain.AddMessage(e.Ctx, tx, e.D.Jobs, domain.NewMessage{WorkspaceID: ws.ID, TicketID: ticket.ID, Kind: "reply", Direction: "inbound",
+				AuthorType: "contact", BodyHTML: "<p>See the screenshot</p>", BodyText: "See the screenshot", Subject: "Error",
+				FromEmail: "carla@customer.test", FromName: "Carla", AuthFailed: authFailed})
+			if err != nil {
+				return err
+			}
+			for i, f := range files {
+				if _, err := tx.Exec(e.Ctx, `UPDATE attachments SET message_id = $2, inline = $3 WHERE id = $1`, f.ID, m.ID, i == 0); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	shot, file := upload("shot.png"), upload("invoice.pdf")
+	email := inbound(tk, false, shot, file)
+	var note domain.Message
+	e.Do("POST", "/v1/tickets/"+tk.ID.String()+"/messages", agent, map[string]any{"kind": "note", "body_html": "<p>Internal.</p>"}).Want(t, 201).JSON(t, &note)
+	spoofed := inbound(tk, true)
+	other := createTicket(t, e, ws, map[string]any{"channel": "email", "mailbox_id": mb.String(), "kind": "note",
+		"contact": map[string]any{"email": "carla@customer.test", "name": "Carla"}})
+	elsewhere := inbound(other, false)
+
+	base := "/v1/tickets/" + tk.ID.String() + "/threads"
+	body := func(extra map[string]any) map[string]any {
+		b := map[string]any{"to": []string{"ops@acquirer.test"}, "subject": "Fwd: Error", "body_html": ""}
+		for k, v := range extra {
+			b[k] = v
+		}
+		return b
+	}
+	// One email or the conversation, not both; never a note, mail that failed its sender
+	// checks, another ticket's email or something that is not an id.
+	e.Do("POST", base, agent, body(map[string]any{"forward_message_id": email.ID.String(), "include_history": true})).Want(t, 422)
+	for _, id := range []string{note.ID.String(), spoofed.ID.String(), elsewhere.ID.String(), ids.New().String(), "nope"} {
+		e.Do("POST", base, agent, body(map[string]any{"forward_message_id": id})).Want(t, 422)
+	}
+	// Without words of its own, a thread still needs something to send.
+	e.Do("POST", base, agent, body(nil)).Want(t, 422)
+
+	var fwd threadCreated
+	e.Do("POST", base, agent, body(map[string]any{"forward_message_id": email.ID.String(), "forward_attachment_ids": []string{file.ID.String()}})).
+		Want(t, 201).JSON(t, &fwd)
+	if fwd.Thread.ForwardMessageID == nil || *fwd.Thread.ForwardMessageID != email.ID || fwd.Thread.IncludeHistory {
+		t.Fatalf("thread %+v", fwd.Thread)
+	}
+	var inline, files []domain.Attachment
+	for _, a := range fwd.Message.Attachments {
+		if a.Inline {
+			inline = append(inline, a)
+		} else {
+			files = append(files, a)
+		}
+	}
+	if len(inline) != 1 || inline[0].Filename != "shot.png" || inline[0].ID == shot.ID || len(files) != 1 || files[0].Filename != "invoice.pdf" {
+		t.Fatalf("attachments %+v", fwd.Message.Attachments)
+	}
+	var shared int
+	e.Scalar(`SELECT count(*) FROM attachments WHERE storage_key = (SELECT storage_key FROM attachments WHERE id = $1)`, &shared, shot.ID)
+	if shared != 2 {
+		t.Fatalf("the copy shares the stored file: %d", shared)
+	}
+	// Writing in the thread later forwards nothing again.
+	var m2 domain.Message
+	e.Do("POST", base+"/"+fwd.Thread.ID.String()+"/messages", agent, map[string]any{"body_html": "<p>Any news?</p>"}).Want(t, 201).JSON(t, &m2)
+	if len(m2.Attachments) != 0 {
+		t.Fatalf("second message attachments %+v", m2.Attachments)
+	}
+}

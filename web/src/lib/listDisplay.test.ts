@@ -67,3 +67,32 @@ describe("the list's assignee display", () => {
     expect(m.seen.at(-1)).toBe("name");
   });
 });
+
+describe("the list's latest internal note", () => {
+  beforeEach(() => localStorage.clear());
+
+  async function mountedNote(mod: Awaited<ReturnType<typeof load>>) {
+    const seen: boolean[] = [];
+    function Probe() {
+      seen.push(mod.useShowLastNote());
+      return null;
+    }
+    const root = createRoot(document.createElement("div"));
+    await act(async () => root.render(createElement(Probe)));
+    return { seen, unmount: () => act(async () => root.unmount()) };
+  }
+
+  it("shows until switched off, keeps that in this browser and follows other tabs", async () => {
+    const mod = await load();
+    const m = await mountedNote(mod);
+    expect(m.seen.at(-1)).toBe(true);
+    await act(async () => mod.setShowLastNote(false));
+    expect(m.seen.at(-1)).toBe(false);
+    await m.unmount();
+    const next = await mountedNote(await load());
+    expect(next.seen.at(-1)).toBe(false);
+    localStorage.removeItem("od-list-last-note");
+    await act(async () => window.dispatchEvent(new StorageEvent("storage", { key: "od-list-last-note" })));
+    expect(next.seen.at(-1)).toBe(true);
+  });
+});

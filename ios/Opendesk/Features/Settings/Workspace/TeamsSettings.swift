@@ -298,7 +298,7 @@ struct WSTeamDetail: View {
             if team == nil, store.team != nil, !deleting { Task { await store.load(id: id) } }
             else if !store.dirty { Task { await store.load(id: id) } }
         }
-        .wsSaveBar(dirty: store.dirty && admin, saving: store.saving, disabled: store.problem != nil, message: store.dirty ? store.problem : nil, save: save) {
+        .settingsSaveBar(dirty: store.dirty && admin, problem: store.problem, saving: store.saving, canSave: store.problem == nil, save: save) {
             store.discard()
         }
         .sheet(isPresented: $adding) {

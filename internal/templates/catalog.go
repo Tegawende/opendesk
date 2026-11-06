@@ -115,8 +115,18 @@ var Slots = []Slot{
 // HistoryVariables are the variables of a quoted message's header.
 var HistoryVariables = []Variable{
 	{"message.author", "message", "Author", "Who wrote the quoted message.", "Jane Cooper", false, false},
+	{"message.email", "message", "Email", "The address it was sent from: the customer's for their messages, the address a reply went out from for the team's. Empty when there is none.", "jane@acme.com", false, false},
 	{"message.date", "message", "Date", "When it was written.", "Sat, 17 Oct 2026 at 14:03", false, false},
 }
+
+// historyVariable is the set of HistoryVariables' keys.
+var historyVariable = func() map[string]bool {
+	m := map[string]bool{}
+	for _, v := range HistoryVariables {
+		m[v.Key] = true
+	}
+	return m
+}()
 
 // groupOf is each built-in variable's group.
 var groupOf = func() map[string]string {
@@ -194,8 +204,8 @@ func Check(src, kind string, fields map[string]bool) []Problem {
 		seen[k] = true
 		switch {
 		case kind == KindHistoryHeader:
-			if k != "message.author" && k != "message.date" {
-				out = append(out, Problem{Message: "Use {{ message.author }} and {{ message.date }} here.", Token: "{{ " + k + " }}"})
+			if !historyVariable[k] {
+				out = append(out, Problem{Message: "Use {{ message.author }}, {{ message.email }} and {{ message.date }} here.", Token: "{{ " + k + " }}"})
 			}
 		case allowed[k]:
 		case isSlot(k):

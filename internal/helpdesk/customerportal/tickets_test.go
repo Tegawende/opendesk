@@ -66,6 +66,7 @@ func TestPortalTicketOwnership(t *testing.T) {
 	team := ids.New()
 	e.Exec(`INSERT INTO teams(id,workspace_id,name,private) VALUES($1,$2,'Private team',true)`, team, ws.ID)
 	e.Exec(`UPDATE tickets SET team_id=$2, custom='{"secret":"internal"}',last_message_preview='private preview' WHERE id=$1`, own.ID, team)
+	portalMessage(t, e, ws, own, "note", "internal note text")
 	otherContact := ids.New()
 	e.Exec(`INSERT INTO contacts(id,workspace_id,email,name) VALUES($1,$2,'other@example.com','Other')`, otherContact, ws.ID)
 	other := portalTicket(t, e, ws, otherContact, domain.StatusOpen)
@@ -87,7 +88,8 @@ func TestPortalTicketOwnership(t *testing.T) {
 	r := e.Do("GET", portalTickets+"/"+own.ID.String(), customer, nil).Want(t, 200)
 	m := r.Map(t)
 	delete(m, "$schema")
-	if len(m) != 6 || m["id"] != own.ID.String() || strings.Contains(string(r.Body), "private preview") || strings.Contains(string(r.Body), "internal") {
+	if len(m) != 6 || m["id"] != own.ID.String() || strings.Contains(string(r.Body), "private preview") || strings.Contains(string(r.Body), "internal") ||
+		strings.Contains(string(r.Body), "last_note") {
 		t.Fatalf("ticket DTO: %s", r.Body)
 	}
 	rows, next := pageRows(t, e.Do("GET", portalTickets+"?workspace_id="+otherWS.ID.String()+"&contact_id="+otherContact.String(), customer, nil))

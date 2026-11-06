@@ -419,7 +419,8 @@ func (s *service) preview(ctx context.Context, p *auth.Principal, b previewBody)
 			return nil, httpx.Wrap(err)
 		}
 	} else {
-		history = []templates.HistoryItem{{Author: firstNonEmpty(tc.Values.Text["contact.name"], "Jane Cooper"), At: time.Now().Add(-time.Hour),
+		history = []templates.HistoryItem{{Author: firstNonEmpty(tc.Values.Text["contact.name"], "Jane Cooper"),
+			Email: firstNonEmpty(tc.Values.Text["contact.email"], "jane@acme.com"), At: time.Now().Add(-time.Hour),
 			HTML: "<p>Hi, I can't sign in to my account since this morning. Could you take a look?</p>"}}
 	}
 	switch b.Kind {

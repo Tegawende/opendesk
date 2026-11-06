@@ -97,6 +97,13 @@ const RECEIPT =
   `<p style="margin:32px 0 0;font-size:13px;line-height:20px;color:#687385">Questions? Reply to this email or visit <a href="https://margin.app/help" style="color:#635bff;text-decoration:none">margin.app/help</a>.</p>` +
   `</td></tr></table><img src="https://mail.margin.app/o/7f3a.gif" width="1" height="1" alt=""></div>`;
 
+// A picture pasted into an email: an inline image, kept in the message as the API serves it.
+const EXPECTED_PAGE =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240" viewBox="0 0 480 240"><rect width="480" height="240" rx="10" fill="#f6f8fa"/><rect x="24" y="24" width="180" height="14" rx="7" fill="#1a1f36"/><rect x="24" y="52" width="300" height="8" rx="4" fill="#c9ced6"/><rect x="24" y="68" width="260" height="8" rx="4" fill="#c9ced6"/><rect x="24" y="96" width="200" height="120" rx="8" fill="#635bff" opacity="0.18"/><rect x="240" y="96" width="216" height="120" rx="8" fill="#20c997" opacity="0.2"/><text x="124" y="162" font-family="Helvetica, Arial" font-size="13" text-anchor="middle" fill="#3c3f8f">Chart</text><text x="348" y="162" font-family="Helvetica, Arial" font-size="13" text-anchor="middle" fill="#14735a">Photo</text></svg>`,
+  );
+
 export const STORIES: Story[] = [
   {
     number: 1072,
@@ -157,7 +164,13 @@ export const STORIES: Story[] = [
         from: "c",
         min: 14,
         attach: ["pdf", "screenshot2"],
-        html: `<p>Hello,</p><p>When I export our "Client brief" notebook to PDF the download starts, then fails with "Export failed, try again later". Smaller notebooks export fine. This one has about 60 pages and a lot of images.</p><p>I attached what I get when I export a single page from it, the images are missing. We need this for a client presentation tomorrow morning.</p><p>Elena</p>`,
+        html: `<p>Hello,</p><p>When I export our "Client brief" notebook to PDF the download starts, then fails with <strong>"Export failed, try again later"</strong>. Smaller notebooks export fine. This one has about 60 pages and a lot of images.</p><p>I attached what I get when I export a single page from it, the images are missing. This is how that page should look:</p><p><img src="${EXPECTED_PAGE}" alt="The page as it should look" width="480" height="240"></p><ul><li>Pages with only text: fine</li><li>Pages with charts or photos: <em>images missing</em></li></ul><p>We need this for a client presentation tomorrow morning.</p><p>Elena</p>`,
+      },
+      {
+        from: "jonas",
+        note: true,
+        min: 9,
+        html: `<p>Reproduced with a 60 page notebook: the image step times out after 30 s. Asked the export team to raise the limit for her workspace.</p>`,
       },
     ],
   },
@@ -240,6 +253,12 @@ export const STORIES: Story[] = [
         from: "c",
         min: 35,
         html: `<p>Hi, just checking in on this. I haven't heard back yet. Is the refund being processed?</p>`,
+      },
+      {
+        from: "maya",
+        note: true,
+        min: 20,
+        html: `<p>Checked with billing: the refund went through on the 9th. My reply bounced, resending it from the billing address.</p>`,
       },
     ],
   },
