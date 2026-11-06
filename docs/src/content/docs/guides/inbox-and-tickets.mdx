@@ -89,7 +89,7 @@ To keep these in view and the customer at the top of the details panel, set **Ti
 | `pending` | Waiting on the customer. |
 | `on_hold` | Waiting on something else, such as another team or a third party. |
 | `solved` | Resolved. A new reply from the customer reopens the conversation. |
-| `closed` | Finished and kept for the record. |
+| `closed` | Finished and kept for the record. The customer cannot reopen it: an email that answers it opens a new ticket, a help center reply leaves it closed, and the chat widget asks them to start a new conversation. |
 
 An admin can rename, recolour or hide statuses in **Settings**, under **Workspace**, **Statuses and priorities**. A hidden status leaves the menus agents pick from; a ticket already in it keeps it, and **Snooze** still works when **on hold** is hidden. **Open** and **Solved** always stay available. To call the finish action **Close**, rename **Solved** to **Closed** and hide the terminal **Closed** status. Finishing still sends satisfaction surveys when enabled, and a customer reply reopens the same ticket.
 
@@ -107,7 +107,7 @@ An admin can change the times the menu offers in **Settings → Workspace**, und
 
 The **⋯** menu holds the rest: **Merge into another ticket**, **Copy link**, **Hide ticket history** (or **Show**), **Print or save as PDF**, **Mark as spam** and **Delete ticket**.
 
-**Merge into another ticket** first offers the customer's other tickets, closed ones included, and leaves out those already merged elsewhere; type to search every ticket. Merging into a solved or closed ticket reopens it when the ticket you merge is still open, pending or on hold, so the customer's new message is not left in a finished conversation. If the ticket you pick was itself merged, the merge goes into the ticket it went into, and that is the ticket that opens.
+**Merge into another ticket** first offers the customer's other tickets, closed ones included, and leaves out those already merged elsewhere; type to search every ticket. Merging into a solved or closed ticket reopens it when the ticket you merge is still open, pending or on hold, so the customer's new message is not left in a finished conversation. Apart from changing its status, this is the only way a closed ticket opens again. If the ticket you pick was itself merged, the merge goes into the ticket it went into, and that is the ticket that opens.
 
 <Screenshot src="/guides/inbox/more-actions" alt="The More actions button ringed as 1 and its menu ringed as 2: Merge into another ticket, Copy link, Mark as spam and Delete ticket" />
 

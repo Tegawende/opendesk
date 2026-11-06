@@ -193,7 +193,7 @@ curl https://api.opendesk.sh/v1/tickets/1042/merge \
   -d '{ "into_id": "1038" }'
 ```
 
-Every message, call, third-party thread and label moves to the target, and this ticket is closed. The answer is the ticket merged into. When `into_id` was itself merged, the merge goes into the ticket it went into, following the chain, and answers that ticket; `409` when that is this very ticket. A ticket that was open, pending or on hold, merged into a solved or closed one, reopens it, with a status change on its timeline.
+Every message, call, third-party thread and label moves to the target, and this ticket is closed. The answer is the ticket merged into. When `into_id` was itself merged, the merge goes into the ticket it went into, following the chain, and answers that ticket; `409` when that is this very ticket. A ticket that was open, pending or on hold, merged into a solved or closed one, reopens it, with a status change on its timeline. Apart from setting its status, this is the only way a closed ticket opens again: the customer's messages and their email leave it closed.
 
 ## Activities
 
