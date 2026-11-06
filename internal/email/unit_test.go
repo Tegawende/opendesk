@@ -6,7 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 )
 
 func TestPublicAddr(t *testing.T) {
@@ -168,5 +171,28 @@ func TestKeptCopy(t *testing.T) {
 	}
 	if keptCopy("  ") != "" {
 		t.Error("nothing sent keeps nothing")
+	}
+}
+
+// A forwarded email keeps its layout and its own inline images, now its copies'; the email
+// policy still applies, its style sheets stay out, and no other link to our files goes.
+func TestForwardedImages(t *testing.T) {
+	domain.Configure("http://api.test", testSecret)
+	orig, cp, other := uuid.New(), uuid.New(), uuid.New()
+	stored := `<style>p{color:#111}</style><table width="600" bgcolor="#ffffff"><tr><td style="padding: 12px">` +
+		`<p onclick="x()">Hi</p><img src="` + domain.AttachmentURL(orig) + `" width="200" alt="shot">` +
+		`<img src="` + domain.AttachmentURL(other) + `"><img src="https://cdn.example.com/logo.png"><script>alert(1)</script>` +
+		`<a href="javascript:alert(1)">bad</a></td></tr></table>`
+	got := forwardedImages(hd.SanitizeForwardedEmail(stored), map[uuid.UUID]uuid.UUID{orig: cp})
+	for _, want := range []string{`<table width="600" bgcolor="#ffffff">`, `<td style="padding: 12px">`, "<p>Hi</p>",
+		`src="/v1/attachments/` + cp.String() + `"`, `src="https://cdn.example.com/logo.png"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %s", want, got)
+		}
+	}
+	for _, bad := range []string{"<style", "color:#111", "onclick", "<script", "javascript:", orig.String(), other.String(), "sig="} {
+		if strings.Contains(got, bad) {
+			t.Errorf("kept %q in %s", bad, got)
+		}
 	}
 }

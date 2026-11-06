@@ -57,3 +57,31 @@ function snapshot() {
 export function useAlwaysShowImages(): boolean {
   return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
+
+// The emails whose images the reader loaded with "Load images", for as long as the tab is
+// open, so the email shows them again when reopened and a print of it shows what they saw.
+const loadedIds = new Set<string>();
+const loadedListeners = new Set<() => void>();
+
+export function loadImagesFor(messageId: string) {
+  if (loadedIds.has(messageId)) return;
+  loadedIds.add(messageId);
+  loadedListeners.forEach((l) => l());
+}
+
+export function imagesLoadedFor(messageId: string): boolean {
+  return loadedIds.has(messageId);
+}
+
+function subscribeLoaded(cb: () => void) {
+  loadedListeners.add(cb);
+  return () => {
+    loadedListeners.delete(cb);
+  };
+}
+
+/** Whether the reader loaded this email's images in this tab. */
+export function useImagesLoadedFor(messageId: string): boolean {
+  const get = () => loadedIds.has(messageId);
+  return useSyncExternalStore(subscribeLoaded, get, get);
+}

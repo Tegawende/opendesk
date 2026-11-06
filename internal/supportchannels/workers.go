@@ -135,10 +135,7 @@ func (s *Service) dispatch(ctx context.Context, a jobs.SupportChannelDispatchArg
 	if err != nil {
 		return err
 	}
-	if ticketID == nil {
-		return nil
-	}
-	if privateTeam != nil {
+	if ticketID == nil || privateTeam != nil || noteOnly(typ, data) {
 		return nil
 	}
 	t, err := domain.LoadTicket(ctx, s.d.DB.Pool, a.WorkspaceID, *ticketID)

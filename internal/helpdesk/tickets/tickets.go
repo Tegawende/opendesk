@@ -1106,7 +1106,7 @@ func merge(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uuid.UUID
 	if err := domain.PublishTicketUpdated(ctx, tx, wid, src, srcChanged); err != nil {
 		return err
 	}
-	return domain.PublishTicketUpdated(ctx, tx, wid, dst, []string{"messages", "calls", "tags", "last_message_at"})
+	return domain.PublishTicketUpdated(ctx, tx, wid, dst, []string{"messages", "calls", "tags", "last_message_at", "last_note"})
 }
 
 func queryOf(ctx huma.Context) url.Values {

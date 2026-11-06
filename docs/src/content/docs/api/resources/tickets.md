@@ -44,6 +44,15 @@ type Ticket = {
   last_message_at: string;
   last_customer_message_at: string | null;
   last_message_preview: string;
+  // The newest internal note a member or an API key wrote on the ticket, or null.
+  // Side conversation messages, automation and Ollie notes, deleted notes and notes sent as a reply are left out.
+  last_note: {
+    id: string;
+    preview: string; // up to 200 characters, whitespace collapsed
+    author: { type: "user" | "api"; name: string; user: UserRef | null };
+    created_at: string;
+    edited_at: string | null;
+  } | null;
   message_count: number;
   spam: boolean;
   csat: { score: number; comment: string } | null;

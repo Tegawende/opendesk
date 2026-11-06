@@ -130,7 +130,7 @@ func (t *TicketMail) PersonalReply(ctx context.Context, wid, mid uuid.UUID) (*Pe
 		wid, mid, r.MessageID); err != nil && !db.IsUniqueViolation(err, "") {
 		return nil, err
 	}
-	atts, html, err := s.outboundAttachments(ctx, wid, mid, bodyHTML)
+	atts, parts, err := s.outboundAttachments(ctx, wid, mid, bodyHTML)
 	if err != nil {
 		var se *sendError
 		if errors.As(err, &se) && se.permanent {
@@ -138,7 +138,7 @@ func (t *TicketMail) PersonalReply(ctx context.Context, wid, mid uuid.UUID) (*Pe
 		}
 		return nil, err
 	}
-	r.HTML, r.Attachments = html, atts
+	r.HTML, r.Attachments = parts[0], atts
 	r.Text = bodyText
 	if strings.TrimSpace(r.Text) == "" {
 		r.Text = htmlToText(bodyHTML)

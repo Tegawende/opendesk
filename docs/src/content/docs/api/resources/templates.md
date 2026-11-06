@@ -65,7 +65,7 @@ type EmailLayoutOptions = {
   font: "system" | "sans" | "serif";
   footer_html: string;              // takes variables; "" = none
   history: "none" | "last" | "all"; // quote the previous message, or the whole conversation (up to 10)
-  history_header: string;           // {{ message.author }} and {{ message.date }}; "" = the default
+  history_header: string;           // {{ message.author }}, {{ message.email }} and {{ message.date }}; "" = the default
 };
 ```
 

@@ -52,7 +52,7 @@
     "historyLast": "Die vorherige Nachricht",
     "historyAll": "Die ganze Unterhaltung",
     "historyHeader": "Zitatzeile",
-    "historyHeaderHint": "Über jeder zitierten Nachricht. Verwende {{author}} und {{date}}."
+    "historyHeaderHint": "Über jeder zitierten Nachricht. Verwende {{author}}, {{email}} (die Adresse des Absenders) und {{date}}."
   },
   "csat": {
     "off": "Zufriedenheitsumfragen sind aus, daher wird diese E-Mail noch nicht gesendet.",

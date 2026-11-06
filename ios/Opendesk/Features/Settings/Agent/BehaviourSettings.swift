@@ -83,14 +83,12 @@ struct BehaviourSettings: View {
                 email(store)
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            if dirty {
-                AgentSaveBar(busy: saving, discard: {
-                    withAnimation(Motion.snappy) { edit = base }
-                }, save: { Task { await save(store) } })
-            }
+        // The draft stays in the store for the playground and test runs, so leaving keeps it.
+        .settingsSaveBar(dirty: dirty, guarded: false, saving: saving) {
+            Task { await save(store) }
+        } discard: {
+            withAnimation(Motion.snappy) { edit = base }
         }
-        .motion(Motion.snappy, value: dirty)
         .onChange(of: edit) { _, next in
             guard started else { return }
             store.draft = next == (store.config?.behaviour ?? AgentBehaviour()) ? nil : next

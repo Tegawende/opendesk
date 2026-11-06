@@ -155,7 +155,7 @@ The **Layout** tab sets how the brand's emails look.
 - **Font**: **System**, **Sans** or **Serif**.
 - **Footer**: a short text under every email, such as your company's address. It takes variables.
 - **Quote earlier messages**: **None**, **Previous message**, or **Whole conversation** (up to the 10 most recent replies).
-- **Quote line**: the line above each quoted message. It can use `{{ message.author }}` and `{{ message.date }}`; empty means `On {{ message.date }}, {{ message.author }} wrote:`.
+- **Quote line**: the line above each quoted message. It can use `{{ message.author }}`, `{{ message.email }}` (the address the message was sent from) and `{{ message.date }}`; empty means `On {{ message.date }}, {{ message.author }} wrote:`.
 
 Quoted messages are the ticket's earlier public replies, newest first, with their text and links but without images. Notes are never quoted. Only replies quote earlier messages; auto-replies and satisfaction emails do not.
 

@@ -7,8 +7,8 @@ import { HttpError, del, forbidden, get, invalid, notFound, paginate, patch, pos
 import { searchWiki } from "./wiki";
 import { canCreateLabels, checkRequiredOnSolve, mergeFields } from "../labels";
 import { canSeeTicket, defaultBrand, isAdmin, teamRole } from "../teams";
-import { addActivity, addMessage, applyPatch, buildMessage, canSendFrom, counts, fieldFiltersFromQuery, findTicket, matches, newTicket, notify, publishTicketUpdated, resolveFilters, sortTickets, ticketSummary, type ListFilters } from "../tickets";
-import { DAY, isRecord, nowIso, parseUUID, uuid } from "../util";
+import { addActivity, addMessage, applyPatch, buildMessage, canSendFrom, counts, fieldFiltersFromQuery, findTicket, matches, newTicket, notify, publishTicketUpdated, refreshLastNote, resolveFilters, sortTickets, ticketSummary, type ListFilters } from "../tickets";
+import { DAY, escapeHtml, isRecord, nowIso, parseUUID, uuid } from "../util";
 import { clearDraft } from "./drafts";
 import { renderSentReply } from "./templates";
 import { cannotSend, sendingOf } from "./mailhost";
@@ -208,7 +208,22 @@ export function registerTickets() {
     const to = strArr(ctx.body.to) ?? [];
     if (!to.length) throw invalid("a thread needs at least one recipient");
     const subject = required(ctx, "subject").trim();
-    const html = required(ctx, "body_html");
+    // One email of the conversation forwarded in full, in place of the quoted conversation.
+    const forwardId = s(ctx, "forward_message_id");
+    if (forwardId && ctx.body.include_history === true) throw invalid("forward one email or quote the conversation, not both");
+    const forwarded = forwardId
+      ? ctx.ws.messages.find(
+          (m) =>
+            m.id === forwardId &&
+            m.ticket_id === t.id &&
+            m.kind === "reply" &&
+            !m.thread_id &&
+            !m.deleted_at &&
+            (m.direction === "inbound" ? !m.auth_failed : m.delivery_status === "sent" || m.delivery_status === "none"),
+        )
+      : undefined;
+    if (forwardId && !forwarded) throw invalid("forward_message_id must be an email of this ticket's conversation with the customer");
+    const html = forwarded ? (s(ctx, "body_html") ?? "") : required(ctx, "body_html");
     const mailbox = ctx.ws.mailboxes.find((m) => m.id === (s(ctx, "mailbox_id") ?? t.mailbox_id)) ?? ctx.ws.mailboxes.find((m) => m.brand_id === t.brand_id);
     const now = nowIso();
     const th: Thread = {
@@ -220,6 +235,7 @@ export function registerTickets() {
       mailbox_id: mailbox?.id ?? null,
       status: "open",
       include_history: ctx.body.include_history === true,
+      forward_message_id: forwarded?.id ?? null,
       created_by: userRef(db.meId),
       message_count: 0,
       last_message_at: now,
@@ -241,7 +257,29 @@ export function registerTickets() {
       db.attachments.push(copy);
       return copy.id;
     });
-    const message = threadMessage(ctx.ws, t, th, html, [...(strArr(ctx.body.attachment_ids) ?? []), ...copies]);
+    // The forwarded email's inline images go along as inline copies, in their places.
+    const inline = (forwarded?.attachments ?? [])
+      .filter((a) => a.inline)
+      .map((a) => {
+        const copy = { ...a, id: uuid() };
+        db.attachments.push(copy);
+        return copy.id;
+      });
+    const message = threadMessage(ctx.ws, t, th, html, [...(strArr(ctx.body.attachment_ids) ?? []), ...copies, ...inline]);
+    if (forwarded) {
+      // What went out, for the team to open: the message, then the email whole.
+      const when = new Date(forwarded.created_at).toUTCString();
+      const lines = [
+        `From: ${forwarded.from_name ? `${forwarded.from_name} <${forwarded.from_email}>` : forwarded.from_email}`,
+        `Date: ${when}`,
+        `Subject: ${forwarded.subject || t.subject}`,
+        `To: ${forwarded.to.join(", ")}`,
+      ];
+      ctx.ws.originals[message.id] =
+        `${html}<div style="margin-top:24px"><div style="margin:0 0 16px;font-size:12px;color:#737373">---------- Forwarded message ---------<br>${lines.map(escapeHtml).join("<br>")}</div>` +
+        `${ctx.ws.originals[forwarded.id] ?? forwarded.body_html}</div>`;
+      message.has_quoted = true;
+    }
     return respond(201, { thread: th, message });
   });
   post("/v1/tickets/:id/threads/:threadId/messages", (ctx) => {
@@ -421,7 +459,8 @@ export function registerTickets() {
     applyPatch(ctx.ws, src, { status: "closed" }, userRef(db.meId));
     ctx.ws.mergedInto.set(src.id, into.id);
     if (reopen) applyPatch(ctx.ws, into, { status: "open" }, userRef(db.meId));
-    publishTicketUpdated(ctx.ws, into, ["message_count"]);
+    refreshLastNote(ctx.ws, into);
+    publishTicketUpdated(ctx.ws, into, ["message_count", "last_note"]);
     return into;
   });
 
@@ -473,6 +512,8 @@ export function registerTickets() {
       Object.assign(note, { sent_as_reply_id: msg.id, deleted_at: nowIso(), deleted_by: myRef });
       addActivity(ctx.ws, t, "note_sent_as_reply", { message_id: fromNote, reply_id: msg.id }, myRef);
       publish(ctx.ws, "message.updated", { ticket_id: t.id, message: tombstone(note) });
+      refreshLastNote(ctx.ws, t);
+      publishTicketUpdated(ctx.ws, t, ["last_note"]);
     }
     // A reply going out ends the ticket's shared draft, whoever sends it.
     if (kind === "reply") clearDraft(ctx.ws, t);
@@ -493,6 +534,8 @@ export function registerTickets() {
     message.edited_at = nowIso();
     addActivity(ctx.ws, t, "note_edited", { message_id: message.id }, userRef(db.meId));
     publish(ctx.ws, "message.updated", { ticket_id: t.id, message });
+    refreshLastNote(ctx.ws, t);
+    publishTicketUpdated(ctx.ws, t, ["last_note"]);
     return message;
   });
   // A deleted message stays as a marker; only admins read it (contracts/api.md).
@@ -519,6 +562,9 @@ export function registerTickets() {
     if (message.kind === "reply") {
       refreshPreview(ctx.ws.messages, t);
       publish(ctx.ws, "ticket.updated", { ticket: t, changes: ["last_message_preview"] });
+    } else {
+      refreshLastNote(ctx.ws, t);
+      publishTicketUpdated(ctx.ws, t, ["last_note"]);
     }
     return undefined;
   });
@@ -551,6 +597,9 @@ export function registerTickets() {
     if (message.kind === "reply") {
       refreshPreview(ctx.ws.messages, t);
       publish(ctx.ws, "ticket.updated", { ticket: t, changes: ["last_message_preview"] });
+    } else {
+      refreshLastNote(ctx.ws, t);
+      publishTicketUpdated(ctx.ws, t, ["last_note"]);
     }
     addActivity(ctx.ws, t, "message_restored", { message_id: message.id }, userRef(db.meId));
     publish(ctx.ws, "message.updated", { ticket_id: t.id, message });
@@ -567,8 +616,9 @@ export function registerTickets() {
     if (message.author.user?.id !== db.meId && role !== "admin" && role !== "owner") throw forbidden();
     message.kind = "note";
     refreshPreview(ctx.ws.messages, t);
+    refreshLastNote(ctx.ws, t);
     addActivity(ctx.ws, t, "reply_retracted", { message_id: message.id }, userRef(db.meId));
-    publish(ctx.ws, "ticket.updated", { ticket: t, changes: ["last_message_preview"] });
+    publish(ctx.ws, "ticket.updated", { ticket: t, changes: ["last_message_preview", "last_note"] });
     publish(ctx.ws, "message.updated", { ticket_id: t.id, message });
     return message;
   });

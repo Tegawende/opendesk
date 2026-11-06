@@ -85,7 +85,10 @@
     "awaiting": "Wartet auf Antwort",
     "severity": "{{severity}}",
     "receivedAt": "Gesendet an {{address}}",
-    "assignedTo": "Zugewiesen an {{name}}"
+    "assignedTo": "Zugewiesen an {{name}}",
+    "note": "Interne Notiz",
+    "noteBy": "{{name}}:",
+    "noteFrom": "Interne Notiz von {{name}}, {{when}}"
   },
   "waiting": {
     "label": "Wartet seit {{time}}",
@@ -649,7 +652,8 @@
     "sentAsReplyLabel": "Notiz von {{name}}, als Antwort gesendet",
     "showReply": "Antwort anzeigen",
     "showNote": "Notiz anzeigen",
-    "hideNote": "Notiz ausblenden"
+    "hideNote": "Notiz ausblenden",
+    "forward": "Weiterleiten"
   },
   "merge": {
     "title": "#{{number}} mit anderem Ticket zusammenführen",
@@ -806,7 +810,17 @@
     "withFiles_other": "mit {{count}} Dateien des Kunden",
     "withBoth_one": "mit zitierter Unterhaltung und 1 Datei des Kunden",
     "withBoth_other": "mit zitierter Unterhaltung und {{count}} Dateien des Kunden",
-    "optionsHint": "Unterhaltung oder Dateien des Kunden mitsenden"
+    "optionsHint": "Unterhaltung oder Dateien des Kunden mitsenden",
+    "withForwarded": "E-Mail weitergeleitet",
+    "forwarded": "Weitergeleitete E-Mail",
+    "forwardFrom": "Von",
+    "forwardDate": "Datum",
+    "forwardSubject": "Betreff",
+    "forwardTo": "An",
+    "forwardRemove": "Weitergeleitete E-Mail entfernen",
+    "withForward": "mit der weitergeleiteten E-Mail",
+    "withForwardAndFiles_one": "mit der weitergeleiteten E-Mail und 1 Datei",
+    "withForwardAndFiles_other": "mit der weitergeleiteten E-Mail und {{count}} Dateien"
   },
   "links": {
     "title": "Verknüpft",
@@ -988,5 +1002,33 @@
     "discountCodes_other": "Rabattcodes",
     "refunded": "{{amount}} erstattet",
     "openLink": "{{name}} öffnen"
+  },
+  "print": {
+    "action": "Drucken oder als PDF speichern",
+    "dialogTitle": "Unterhaltung drucken",
+    "dialogDescription": "Öffnet das Ticket als Dokument zum Drucken. Um eine Datei zu behalten, wähle Als PDF speichern als Drucker.",
+    "notes": "Interne Notizen einschließen",
+    "notesHint": "Notizen deines Teams, die der Kunde nie sieht.",
+    "side": "Nebenunterhaltungen einschließen",
+    "sideHint": "E-Mails mit Personen außerhalb deines Teams zu diesem Ticket.",
+    "open": "Druckansicht öffnen",
+    "toolbar": "Druckansicht",
+    "conversation": "Unterhaltung",
+    "oneMessage": "Eine Nachricht",
+    "close": "Schließen",
+    "print": "Drucken",
+    "remoteImages": "Externe Bilder anzeigen",
+    "remoteImagesHint": "Bilder von anderen Websites sind ausgeblendet. Lädst du sie, erfährt der Absender, dass die E-Mail geöffnet wurde.",
+    "requester": "Anfragender",
+    "status": "Status",
+    "created": "Eröffnet",
+    "to": "An:",
+    "cc": "Cc:",
+    "sideConversation": "Nebenunterhaltung",
+    "sideConversationNamed": "Nebenunterhaltung: {{subject}}",
+    "imagesHidden": "Externe Bilder nicht angezeigt",
+    "attachments": "Anhänge",
+    "nothing": "Nichts zu drucken",
+    "nothingHint": "Mit diesen Optionen gibt es keine Nachrichten zum Drucken, oder die Nachricht ist nicht mehr im Ticket."
   }
 }

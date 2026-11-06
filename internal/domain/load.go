@@ -85,10 +85,57 @@ var TicketSelect = `SELECT t.id, t.number, t.alias, t.subject, t.status, t.prior
 	` + TagRefsSQL("ticket_tags", "lt.ticket_id = t.id") + `,
 	COALESCE((SELECT json_agg(json_build_object('id', s.id, 'name', s.name) ORDER BY lower(s.name), s.id)
 		FROM ticket_skills ts JOIN skills s ON s.workspace_id = ts.workspace_id AND s.id = ts.skill_id
-		WHERE ts.workspace_id = t.workspace_id AND ts.ticket_id = t.id), '[]')
+		WHERE ts.workspace_id = t.workspace_id AND ts.ticket_id = t.id), '[]'),
+	` + LastNoteSQL + `
 FROM tickets t
 LEFT JOIN contacts c ON c.id = t.contact_id
 LEFT JOIN users u ON u.id = t.assignee_id`
+
+// LastNoteSQL is the ticket's newest internal note (Ticket.last_note) as JSON, or NULL: a
+// member's or an API key's note on the ticket itself, not deleted or sent as a reply. The
+// conditions are messages_ticket_last_note_idx's, so it is one index read per ticket.
+const LastNoteSQL = `(SELECT json_build_object('id', n.id,
+		'preview', left(regexp_replace(btrim(n.body_text), '\s+', ' ', 'g'), 200),
+		'created_at', n.created_at, 'edited_at', n.edited_at, 'author_type', n.author_type,
+		'name', COALESCE(nu.name, nb.name, NULLIF(n.from_name, ''), nk.name, ''),
+		'user_id', nu.id, 'user_name', nu.name, 'user_email', nu.email, 'user_avatar', nu.avatar_url)
+	FROM messages n
+	LEFT JOIN users nu ON nu.id = n.author_user_id
+	LEFT JOIN bots nb ON nb.id = n.bot_id
+	LEFT JOIN api_keys nk ON nk.id = n.api_key_id
+	WHERE n.ticket_id = t.id AND n.workspace_id = t.workspace_id AND n.kind = 'note' AND n.thread_id IS NULL
+		AND n.deleted_at IS NULL AND n.sent_as_reply_id IS NULL AND n.author_type IN ('user', 'api') AND NOT n.ai
+	ORDER BY n.created_at DESC, n.id DESC LIMIT 1)`
+
+type lastNoteRow struct {
+	ID         uuid.UUID  `json:"id"`
+	Preview    string     `json:"preview"`
+	CreatedAt  time.Time  `json:"created_at"`
+	EditedAt   *time.Time `json:"edited_at"`
+	AuthorType string     `json:"author_type"`
+	Name       string     `json:"name"`
+	UserID     *uuid.UUID `json:"user_id"`
+	UserName   string     `json:"user_name"`
+	UserEmail  string     `json:"user_email"`
+	UserAvatar string     `json:"user_avatar"`
+}
+
+// scanLastNote reads LastNoteSQL's JSON; nil when the ticket has no note.
+func scanLastNote(raw []byte) (*LastNote, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var r lastNoteRow
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return nil, err
+	}
+	n := &LastNote{ID: r.ID, Preview: r.Preview, CreatedAt: r.CreatedAt, EditedAt: r.EditedAt,
+		Author: LastNoteAuthor{Type: r.AuthorType, Name: r.Name}}
+	if r.UserID != nil {
+		n.Author.User = &UserRef{ID: *r.UserID, Name: r.UserName, Email: r.UserEmail, AvatarURL: Avatar(r.UserAvatar)}
+	}
+	return n, nil
+}
 
 // ScanTicket scans one row of TicketSelect.
 func ScanTicket(row pgx.Row) (Ticket, error) {
@@ -101,14 +148,17 @@ func ScanTicket(row pgx.Row) (Ticket, error) {
 	var cEmail, cName, cAvatar *string
 	var uID *uuid.UUID
 	var uName, uEmail, uAvatar *string
-	var tags, skills []byte
+	var tags, skills, lastNote []byte
 	err := row.Scan(&t.ID, &t.Number, &t.Alias, &t.Subject, &t.Status, &t.Priority, &t.Severity, &t.Channel, &t.MailboxID, &t.TeamID,
 		&slaID, &frDue, &resDue, &t.FirstRespondedAt, &t.SolvedAt, &t.SnoozedUntil,
 		&t.LastMessageAt, &t.LastCustomerMessageAt, &t.WaitingSince, &t.UnansweredCount, &t.LastMessagePreview, &t.MessageCount, &t.Spam,
 		&csatScore, &csatComment, &t.Custom, &t.Fields, &t.CreatedAt, &t.UpdatedAt,
 		&t.BrandID, &t.WidgetID, &t.OriginMailboxID, &t.ReceivedAt, &t.PageURL, &t.Routed,
-		&cID, &cEmail, &cName, &cAvatar, &uID, &uName, &uEmail, &uAvatar, &tags, &skills)
+		&cID, &cEmail, &cName, &cAvatar, &uID, &uName, &uEmail, &uAvatar, &tags, &skills, &lastNote)
 	if err != nil {
+		return t, err
+	}
+	if t.LastNote, err = scanLastNote(lastNote); err != nil {
 		return t, err
 	}
 	if cID != nil {

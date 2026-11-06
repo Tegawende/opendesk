@@ -56,7 +56,7 @@ struct MailboxDetailView: View {
             }
         }
         .disabled(saving)
-        .channelSaveButton(visible: admin && mailbox != nil, enabled: dirty && draft.valid, saving: saving, save: save)
+        .settingsSaveBar(dirty: admin && mailbox != nil && dirty, saving: saving, canSave: draft.valid, save: save) { draft = original }
         .accountConfirm($confirm)
         .channelWebSheet($web) { Task { await load() } }
         .sheet(item: Binding(get: { editingAlias.map(MailboxAliasEdit.init) }, set: { editingAlias = $0?.alias })) { edit in

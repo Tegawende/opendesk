@@ -518,34 +518,6 @@ struct AgentStatGrid<Content: View>: View {
     }
 }
 
-/// Unsaved changes: Discard and Save, floating over the page's bottom edge.
-struct AgentSaveBar: View {
-    var title = "Unsaved changes"
-    let busy: Bool
-    var canSave = true
-    let discard: () -> Void
-    let save: () -> Void
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Text(title).font(ODFont.sans(13.5, weight: .medium)).foregroundStyle(Theme.fg2)
-            Spacer(minLength: 8)
-            Button("Discard", action: discard)
-                .buttonStyle(OutlineButtonStyle(fullWidth: false, height: 38))
-                .disabled(busy)
-            Button(action: save) { ButtonLabel(title: "Save", busy: busy) }
-                .buttonStyle(InkButtonStyle(fullWidth: false, height: 38))
-                .disabled(busy || !canSave)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
-        .transition(.move(edge: .bottom).combined(with: .opacity))
-    }
-}
-
 /// A short title with its line under it, above a group of fields.
 struct AgentGroupTitle: View {
     let title: String
