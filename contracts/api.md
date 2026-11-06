@@ -107,7 +107,8 @@ type Ticket = {
   mailbox_id: string | null; contact: ContactRef | null; assignee: UserRef | null; team_id: string | null;
   tags: TagRef[]; required_skills: TicketSkill[] /* fixed when the ticket is created; automatic assignment requires every one, while manual assignment remains available */; fields: FieldValues; sla: { policy_id: string; first_response_due_at: string | null; resolution_due_at: string | null; breached: boolean } | null;
   first_responded_at: string | null; solved_at: string | null; snoozed_until: string | null;
-  last_message_at: string; last_customer_message_at: string | null; waiting_since: string | null /* the customer's first unanswered public message; null once anyone (or the AI agent) replied */; unanswered_count: number /* the customer's public messages since the last outbound public reply; 0 once replied */; last_message_preview: string; message_count: number;
+  last_message_at: string; last_customer_message_at: string | null; waiting_since: string | null /* the customer's first unanswered public message; null once anyone (or the AI agent) replied */; unanswered_count: number /* the customer's public messages since the last outbound public reply; 0 once replied */; last_message_preview: string;
+  last_note: { id: string; preview: string /* the note's text, whitespace collapsed, up to 200 characters */; author: { type: "user" | "api"; name: string; user: UserRef | null }; created_at: string; edited_at: string | null } | null /* the newest internal note a member or an API key wrote on the ticket itself: never a side conversation's message, an automation's or Ollie's note, a deleted note or one sent as a reply. Read from the messages each time, so an edit, a deletion or a merge shows at once; a change publishes ticket.updated with last_note in changes. The team's alone: the widget, the customer portal and every public route leave it out */; message_count: number;
   spam: boolean; csat: { score: number; comment: string } | null; custom: Record<string, unknown>;
   created_at: string; updated_at: string;
 };
@@ -591,7 +592,7 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 | DELETE | `/v1/tickets/{id}/draft` | agent (`tickets:write`) → 204; idempotent |
 | POST | `/v1/tickets/{id}/typing` | agent (`tickets:write`), signed-in member (an API key gets `403`) → 204. A teammate is writing a reply: on a chat ticket with a contact, the visitor's widget gets `"typing"` `{ticket_id, user: {id, name}}` (contracts/realtime.md "Live events"); on other tickets nothing happens. A ticket the caller cannot see is `404`. Clients send it at most every 2.5 s while typing |
 | GET | `/v1/tickets/{id}/threads` | viewer → `{data: Thread[]}`, oldest first ("Threads") |
-| POST | `/v1/tickets/{id}/threads` | `{to: string[] /* 1..20 */, cc?: string[], subject, body_html, attachment_ids?, mailbox_id?, include_history?: boolean, forward_attachment_ids?: string[]}` → 201 `{thread: Thread, message: Message}` |
+| POST | `/v1/tickets/{id}/threads` | `{to: string[] /* 1..20 */, cc?: string[], subject, body_html, attachment_ids?, mailbox_id?, include_history?: boolean, forward_attachment_ids?: string[], forward_message_id?: string}` → 201 `{thread: Thread, message: Message}` |
 | POST | `/v1/tickets/{id}/threads/{threadId}/messages` | `{body_html, attachment_ids?}` → 201 `Message` |
 | PATCH | `/v1/tickets/{id}/threads/{threadId}` | `{status: "open"\|"closed"}` → `Thread` |
 | GET | `/v1/messages/{id}/original` | → `{full_html}`: an inbound email in full (with its quoted history); for an email we sent (a reply, a side conversation's message), the copy kept when it went out: the layout, the reply, the signature and the quoted conversation, sanitized like every stored email, its inline images pointing at their attachments. A copy too large to keep (over 1 MB) is not kept. The kept copies of emails sent after a reply are dropped when that reply is deleted or purged (`message.updated`), since their quoted conversation may hold it; the body when there is none |
@@ -686,7 +687,9 @@ answer the customer. The app calls it a side conversation. It stays internal to 
 ```ts
 type Thread = { id: string; ticket_id: string; subject: string; to: string[]; cc: string[];
   mailbox_id: string | null /* the address it is sent from; null once that mailbox is removed */;
-  status: "open" | "closed"; include_history: boolean; created_by: UserRef | null; message_count: number;
+  status: "open" | "closed"; include_history: boolean;
+  forward_message_id: string | null /* the email the first message forwarded in full; null once that message is gone */;
+  created_by: UserRef | null; message_count: number;
   last_message_at: string; created_at: string; updated_at: string };
 ```
 
@@ -709,6 +712,21 @@ type Thread = { id: string; ticket_id: string; subject: string; to: string[]; cc
   share the stored file. Notes, other threads and inbound mail that failed sender checks never go.
   An id that is not an attachment of the ticket's public replies, or is one of mail that failed
   sender checks, is a `422`; attachments of one message are limited to 25 MB in all.
+- `forward_message_id` forwards one email of the ticket's conversation in full under the first
+  message, in place of `include_history` (both is a `422`): a public reply as `include_history` would
+  quote it (a customer's email that passed sender checks, or a reply that went out), of the same
+  ticket (`422` otherwise). The email gets the conventional header (`---------- Forwarded message ---------`,
+  then From `name <email>`, Date, Subject, To and Cc), then its HTML in full: the kept original
+  (`full_html`: an inbound email with what it quoted, a reply as it went out with its layout and
+  signature) when there is one, else the body, sanitized again with the email policy and without its
+  style sheets, which would restyle the message around it. Its inline images go in their places as
+  inline parts of a `multipart/related` body (`Content-ID`, as a reply's own inline images): when the
+  thread starts, they are copied onto its first message as inline attachments sharing the stored file,
+  outside the 20-file limit and inside the 25 MB one. Any other image pointing at our attachments is
+  left out. Its other files go only as `forward_attachment_ids` (the app preselects them). The first
+  message's `body_html` may be empty when it forwards. An email deleted before its forward goes out
+  fails it (`failed`, "The forwarded email is no longer in the ticket's conversation.") rather than
+  send its images alone. The team's copy of what went out is the message's original, as for every email we send.
 - An inbound email that answers one of a thread's messages (`In-Reply-To` / `References`, or our
   Message-ID format) lands in that thread, whoever sends it, as an inbound note with the email's
   sender, recipients and attachments. The sender does not become a contact. A ticket that is

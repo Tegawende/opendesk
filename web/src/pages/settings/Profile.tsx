@@ -21,7 +21,7 @@ import { playAlert, setAlertSound, setSoundPref, useAlertSound, useSoundPrefs, t
 import { api } from "@/lib/api/endpoints";
 import type { MemberProfile, User } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
-import { setAssigneeDisplay, useAssigneeDisplay, type AssigneeDisplay } from "@/lib/listDisplay";
+import { setAssigneeDisplay, setShowLastNote, useAssigneeDisplay, useShowLastNote, type AssigneeDisplay } from "@/lib/listDisplay";
 import { useMyAvatar } from "@/lib/pictures";
 import { q } from "@/lib/queries";
 import { updateUser, useRole, useSession } from "@/lib/session";
@@ -181,6 +181,7 @@ export default function Profile() {
           <ThemeCards />
         </div>
         <AssigneeSetting />
+        <LastNoteSetting />
         <ConversationLayout />
         <ConversationWidthSetting />
         <TicketPropertiesSetting />
@@ -268,6 +269,17 @@ function AssigneeSetting() {
           { value: "none", label: t("profile.assignee.none") },
         ]}
       />
+    </Row>
+  );
+}
+
+/** Whether the ticket list shows each ticket's latest internal note. On by default, per browser. */
+function LastNoteSetting() {
+  const { t } = useTranslation("settings");
+  const on = useShowLastNote();
+  return (
+    <Row label={t("profile.lastNote.label")} description={t("profile.lastNote.hint")}>
+      <Switch checked={on} onCheckedChange={setShowLastNote} aria-label={t("profile.lastNote.label")} />
     </Row>
   );
 }

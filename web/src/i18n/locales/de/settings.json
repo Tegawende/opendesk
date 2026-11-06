@@ -300,6 +300,10 @@
       "name": "Vorname",
       "none": "Nichts"
     },
+    "lastNote": {
+      "label": "Neueste interne Notiz anzeigen",
+      "hint": "Jedes Ticket in der Liste zeigt seine neueste interne Notiz, damit du sie lesen kannst, ohne das Ticket zu öffnen."
+    },
     "theme": {
       "label": "Design",
       "light": "Hell",

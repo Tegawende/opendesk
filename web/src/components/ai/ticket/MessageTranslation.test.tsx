@@ -44,6 +44,7 @@ it.each([null,'und','zxx','en','fr'])('offers translation unless the source lang
     waiting_since: null,
     unanswered_count: 0,
     last_message_preview: "",
+    last_note: null,
     message_count: 1,
     spam: false,
     csat: null,

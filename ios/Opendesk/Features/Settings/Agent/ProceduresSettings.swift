@@ -207,12 +207,11 @@ extension ProceduresSettings {
                     }
                 }
             }
-            .safeAreaInset(edge: .bottom) {
-                if isNew || dirty {
-                    AgentSaveBar(title: isNew ? "New procedure" : "Unsaved changes", busy: saving, discard: discard, save: { Task { await save() } })
-                }
+            .settingsSaveBar(dirty: isNew || dirty, guarded: isNew ? !AgentText.trimmed(name + when + instructions).isEmpty : dirty, saveTitle: isNew ? "Create procedure" : "Save changes", saving: saving) {
+                Task { await save() }
+            } discard: {
+                discard()
             }
-            .motion(Motion.snappy, value: dirty)
             .sheet(isPresented: $copying) {
                 WikiCopySheet { title, markdown in
                     instructions = String(markdown.prefix(8000))

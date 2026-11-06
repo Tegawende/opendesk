@@ -433,12 +433,24 @@ export type Ticket = {
   /** The customer's public messages since the last reply; 0 once anyone (or the AI agent) replied. */
   unanswered_count: number;
   last_message_preview: string;
+  /** The newest internal note a member or an API key wrote on the ticket (not a side conversation's, not Ollie's); null when none. */
+  last_note: TicketLastNote | null;
   message_count: number;
   spam: boolean;
   csat: { score: number; comment: string } | null;
   custom: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+};
+
+export type TicketLastNote = {
+  id: string;
+  /** The start of the note's text, whitespace collapsed, up to 200 characters. */
+  preview: string;
+  /** name is what to show; user is the member, null for an API key. */
+  author: { type: "user" | "api"; name: string; user: UserRef | null };
+  created_at: string;
+  edited_at: string | null;
 };
 
 export type Attachment = {
@@ -521,6 +533,8 @@ export type Thread = {
   status: "open" | "closed";
   /** The first message quoted the ticket's conversation with the customer. */
   include_history: boolean;
+  /** The email of the ticket the first message forwarded in full; null when none (or it is gone). */
+  forward_message_id: string | null;
   created_by: UserRef | null;
   message_count: number;
   last_message_at: string;
@@ -2559,7 +2573,7 @@ export type EmailLayoutOptions = {
   font: "system" | "sans" | "serif";
   footer_html: string;
   history: "none" | "last" | "all";
-  /** "" is the default "On {{ message.date }}, {{ message.author }} wrote:". */
+  /** Takes {{ message.author }}, {{ message.email }} and {{ message.date }}; "" is the default "On {{ message.date }}, {{ message.author }} wrote:". */
   history_header: string;
 };
 export type EmailTemplate = {

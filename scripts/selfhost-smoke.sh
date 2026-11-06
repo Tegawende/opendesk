@@ -89,11 +89,20 @@ if command -v node >/dev/null 2>&1 && [[ $(node -p 'process.versions.node.split(
   nats_token=$(sed -n 's/^NATS_TOKEN=//p' "$work/.env")
   envelope=$(printf '{"id":"%s","seq":1,"workspace_id":"%s","type":"ticket.updated","visibility":"agents","topics":["workspace:%s"],"data":{},"occurred_at":"2026-01-01T00:00:00Z"}' \
     "$(python3 -c 'import uuid; print(uuid.uuid4())')" "$wid" "$wid")
+  for try in 1 2 3; do
+    docker pull -q natsio/nats-box:latest >/dev/null && break
+    [[ $try == 3 ]] && fail "could not pull natsio/nats-box"
+    sleep 5
+  done
+  # Publish every 2s until the listener has it: one publish can land before the join completes.
   (
-    sleep 3
-    docker run --rm --network "${PROJECT}_internal" natsio/nats-box:latest \
-      nats --server "nats://${nats_token}@opendesk:4222" pub "od.events.$wid" "$envelope" >/dev/null 2>&1
+    for _ in $(seq 1 9); do
+      sleep 2
+      docker run --rm --network "${PROJECT}_internal" natsio/nats-box:latest \
+        nats --server "nats://${nats_token}@opendesk:4222" pub "od.events.$wid" "$envelope" >/dev/null 2>&1 || true
+    done
   ) &
+  publisher=$!
   NODE_TLS_REJECT_UNAUTHORIZED=0 URL="wss://localhost:${HTTPS_PORT}/socket/websocket?vsn=2.0.0" TOKEN="$token" WID="$wid" \
     node --no-warnings -e '
       const ws = new WebSocket(process.env.URL, ["phoenix", "base64url.bearer.phx." + Buffer.from(process.env.TOKEN).toString("base64url")]);
@@ -102,7 +111,8 @@ if command -v node >/dev/null 2>&1 && [[ $(node -p 'process.versions.node.split(
       ws.onmessage = (m) => { const [, , , ev] = JSON.parse(m.data); if (ev === "event") { clearTimeout(t); process.exit(0); } };
       ws.onerror = () => { console.error("socket error"); process.exit(1); };
     ' || fail "an event published on NATS did not reach the joined channel"
-  wait
+  kill "$publisher" 2>/dev/null || true
+  wait "$publisher" 2>/dev/null || true
   pass "an event on NATS od.events.<wid> reaches the joined workspace channel"
 fi
 

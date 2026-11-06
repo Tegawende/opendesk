@@ -393,6 +393,7 @@ export function Timeline({
   onRetry,
   onToReply,
   onRetract,
+  onForward,
   contactName,
   receivedAt,
   threads,
@@ -406,6 +407,8 @@ export function Timeline({
   onToReply?: (m: Message) => void;
   /** Set on a chat ticket: an agent's sent reply can be taken back from the customer. */
   onRetract?: (m: Message) => void;
+  /** Starts a side conversation forwarding an email of the conversation. */
+  onForward?: (m: Message) => void;
   contactName?: string;
   /** The address the customer first wrote to, for inbound messages that don't say. */
   receivedAt?: string | null;
@@ -539,6 +542,7 @@ export function Timeline({
                       onRetry={onRetry}
                       onToReply={onToReply}
                       onRetract={onRetract}
+                      onForward={onForward}
                       highlight={pointed.id === it.m.id}
                       receivedAt={receivedAt}
                       thread={it.m.thread_id ? threadById.get(it.m.thread_id) : undefined}

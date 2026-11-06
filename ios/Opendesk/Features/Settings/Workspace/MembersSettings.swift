@@ -451,7 +451,7 @@ struct WSMemberDetail: View {
             store.attach(env.session.api)
             await load()
         }
-        .wsSaveBar(dirty: profileDirty, saving: saving, save: saveProfile) {
+        .settingsSaveBar(dirty: profileDirty, saving: saving, save: saveProfile) {
             profile = savedProfile
             signature = savedSignature
         }

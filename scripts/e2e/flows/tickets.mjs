@@ -10,7 +10,8 @@ function prop(page, label) {
 
 async function pick(page, label, option) {
   await prop(page, label).click();
-  await page.getByRole("option", { name: option }).first().click();
+  // The picker's own list: ticket rows are options too, and a row's note can name a teammate.
+  await page.locator("[cmdk-list]").getByRole("option", { name: option }).first().click();
 }
 
 export async function run(t) {

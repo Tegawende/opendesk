@@ -14,6 +14,10 @@ Scopes: `tickets:read` to read, `tickets:write` to send.
 | `POST` | `/v1/tickets/{id}/messages/{messageId}/restore` | Admins: bring a deleted message back |
 | `POST` | `/v1/tickets/{id}/messages/{messageId}/purge` | Admins: remove a deleted message's content for good |
 | `POST` | `/v1/tickets/{id}/messages/{messageId}/retract` | Turn a sent chat reply into an internal note |
+| `GET` | `/v1/tickets/{id}/threads` | The ticket's side conversations, oldest first |
+| `POST` | `/v1/tickets/{id}/threads` | Start a side conversation |
+| `POST` | `/v1/tickets/{id}/threads/{threadId}/messages` | Write in a side conversation |
+| `PATCH` | `/v1/tickets/{id}/threads/{threadId}` | Close or reopen a side conversation |
 | `GET` | `/v1/messages/{id}/original` | The full original, including quoted history |
 | `POST` | `/v1/attachments` | Upload a file |
 | `GET` | `/v1/attachments/{id}` | Download a file |
@@ -132,6 +136,29 @@ Deleting leaves a marker in the conversation with who deleted it and when. Teamm
 
 These routes are for teammates signed in to the app: an API key gets `403`. Deleting returns `204` and publishes `message.updated` with the marker, never the text; replaying events (`GET /v1/events`) shows earlier events about it as the marker too.
 
+
+## Side conversations
+
+A side conversation (`Thread`) is an email conversation on a ticket with someone outside the team, such as a supplier or a payment provider. Its messages are internal notes with `thread_id` set, sent by email to its recipients from the ticket's address; their answers come back into it. The customer never sees them.
+
+```json
+POST /v1/tickets/{id}/threads
+{
+  "to": ["ops@supplier.example"],
+  "subject": "Fwd: Damaged parcel",
+  "body_html": "<p>Can you check this delivery?</p>",
+  "forward_message_id": "6f1c2a9e-3b7d-4c51-9a0e-2d8f4b6c1e70",
+  "forward_attachment_ids": ["0b6f3c2e-8f4a-4d3b-9c1e-2a7d5e6f8a90"]
+}
+```
+
+Nothing of the customer's conversation goes along unless you ask for it, under the first message only:
+
+- `include_history: true` quotes the ticket's last 10 public replies, as words without their images or layout.
+- `forward_message_id` forwards one email of the conversation in full instead: a header with who sent it, when, the subject and the recipients, then the email with its layout and its inline images in place (sent as inline parts of the email, so they show where they were). It is the original as it came in, or for one of your replies as it went out, cleaned like every email. `body_html` may be empty when you forward. It cannot be combined with `include_history`.
+- `forward_attachment_ids` sends files of the conversation along. The app picks the forwarded email's own files here; leave out the ones that should not go.
+
+Internal notes, other side conversations and mail that failed its sender checks never go: naming one is a `422`, as is a message of another ticket. The response is `201` with `{ thread, message }`; `Thread.forward_message_id` records the email that was forwarded.
 
 ## Attachments
 

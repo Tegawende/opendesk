@@ -31,7 +31,7 @@ struct WidgetDetailView: View {
                 }
             }
         }
-        .channelSaveButton(visible: env.session.isAdmin && draft != base, enabled: draft != base && !(draft?.invalid ?? true) && !saving, saving: saving, save: save)
+        .settingsSaveBar(dirty: env.session.isAdmin && draft != base, saving: saving, canSave: !(draft?.invalid ?? true), save: save) { draft = base }
         .channelTypedConfirm($typed)
         .channelWebSheet($web) { reload() }
         .refreshable { await load() }

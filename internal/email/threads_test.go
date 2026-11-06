@@ -2,6 +2,7 @@ package email
 
 import (
 	"bytes"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -230,5 +231,92 @@ func TestThirdPartyThreadWithHistory(t *testing.T) {
 	}
 	if strings.Contains(env2.HTML, "smoking") {
 		t.Error("only the first message quotes the conversation")
+	}
+}
+
+// A side conversation can forward one email of the ticket whole (forward_message_id): the
+// conventional header, then the email in its own layout, sanitized like every email, with its
+// inline images as parts of a multipart/related body in their places, so they show where they
+// were in the recipient's mail client.
+func TestThirdPartyThreadForwardsEmail(t *testing.T) {
+	w := newWorld(t)
+	sink, port := startSink(t, w)
+	m := w.mailbox(InboundIMAP, OutboundSMTP, func(m *mailboxRow, c *credentials) {
+		m.Config = MailboxConfig{IMAPHost: "127.0.0.1", IMAPPort: 1, IMAPTLS: TLSImplicit, IMAPUsername: "u",
+			SMTPHost: "127.0.0.1", SMTPPort: port, SMTPTLS: TLSStart, SMTPUsername: "support@acme.test"}
+		c.Password = "imap-pass"
+		c.SMTPPassword = "s3cret-pass"
+	})
+	from := customer()
+	src := w.messageFor(w.receive(m, fixture(t, "inline_image.eml", "{{FROM}}", from, "{{TO}}", "", "{{ID}}", "fwd"+crypto.RandomString(6))))
+	var orig uuid.UUID
+	if err := w.d.DB.Pool.QueryRow(w.ctx, `SELECT id FROM attachments WHERE message_id = $1 AND inline`, src.ID).Scan(&orig); err != nil {
+		t.Fatalf("the customer's inline image: %v", err)
+	}
+	forward := func(subject string) uuid.UUID {
+		thread, mid := w.startThread(src.TicketID, m, "ops@acquirer.test", subject, "Have you seen this error?")
+		// As the API does: the thread names the email, its message carries copies of its inline images.
+		mustExec(t, w.d, `UPDATE ticket_threads SET forward_message_id = $2 WHERE id = $1`, thread, src.ID)
+		mustExec(t, w.d, `INSERT INTO attachments (id, workspace_id, message_id, filename, content_type, size_bytes, storage_key, content_id, inline)
+			SELECT gen_random_uuid(), workspace_id, $2, filename, content_type, size_bytes, storage_key, content_id, true FROM attachments
+			WHERE message_id = $1 AND inline`, src.ID, mid)
+		return mid
+	}
+
+	mid := forward("Error screenshot")
+	if err := w.s.sendMessage(w.ctx, w.wid, mid, false); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.msgs) != 1 {
+		t.Fatalf("sink got %d messages", len(sink.msgs))
+	}
+	raw := string(sink.msgs[0].data)
+	env, err := enmime.ReadEnvelope(bytes.NewReader(sink.msgs[0].data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Have you seen this error?", "---------- Forwarded message ---------", "From: Ian Inline &lt;" + from + "&gt;",
+		"Subject: Screenshot of the error", "See the screenshot:", `href="https://example.com/help"`} {
+		if !strings.Contains(env.HTML, want) {
+			t.Errorf("html missing %q in %s", want, env.HTML)
+		}
+	}
+	for _, bad := range []string{"onerror", "javascript:", orig.String()} {
+		if strings.Contains(env.HTML, bad) {
+			t.Errorf("html kept %q: %s", bad, env.HTML)
+		}
+	}
+	if !strings.Contains(env.Text, "From: Ian Inline <"+from+">") || !strings.Contains(env.Text, "See the screenshot") {
+		t.Errorf("text %q", env.Text)
+	}
+	if !strings.Contains(raw, "multipart/related") {
+		t.Fatal("the inline image travels in a multipart/related body")
+	}
+	src2 := regexp.MustCompile(`<img src="cid:([^"]+)"`).FindStringSubmatch(env.HTML)
+	if src2 == nil || len(env.Inlines) != 1 || env.Inlines[0].ContentID != src2[1] || env.Inlines[0].ContentType != "image/png" ||
+		len(env.Inlines[0].Content) == 0 || len(env.Attachments) != 0 {
+		t.Fatalf("img %v, inlines %+v, attachments %d", src2, env.Inlines, len(env.Attachments))
+	}
+	// The team opens it as it went out, its image pointing at the copy the message holds.
+	var copyID uuid.UUID
+	if err := w.d.DB.Pool.QueryRow(w.ctx, `SELECT id FROM attachments WHERE message_id = $1 AND inline`, mid).Scan(&copyID); err != nil {
+		t.Fatal(err)
+	}
+	if kept := w.message(mid).FullHTML; !strings.Contains(src2[1], copyID.String()) || !strings.Contains(kept, "/v1/attachments/"+copyID.String()) ||
+		!strings.Contains(kept, "Forwarded message") {
+		t.Errorf("cid %s, copy %s, kept copy %s", src2[1], copyID, kept)
+	}
+
+	// An email deleted before its forward goes out is not sent, nor its images on their own.
+	mid2 := forward("Again")
+	mustExec(t, w.d, `UPDATE messages SET deleted_at = now() WHERE id = $1`, src.ID)
+	if err := w.s.sendMessage(w.ctx, w.wid, mid2, true); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.msgs) != 1 {
+		t.Fatalf("sink got %d messages: the forward of a deleted email went out", len(sink.msgs))
+	}
+	if got := w.message(mid2); got.Delivery != "failed" {
+		t.Fatalf("delivery %s", got.Delivery)
 	}
 }

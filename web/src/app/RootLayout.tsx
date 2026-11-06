@@ -64,15 +64,18 @@ export function RootLayout() {
   );
 }
 
-/** Set a page-specific tab title (a ticket subject, an article). */
-export function useDocumentTitle(title: string | null | undefined) {
+/**
+ * Set a page-specific tab title (a ticket subject, an article). bare: the title alone, without
+ * the brand (a page to print, whose title names the saved file).
+ */
+export function useDocumentTitle(title: string | null | undefined, { bare = false }: { bare?: boolean } = {}) {
   useEffect(() => {
     if (!title) return;
     pageTitle = title;
-    document.title = `${title} · opendesk`;
+    document.title = bare ? title : `${title} · opendesk`;
     return () => {
       pageTitle = null;
       document.title = routeTitle;
     };
-  }, [title]);
+  }, [title, bare]);
 }

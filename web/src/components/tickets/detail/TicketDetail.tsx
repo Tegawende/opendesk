@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, CircleCheck, CircleDot, Signal, Copy, GitMerge, History, MoreHorizontal, PanelRight, RotateCcw, ShieldAlert, ShieldCheck, Trash2, UserRound, Users, X, MessageSquare, MessagesSquare, StickyNote } from "lucide-react";
+import { ChevronDown, ChevronUp, CircleCheck, CircleDot, Signal, Copy, GitMerge, History, MoreHorizontal, PanelRight, Printer, RotateCcw, ShieldAlert, ShieldCheck, Trash2, UserRound, Users, X, MessageSquare, MessagesSquare, StickyNote } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { tone } from "@/lib/tones";
@@ -46,6 +46,7 @@ import { Composer, type ComposerHandle } from "./Composer";
 import { TicketProperties, TicketPropertiesBar, type PropPicker } from "./TicketProperties";
 import { useTicketPropertiesPlace } from "@/lib/ticketPropertiesPlace";
 import { MergeDialog } from "./MergeDialog";
+import { PrintDialog } from "./PrintDialog";
 import { TicketTeamChips, useTeamsCtx } from "../teams";
 import { SnoozeMenu } from "./SnoozeMenu";
 import { readPanel, savePanel } from "./panel";
@@ -162,6 +163,7 @@ export default function TicketDetail({
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const [burst, setBurst] = useState(0);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
   // The history between the messages (status, assignments, tags, rules…), shown or hidden per browser.
   const historyShown = useTicketHistoryShown();
   const [panel, setPanel] = useState(readPanel);
@@ -310,6 +312,7 @@ export default function TicketDetail({
         { id: "solve", label: solved ? tr("commands.reopen") : finish.command(), shortcut: "e", icon: <CircleCheck />, run: solve },
         { id: "merge", label: tr("detail.merge"), icon: <GitMerge />, run: () => setMergeOpen(true) },
         { id: "history", label: historyShown ? tr("detail.hideHistory") : tr("detail.showHistory"), keywords: ["history", "events", "activity"], icon: <History />, run: () => setTicketHistoryShown(!historyShown) },
+        { id: "print", label: tr("print.action"), keywords: ["print", "pdf", "export", "save"], icon: <Printer />, run: () => setPrintOpen(true) },
         { id: "spam", label: t.spam ? tr("detail.notSpam") : tr("detail.markSpam"), icon: <ShieldAlert />, run: spam },
       ],
     });
@@ -382,8 +385,10 @@ export default function TicketDetail({
             </span>
           </Tooltip>
         )}
-        {t && canEdit && (
+        {t && (
           <div className="flex items-center gap-1">
+            {canEdit && (
+              <>
             <Tooltip content={solved ? tr("detail.reopen") : finish.verb === "solve" ? finishLabel : finish.command()} shortcut="e">
               <Button
                 size="sm"
@@ -414,6 +419,8 @@ export default function TicketDetail({
                 if (onNext) onNext();
               }}
             />
+              </>
+            )}
             <Menu>
               <Tooltip content={tr("detail.more")}>
                 <MenuTrigger asChild>
@@ -421,12 +428,16 @@ export default function TicketDetail({
                 </MenuTrigger>
               </Tooltip>
               <MenuContent align="end" className="w-[210px]">
-                <MenuItem icon={<UserRound />} shortcut="i" onSelect={assignMe}>
-                  {tr("commands.assignMe")}
-                </MenuItem>
-                <MenuItem icon={<GitMerge />} onSelect={() => setMergeOpen(true)}>
-                  {tr("detail.merge")}
-                </MenuItem>
+                {canEdit && (
+                  <>
+                    <MenuItem icon={<UserRound />} shortcut="i" onSelect={assignMe}>
+                      {tr("commands.assignMe")}
+                    </MenuItem>
+                    <MenuItem icon={<GitMerge />} onSelect={() => setMergeOpen(true)}>
+                      {tr("detail.merge")}
+                    </MenuItem>
+                  </>
+                )}
                 <MenuItem
                   icon={<Copy />}
                   onSelect={async () => {
@@ -438,13 +449,20 @@ export default function TicketDetail({
                 <MenuItem icon={<History />} onSelect={() => setTicketHistoryShown(!historyShown)}>
                   {historyShown ? tr("detail.hideHistory") : tr("detail.showHistory")}
                 </MenuItem>
-                <MenuSeparator />
-                <MenuItem icon={t.spam ? <ShieldCheck /> : <ShieldAlert />} onSelect={spam}>
-                  {t.spam ? tr("detail.notSpam") : tr("detail.markSpam")}
+                <MenuItem icon={<Printer />} onSelect={() => setPrintOpen(true)}>
+                  {tr("print.action")}
                 </MenuItem>
-                <MenuItem icon={<Trash2 />} danger onSelect={remove}>
-                  {tr("detail.deleteTicket")}
-                </MenuItem>
+                {canEdit && (
+                  <>
+                    <MenuSeparator />
+                    <MenuItem icon={t.spam ? <ShieldCheck /> : <ShieldAlert />} onSelect={spam}>
+                      {t.spam ? tr("detail.notSpam") : tr("detail.markSpam")}
+                    </MenuItem>
+                    <MenuItem icon={<Trash2 />} danger onSelect={remove}>
+                      {tr("detail.deleteTicket")}
+                    </MenuItem>
+                  </>
+                )}
               </MenuContent>
             </Menu>
           </div>
@@ -474,6 +492,7 @@ export default function TicketDetail({
             loading={!messages.data}
             onRetry={(m) => composer.current?.retry(m)}
             onToReply={canEdit ? (m) => composer.current?.fromNote(m) : undefined}
+            onForward={canEdit ? (m) => composer.current?.forward(m) : undefined}
             onRetract={canEdit && t?.channel === "chat" ? retract : undefined}
             contactName={t?.contact?.name}
             receivedAt={t && t.channel !== "email" ? null : t?.received_at}
@@ -524,6 +543,7 @@ export default function TicketDetail({
         </AnimatePresence>
       </div>
       {t && <MergeDialog ticket={t} open={mergeOpen} onOpenChange={setMergeOpen} />}
+      {t && <PrintDialog ticketId={t.id} open={printOpen} onOpenChange={setPrintOpen} />}
     </div>
   );
 }

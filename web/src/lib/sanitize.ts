@@ -22,8 +22,9 @@ const APP_CLASSES = new Set(["mention"]);
 
 // The pass in progress: whether classes stay, whether remote images are held back (and how
 // many were), and whether links and images get the app's display attributes (off for HTML
-// that is sent on as written: a signature in a composer).
-type Pass = { keepClasses: boolean; blockRemote: boolean; blocked: number; display?: boolean };
+// that is sent on as written: a signature in a composer), and whether images load at once
+// rather than when scrolled to (a page about to print).
+type Pass = { keepClasses: boolean; blockRemote: boolean; blocked: number; display?: boolean; eager?: boolean };
 let pass: Pass | null = null;
 
 const CSS_URL = /url\s*\(\s*(['"]?)([^'"()]*)\1\s*\)/gi;
@@ -108,7 +109,7 @@ function ensureHook() {
         pass.blocked++;
       }
       if (display) {
-        node.setAttribute("loading", "lazy");
+        node.setAttribute("loading", pass?.eager ? "eager" : "lazy");
         node.setAttribute("referrerpolicy", "no-referrer");
       }
     }
@@ -132,6 +133,8 @@ export type Sanitized = { html: string; held: number };
 export type SanitizeOptions = {
   /** Hold back images that would load from another site (an inbound email, until the reader loads them). */
   blockRemoteImages?: boolean;
+  /** Load images at once instead of when scrolled to: a page about to print waits for them. */
+  eagerImages?: boolean;
 };
 
 /** HTML for the app's own DOM: plain formatting, no styles, only the app's own classes. */
@@ -177,14 +180,14 @@ export function emphasizeInlineStyles(html: string): string {
 }
 
 export function sanitizeProse(html: string, opts: SanitizeOptions = {}): Sanitized {
-  const p: Pass = { keepClasses: false, blockRemote: !!opts.blockRemoteImages, blocked: 0 };
+  const p: Pass = { keepClasses: false, blockRemote: !!opts.blockRemoteImages, blocked: 0, eager: opts.eagerImages };
   const out = run(emphasizeInlineStyles(html), p, { ALLOWED_TAGS, ALLOWED_ATTR: [...ALLOWED_ATTR, "loading", "referrerpolicy"], ALLOW_DATA_ATTR: false, ALLOWED_URI_REGEXP: URI });
   return { html: out, held: p.blocked };
 }
 
 /** A designed email for its own frame (EmailFrame): styles, layout attributes and classes stay. */
 export function sanitizeEmailHtml(html: string, opts: SanitizeOptions = {}): Sanitized {
-  const p: Pass = { keepClasses: true, blockRemote: !!opts.blockRemoteImages, blocked: 0 };
+  const p: Pass = { keepClasses: true, blockRemote: !!opts.blockRemoteImages, blocked: 0, eager: opts.eagerImages };
   const out = run(html, p, {
     ALLOWED_TAGS: EMAIL_TAGS,
     ALLOWED_ATTR: [...EMAIL_ATTR, "loading", "referrerpolicy"],

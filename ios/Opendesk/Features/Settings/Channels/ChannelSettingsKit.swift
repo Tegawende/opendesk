@@ -248,24 +248,6 @@ extension View {
     func channelWebSheet(_ path: Binding<String?>, onClose: @escaping () -> Void = {}) -> some View {
         modifier(ChannelWebSheet(path: path, onClose: onClose))
     }
-
-    /// A Save button in the navigation bar, enabled while there are valid changes.
-    func channelSaveButton(visible: Bool = true, enabled: Bool, saving: Bool, title: String = "Save", save: @escaping () -> Void) -> some View {
-        toolbar {
-            if visible {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: save) {
-                        if saving {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Text(title).font(ODFont.sans(16, weight: .semibold))
-                        }
-                    }
-                    .disabled(!enabled || saving)
-                }
-            }
-        }
-    }
 }
 
 /// Loading, failed or loaded: the shared skeleton and retry around a page's content.

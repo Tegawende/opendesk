@@ -1,55 +1,7 @@
 import SwiftUI
 
-// Pieces the Workspace settings pages share: the save bar for pages with a draft, colour
-// swatches, a menu row, a searchable time zone list, meters and the summary strip.
-
-/// Unsaved changes, with Discard and Save, floating over the bottom of a page with a draft.
-struct WSSaveBar: View {
-    let dirty: Bool
-    var saving = false
-    var disabled = false
-    var message: String?
-    let save: () -> Void
-    let discard: () -> Void
-
-    var body: some View {
-        if dirty {
-            HStack(spacing: 10) {
-                Text(message ?? "Unsaved changes")
-                    .font(ODFont.footnote)
-                    .foregroundStyle(message == nil ? Theme.fg2 : Tone.amber.text)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 4)
-                Button("Discard", action: discard)
-                    .buttonStyle(OutlineButtonStyle(fullWidth: false, height: 36))
-                    .disabled(saving)
-                Button(action: save) { ButtonLabel(title: "Save", busy: saving) }
-                    .buttonStyle(InkButtonStyle(fullWidth: false, height: 36))
-                    .disabled(disabled || saving)
-            }
-            .padding(.leading, 14)
-            .padding(.trailing, 8)
-            .padding(.vertical, 8)
-            .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.line, lineWidth: 1))
-            .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-}
-
-extension View {
-    /// Pins `WSSaveBar` under the page while it has unsaved changes.
-    func wsSaveBar(dirty: Bool, saving: Bool, disabled: Bool = false, message: String? = nil, save: @escaping () -> Void, discard: @escaping () -> Void) -> some View {
-        safeAreaInset(edge: .bottom, spacing: 0) {
-            WSSaveBar(dirty: dirty, saving: saving, disabled: disabled, message: message, save: save, discard: discard)
-        }
-        .motion(Motion.snappy, value: dirty)
-    }
-}
+// Pieces the Workspace settings pages share: colour swatches, a menu row, a searchable time
+// zone list, meters and the summary strip.
 
 /// The label colours as a wrap of round swatches, the chosen one ringed.
 struct WSColorSwatches: View {
