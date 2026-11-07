@@ -967,6 +967,8 @@ export type Mailbox = {
   personal_replies?: MailboxPersonalReplies;
   /** Website contact forms (exact addresses or "@domain"); their authenticated mail is from the visitor in Reply-To. Admins only. */
   trusted_form_senders?: string[];
+  /** Mail marked automatic (Auto-Submitted, Precedence: bulk) is taken in instead of dropped; nothing automatic answers it. */
+  keep_automatic_mail?: boolean;
   signature_html: string;
   auto_reply_enabled: boolean;
   auto_reply_subject: string;

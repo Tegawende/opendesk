@@ -457,6 +457,7 @@ export function registerResources() {
     patchConnection(ctx, m);
     patchMailboxAI(ctx, m);
     patchFormSenders(ctx, m);
+    if (typeof ctx.body.keep_automatic_mail === "boolean") m.keep_automatic_mail = ctx.body.keep_automatic_mail;
     if ("bot_id" in ctx.body) m.bot_id = checkBotId(ctx.ws, ctx.body.bot_id);
     if (ctx.body.password || ctx.body.smtp_password) {
       m.status = "active";
@@ -821,6 +822,7 @@ function mailbox(ws: WsData, init: Pick<Mailbox, "name" | "email" | "display_nam
     aliases: [],
     alias_teams: {},
     trusted_form_senders: [],
+    keep_automatic_mail: false,
     from_name_format: "{agent} at {mailbox}",
     private: !!init.team_id && !!ws.teams.find((t) => t.id === init.team_id)?.private,
     id: uuid(),

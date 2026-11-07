@@ -130,6 +130,12 @@ func (s *service) processInbound(ctx context.Context, wid, inboundID uuid.UUID) 
 	if (reason == "auto_submitted" || reason == "precedence") && formSenderTrusted(m.TrustedFormSenders, pm.FromAddr) && !autoresponse(pm, null) {
 		reason = ""
 	}
+	// A mailbox that keeps automatic mail takes in what a help desk marks automatic (many mark
+	// every email, a person's too); nothing automatic answers it. An autoresponder stays noise.
+	keptAuto := keepAutomatic(m, reason, pm, null)
+	if keptAuto {
+		reason = ""
+	}
 	if reason != "" {
 		if reason == "bounce" && null {
 			if err := s.recordBounce(ctx, wid, m.ID, pm, raw); err != nil {
@@ -212,7 +218,7 @@ func (s *service) processInbound(ctx context.Context, wid, inboundID uuid.UUID) 
 	if formSender != "" {
 		automatic = autoresponse(pm, null)
 	}
-	noAuto := internal || authFailed || automatic || noReplySender(sender)
+	noAuto := internal || authFailed || automatic || noReplySender(sender) || keptAuto
 
 	err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
 		match, err := s.findThread(ctx, tx, wid, m, pm, rcpt, sender)

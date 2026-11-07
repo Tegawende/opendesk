@@ -78,6 +78,7 @@ type Draft = {
   alias_teams: Record<string, string>;
   alias_settings: Record<string, AliasDraft>;
   trusted_form_senders: string[];
+  keep_automatic_mail: boolean;
   from_name_format: string;
   signature_html: string;
   auto_reply_enabled: boolean;
@@ -121,6 +122,7 @@ function toDraft(m: Mailbox): Draft {
     alias_teams: { ...(m.alias_teams ?? {}) },
     alias_settings: aliasDraftsFor(m),
     trusted_form_senders: [...(m.trusted_form_senders ?? [])],
+    keep_automatic_mail: m.keep_automatic_mail ?? false,
     from_name_format: m.from_name_format ?? "",
     signature_html: m.signature_html,
     auto_reply_enabled: m.auto_reply_enabled,
@@ -294,6 +296,7 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
         ...(sameAliasTeams(aliasTeams, base.alias_teams) ? {} : { alias_teams: aliasTeams }),
         ...(aliasSettings ? { alias_settings: aliasSettings } : {}),
         ...(!sameJSON(draft.trusted_form_senders, base.trusted_form_senders) ? { trusted_form_senders: draft.trusted_form_senders } : {}),
+        ...(draft.keep_automatic_mail !== base.keep_automatic_mail ? { keep_automatic_mail: draft.keep_automatic_mail } : {}),
         ...(draft.from_name_format !== base.from_name_format ? { from_name_format: draft.from_name_format.trim() } : {}),
         signature_html: draft.signature_html,
         auto_reply_enabled: draft.auto_reply_enabled,
@@ -768,6 +771,12 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
         <div className="py-3.5">
           <ContactFormsField value={draft.trusted_form_senders} onChange={(v) => set("trusted_form_senders", v)} own={[mailbox.email, ...draft.aliases]} />
         </div>
+      </Section>
+
+      <Section title={t("automatic.title")} description={t("automatic.hint")}>
+        <Row label={t("automatic.toggle")}>
+          <Switch aria-label={t("automatic.toggle")} checked={draft.keep_automatic_mail} onCheckedChange={(v) => set("keep_automatic_mail", v)} />
+        </Row>
       </Section>
 
       <Section title={t("detail.signature")} description={t("detail.signatureHint", { tag: "{{ agent.signature }}" })}>
