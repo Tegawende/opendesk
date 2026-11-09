@@ -87,6 +87,19 @@
     "inSection": "In section {{name}}",
     "reorderSectionAria": "Reorder the {{name}} section. Hold Alt and press the arrow keys to move it with its views.",
     "sectionChars": "Section names can't contain < or >.",
+    "sectionEdit": {
+      "title": "Edit section",
+      "aria": "Edit the {{name}} section",
+      "description_one": "A new name renames the section on its view listed here, and its icon goes with it.",
+      "description_other": "A new name renames the section on its {{count}} views listed here, and its icon goes with it.",
+      "save": "Save section",
+      "saved": "Section saved",
+      "needName": "Give the section a name."
+    },
+    "sectionIcon": {
+      "hint": "Shown beside the section's name in the sidebar, for everyone with a view in it.",
+      "namePlaceholder": "Section name"
+    },
     "needName": "Give the view a name.",
     "icon": {
       "label": "Icon",

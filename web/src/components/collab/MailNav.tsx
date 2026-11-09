@@ -14,7 +14,7 @@ import { useFoldedSections, useOpenView, ViewSectionGroup } from "@/app/ViewSect
 import { buildRow, NavItemRow, rowNumber, useMailLocation, useRowLabels, type MailHere, type RowModel } from "@/components/spaces/rows";
 import { useWaitingFor } from "@/components/tickets/useUrgentChats";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { MailAccount, MailBox, MailCounts, MailFolder, SidebarPin, SidebarPrefs, SidebarSectionId, View } from "@/lib/api/types";
+import type { MailAccount, MailBox, MailCounts, MailFolder, SidebarPin, SidebarPrefs, SidebarSectionId, View, ViewIcon } from "@/lib/api/types";
 import { accountAssignedNumbers, accountNumbers, allInboxNumbers, folderNumbers, listBoxNumbers, type RowNumbers } from "@/lib/collab/badges";
 import { ACCOUNT_BOXES, accountName, buildFolderTree, flattenTree, folderWithRole } from "@/lib/collab/boxes";
 import { useAllFolders, useMailAccounts, useSaveSidebarPrefs } from "@/lib/collab/hooks";
@@ -442,7 +442,7 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
     }
     // Every view of the section the member sees, those hidden from Views too, like a pinned view.
     const section = findSection(data.views ?? [], pin.id);
-    return section && { kind: "section", name: section.name, views: section.views };
+    return section && { kind: "section", name: section.name, icon: section.icon, views: section.views };
   });
   if (!pins.length) return null;
   const menuFor = (model: RowModel, pin: SidebarPin) => (row: ReactElement) => (
@@ -476,6 +476,7 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
           <ViewSectionGroup
             key={`${pin.kind}:${pin.id}`}
             name={target.name}
+            icon={target.icon}
             views={target.views}
             rail={rail}
             folded={folded.has(pin.id)}
@@ -504,4 +505,4 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
 }
 
 /** What a favorite shows: one row, or a pinned view section and its views. */
-type Favorite = { kind: "row"; model: RowModel } | { kind: "section"; name: string; views: View[] };
+type Favorite = { kind: "row"; model: RowModel } | { kind: "section"; name: string; icon: ViewIcon | null; views: View[] };

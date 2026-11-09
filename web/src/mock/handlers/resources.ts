@@ -220,6 +220,14 @@ export function registerResources() {
     }
   };
 
+  /** A view section's key: its name in lower case, as views match it. */
+  const sectionKeyOf = (s: string | null | undefined) => (s ?? "").toLocaleLowerCase();
+  /** The view with its section's icon, as the API reads it. */
+  const withSectionIcon = (ws: WsData, v: View): View => {
+    v.section_icon = v.section ? (ws.viewSectionIcons?.[sectionKeyOf(v.section)] ?? null) : null;
+    return v;
+  };
+
   crud<View>({
     path: "/v1/views",
     resource: "view",
@@ -229,7 +237,7 @@ export function registerResources() {
     filter: (ctx, rows) => rows.filter((v) => !v.team_id || isAdmin(ctx.ws, db.meId) || !!teamOfId(ctx.ws, v.team_id, db.meId)),
     create: (ctx, id) => {
       const team_id = teamRef(ctx, ctx.body.team_id);
-      return { id, name: required(ctx, "name").slice(0, 60), shared: team_id ? false : ctx.body.shared === true, team_id, section: viewSection(ctx.body.section), filters: isRecord(ctx.body.filters) ? (ctx.body.filters as TicketFilters) : {}, position: typeof ctx.body.position === "number" ? ctx.body.position : ctx.ws.views.length, icon: viewIcon(ctx.body.icon) };
+      return withSectionIcon(ctx.ws, { id, name: required(ctx, "name").slice(0, 60), shared: team_id ? false : ctx.body.shared === true, team_id, section: viewSection(ctx.body.section), filters: isRecord(ctx.body.filters) ? (ctx.body.filters as TicketFilters) : {}, position: typeof ctx.body.position === "number" ? ctx.body.position : ctx.ws.views.length, icon: viewIcon(ctx.body.icon) });
     },
     update: (ctx, row) => {
       assign(row, ctx.body, ["name", "shared", "position"]);
@@ -238,7 +246,35 @@ export function registerResources() {
       if (row.team_id) row.shared = false;
       if (isRecord(ctx.body.filters)) row.filters = ctx.body.filters as TicketFilters;
       if ("icon" in ctx.body) row.icon = viewIcon(ctx.body.icon);
+      withSectionIcon(ctx.ws, row);
     },
+  });
+
+  // A view section's icon and name (contracts/api.md, PATCH /v1/view-sections): admins only.
+  patch("/v1/view-sections", (ctx) => {
+    if (!isAdmin(ctx.ws, db.meId)) throw new HttpError(403, "forbidden", "Only admins change a view section.");
+    const from = viewSection(ctx.body.section);
+    if (!from) throw invalid("section is required");
+    const to = "name" in ctx.body ? viewSection(ctx.body.name) : from;
+    if (!to) throw invalid("name is required");
+    const fromKey = sectionKeyOf(from);
+    const toKey = sectionKeyOf(to);
+    const inSection = ctx.ws.views.filter((v) => sectionKeyOf(v.section) === fromKey);
+    if (!inSection.length) throw notFound("View section");
+    const icons = (ctx.ws.viewSectionIcons ??= {});
+    const set = "icon" in ctx.body;
+    let next: ViewIcon | null = set ? viewIcon(ctx.body.icon) : (icons[fromKey] ?? null);
+    for (const v of inSection) v.section = to;
+    if (toKey !== fromKey) {
+      // Into a section with an icon of its own, without a new one: it keeps its own.
+      if (!set && icons[toKey]) next = icons[toKey];
+      delete icons[fromKey];
+    }
+    if (next) icons[toKey] = next;
+    else delete icons[toKey];
+    const named = ctx.ws.views.filter((v) => sectionKeyOf(v.section) === toKey);
+    for (const v of named) publish(ctx.ws, "view.updated", { view: withSectionIcon(ctx.ws, v) });
+    return { name: to, icon: next, views: named.length };
   });
 
   crud<SlaPolicy>({

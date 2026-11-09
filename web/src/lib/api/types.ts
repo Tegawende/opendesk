@@ -658,7 +658,9 @@ export type TicketFilters = {
   /** Custom field filters, ANDed (max 20). */
   fields?: FieldFilter[];
 };
-export type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number; /** Shared with this team. */ team_id?: string | null; /** The sidebar heading it shows under (lib/viewSections). */ section?: string | null; /** What the sidebar shows beside the name; none shows the layers icon. */ icon?: ViewIcon | null };
+export type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number; /** Shared with this team. */ team_id?: string | null; /** The sidebar heading it shows under (lib/viewSections). */ section?: string | null; /** What the sidebar shows beside the name; none shows the layers icon. */ icon?: ViewIcon | null; /** Its section's icon (PATCH /v1/view-sections), the same on every view of the section; none shows none. */ section_icon?: ViewIcon | null };
+/** A view section as PATCH /v1/view-sections leaves it: `views` is how many of the views the caller sees name it. */
+export type ViewSection = { name: string; icon: ViewIcon | null; views: number };
 /** emoji: one emoji; icon: a name of the app's list (viewIcons.ts); text: one or two letters or digits. `color` tints an icon or text (a Tone), never an emoji. */
 export type ViewIcon = { kind: "emoji" | "icon" | "text"; value: string; color: string | null };
 export type SlaPolicy = {

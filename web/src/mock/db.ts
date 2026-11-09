@@ -35,6 +35,7 @@ import type {
   User,
   UserRef,
   View,
+  ViewIcon,
   Webhook,
   WebhookDelivery,
   WidgetSettings,
@@ -114,6 +115,8 @@ export type WsData = {
   customFields: CustomField[];
   savedReplies: SavedReply[];
   views: View[];
+  /** View sections' icons, by the section's name in lower case (PATCH /v1/view-sections). */
+  viewSectionIcons?: Record<string, ViewIcon>;
   sla: SlaPolicy[];
   automations: Automation[];
   mailboxes: Mailbox[];

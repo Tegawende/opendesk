@@ -648,6 +648,10 @@ export const api = {
   },
   savedReplies: crud<T.SavedReply, { title: string; shortcut: string; body_html: string; team_id?: string | null }>("/v1/saved-replies"),
   views: crud<T.View, { name: string; filters: T.TicketFilters; shared: boolean; position?: number; team_id?: string | null; section?: string | null; icon?: T.ViewIcon | null }>("/v1/views"),
+  /** `section` as its views name it; `name` renames it on the views the caller sees; `icon` null clears it. */
+  viewSections: {
+    update: (b: { section: string; name?: string; icon?: T.ViewIcon | null }) => http.patch<T.ViewSection>("/v1/view-sections", b),
+  },
   slaPolicies: crud<T.SlaPolicy, Omit<T.SlaPolicy, "id" | "business_hours"> & { business_hours?: boolean }>("/v1/sla-policies"),
   automations: crud<T.Automation, Omit<T.Automation, "id" | "run_count">>("/v1/automations"),
   kb: {

@@ -218,6 +218,29 @@ describe("mock backend", () => {
     expect((await call("PATCH", `/v1/views/${v.id}`, { section: null })).body.section).toBeNull();
   });
 
+  it("gives a view section an icon that its views carry, and takes it along on a rename", async () => {
+    const make = async (name: string, section: string) => (await call("POST", "/v1/views", { name, shared: true, section })).body;
+    const a = await make("Damaged", "After sales");
+    const b = await make("Returns", "after SALES");
+    const star = { kind: "emoji", value: "⭐", color: null };
+    expect((await call("PATCH", "/v1/view-sections", { section: "Nowhere", icon: star })).status).toBe(404);
+    expect((await call("PATCH", "/v1/view-sections", { section: "After sales", icon: { kind: "icon", value: "rocket" } })).status).toBe(422);
+    const set = (await call("PATCH", "/v1/view-sections", { section: "After sales", icon: star })).body;
+    expect(set).toEqual({ name: "After sales", icon: star, views: 2 });
+    const listed = async (id: string) => ((await call("GET", "/v1/views")).body.data as { id: string; section: string | null; section_icon: unknown }[]).find((v) => v.id === id)!;
+    expect((await listed(b.id)).section_icon).toEqual(star);
+    // A view joining the section takes its icon; leaving it, loses it.
+    const c = await make("Claims", "AFTER sales");
+    expect(c.section_icon).toEqual(star);
+    expect((await call("PATCH", `/v1/views/${c.id}`, { section: null })).body.section_icon).toBeNull();
+    // Renamed: every view takes the name, and the icon goes with it.
+    expect((await call("PATCH", "/v1/view-sections", { section: "after sales", name: "Post sale" })).body).toEqual({ name: "Post sale", icon: star, views: 2 });
+    expect(await listed(a.id)).toMatchObject({ section: "Post sale", section_icon: star });
+    expect((await call("PATCH", "/v1/view-sections", { section: "Post sale", icon: null })).body.icon).toBeNull();
+    expect((await listed(a.id)).section_icon).toBeNull();
+    for (const v of [a, b, c]) await call("DELETE", `/v1/views/${v.id}`);
+  });
+
   it("keeps an automation's phrase list one trimmed phrase per line", async () => {
     const action = [{ type: "set_status", value: "closed" }];
     const made = await call("POST", "/v1/automations", {

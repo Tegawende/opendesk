@@ -89,6 +89,20 @@
     "inSection": "Dans la section {{name}}",
     "reorderSectionAria": "Réorganiser la section {{name}}. Maintenez Alt et appuyez sur les touches fléchées pour la déplacer avec ses vues.",
     "sectionChars": "Un nom de section ne peut pas contenir < ou >.",
+    "sectionEdit": {
+      "title": "Modifier la section",
+      "aria": "Modifier la section {{name}}",
+      "description_one": "Un nouveau nom renomme la section sur sa vue listée ici, et son icône la suit.",
+      "description_other": "Un nouveau nom renomme la section sur ses {{count}} vues listées ici, et son icône la suit.",
+      "description_many": "Un nouveau nom renomme la section sur ses {{count}} vues listées ici, et son icône la suit.",
+      "save": "Enregistrer la section",
+      "saved": "Section enregistrée",
+      "needName": "Donnez un nom à la section."
+    },
+    "sectionIcon": {
+      "hint": "Affichée à côté du nom de la section dans la barre latérale, pour tous ceux qui y ont une vue.",
+      "namePlaceholder": "Nom de la section"
+    },
     "needName": "Donnez un nom à la vue.",
     "icon": {
       "label": "Icône",

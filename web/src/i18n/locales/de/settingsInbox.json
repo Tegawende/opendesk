@@ -87,6 +87,19 @@
     "inSection": "Im Abschnitt {{name}}",
     "reorderSectionAria": "Abschnitt {{name}} neu anordnen. Halte Alt gedrückt und bewege ihn mit seinen Ansichten über die Pfeiltasten.",
     "sectionChars": "Ein Abschnittsname darf weder < noch > enthalten.",
+    "sectionEdit": {
+      "title": "Abschnitt bearbeiten",
+      "aria": "Abschnitt {{name}} bearbeiten",
+      "description_one": "Ein neuer Name benennt den Abschnitt in seiner hier aufgeführten Ansicht um, und sein Symbol geht mit.",
+      "description_other": "Ein neuer Name benennt den Abschnitt in seinen {{count}} hier aufgeführten Ansichten um, und sein Symbol geht mit.",
+      "save": "Abschnitt speichern",
+      "saved": "Abschnitt gespeichert",
+      "needName": "Gib dem Abschnitt einen Namen."
+    },
+    "sectionIcon": {
+      "hint": "Steht in der Seitenleiste neben dem Namen des Abschnitts, für alle, die eine Ansicht darin haben.",
+      "namePlaceholder": "Name des Abschnitts"
+    },
     "needName": "Gib der Ansicht einen Namen.",
     "icon": {
       "label": "Symbol",

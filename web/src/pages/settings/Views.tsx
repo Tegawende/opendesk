@@ -5,7 +5,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsPage, Section, ListRow } from "@/components/layout";
 import { Button } from "@/components/ui/button";
-import { Drawer } from "@/components/ui/dialog";
+import { Dialog, Drawer } from "@/components/ui/dialog";
 import { Field, TextInput } from "@/components/ui/input";
 import { Picker } from "@/components/ui/picker";
 import { Select } from "@/components/ui/select";
@@ -225,6 +225,9 @@ export default function Views() {
   const { t } = useTranslation("settingsInbox");
   const confirm = useConfirm();
   const [editing, setEditing] = useState<View | "new" | null>(null);
+  // A section's name and icon are written for everyone who sees it: shared-view rights.
+  const canEditSections = atLeast(role, "admin");
+  const [editingSection, setEditingSection] = useState<SectionEntry | null>(null);
   const navigate = useNavigate();
   // The copy being made: from a row's menu here, or ?duplicate=<id> (the sidebar's Duplicate).
   const [copying, setCopying] = useState<View | null>(null);
@@ -304,9 +307,21 @@ export default function Views() {
                 <div role="group" aria-label={t("views.inSection", { name: e.name })}>
                   <div className="group relative flex h-9 items-center gap-2 border-b border-line-soft bg-sunken/60 px-4 text-[12.5px] font-medium text-fg-2">
                     {handle}
-                    <FolderClosed className="size-3.5 shrink-0 text-fg-3" />
-                    <span className="min-w-0 truncate">{e.name}</span>
+                    {e.icon ? <ViewIcon icon={e.icon} size={14} className="size-3.5 shrink-0 text-fg-3" /> : <FolderClosed className="size-3.5 shrink-0 text-fg-3" />}
+                    <span className="min-w-0 truncate">{viewName(e)}</span>
                     <span className="mono text-[11px] font-normal text-fg-4">{e.views.length}</span>
+                    {canEditSections && (
+                      <Tooltip content={t("views.sectionEdit.title")}>
+                        <button
+                          type="button"
+                          aria-label={t("views.sectionEdit.aria", { name: e.name })}
+                          onClick={() => setEditingSection(e)}
+                          className="ml-auto flex size-7 items-center justify-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
+                      </Tooltip>
+                    )}
                   </div>
                   <SortableList
                     items={e.views}
@@ -327,6 +342,7 @@ export default function Views() {
       ) : (
         editing && <ViewDrawer view={editing === "new" ? null : editing} views={sorted} nextPosition={sorted.length} onClose={() => setEditing(null)} />
       )}
+      {editingSection && <SectionDialog key={editingSection.key} section={editingSection} views={views ?? []} onClose={() => setEditingSection(null)} />}
     </SettingsPage>
   );
 
@@ -424,6 +440,68 @@ export default function Views() {
   }
 }
 
+type SectionEntry = Extract<ViewEntry, { kind: "section" }>;
+
+/**
+ * A view section's name and icon (PATCH /v1/view-sections). A new name renames the section on
+ * the views listed here, and its icon goes with it; the icon shows on every view of the
+ * section, in the sidebar of everyone who has one.
+ */
+function SectionDialog({ section, views, onClose }: { section: SectionEntry; views: View[]; onClose: () => void }) {
+  const { t } = useTranslation("settingsInbox");
+  const qc = useQueryClient();
+  const [name, setName] = useState(section.name);
+  const [icon, setIcon] = useState<ViewIconValue | null>(section.icon);
+  const [error, setError] = useState<string | null>(null);
+  // A name another section has, in any case, joins it as that section spells it.
+  const others = viewSections(views).filter((s) => sectionKey(s) !== section.key);
+  const next = matchSection(clipSection(name), others);
+  const save = useMutation({
+    mutationFn: () => api.viewSections.update({ section: section.name, ...(next !== section.name ? { name: next } : {}), icon }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.views });
+      toast.success(t("views.sectionEdit.saved"));
+      onClose();
+    },
+    onError: (e) => setError(errorMessage(e)),
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      size="sm"
+      title={t("views.sectionEdit.title")}
+      description={t("views.sectionEdit.description", { count: section.views.length })}
+      footer={
+        <>
+          <span className="flex-1 text-xs text-danger-fg">{error}</span>
+          <Button variant="ghost" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button variant="primary" type="submit" form="view-section-form" loading={save.isPending}>
+            {t("views.sectionEdit.save")}
+          </Button>
+        </>
+      }
+    >
+      <form
+        id="view-section-form"
+        className="flex flex-col gap-5 pb-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError(null);
+          if (!cleanSection(name)) return setError(t("views.sectionEdit.needName"));
+          if (sectionProblem(name)) return setError(t("views.sectionChars"));
+          save.mutate();
+        }}
+      >
+        <Field label={t("views.nameLabel")}>{(p) => <TextInput {...p} autoFocus value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />}</Field>
+        <ViewIconField section value={icon} onChange={setIcon} name={next} />
+      </form>
+    </Dialog>
+  );
+}
+
 /**
  * The view editor: `view` to change one, else a new view, started from a copy of `copyOf`
  * (Duplicate) that is saved right after it.
@@ -446,7 +524,14 @@ function ViewDrawer({ view, copyOf, views, nextPosition, onClose }: { view: View
   const [teamId, setTeamId] = useState<string | null>(start?.team_id ?? null);
   const [icon, setIcon] = useState<ViewIconValue | null>(start?.icon ?? null);
   const [section, setSection] = useState(cleanSection(start?.section));
-  const inUse = viewSections(useQuery(q.views()).data ?? []);
+  const allViews = useQuery(q.views()).data;
+  const inUse = viewSections(allViews ?? []);
+  // Each section in use with its icon, as the sidebar shows it.
+  const sectionIcon = (s: string) => {
+    const e = groupViews(allViews ?? []).find((x) => x.kind === "section" && x.key === sectionKey(s));
+    const i = e?.kind === "section" ? e.icon : null;
+    return i ? <ViewIcon icon={i} size={14} /> : <FolderClosed />;
+  };
   const sections = section && !inUse.some((s) => sectionKey(s) === sectionKey(section)) ? [...inUse, section] : inUse;
   const { t: tt } = useTranslation("settingsTeams");
   const [f, setF] = useState<TicketFilters>(start?.filters ?? { status: ["open"] });
@@ -584,7 +669,7 @@ function ViewDrawer({ view, copyOf, views, nextPosition, onClose }: { view: View
               <Picker
                 items={[
                   { value: "", label: t("views.noSection"), icon: <X /> },
-                  ...sections.map((s) => ({ value: s, label: s, icon: <FolderClosed /> })),
+                  ...sections.map((s) => ({ value: s, label: s, icon: sectionIcon(s) })),
                 ]}
                 value={section}
                 onSelect={setSection}
@@ -600,7 +685,7 @@ function ViewDrawer({ view, copyOf, views, nextPosition, onClose }: { view: View
                 emptyText={t("views.sectionEmpty")}
                 width={300}
                 trigger={
-                  <ValueButton id={p.id} aria-describedby={p["aria-describedby"]} size="md" placeholder={t("views.noSection")} icon={section ? <FolderClosed /> : undefined} className="w-full">
+                  <ValueButton id={p.id} aria-describedby={p["aria-describedby"]} size="md" placeholder={t("views.noSection")} icon={section ? sectionIcon(section) : undefined} className="w-full">
                     {section || undefined}
                   </ValueButton>
                 }
