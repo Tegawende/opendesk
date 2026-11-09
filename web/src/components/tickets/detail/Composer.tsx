@@ -28,6 +28,7 @@ import { variableText } from "./composerTemplates";
 import { ReplySignature } from "./ReplySignature";
 import { ReplyPreview } from "./ReplyPreview";
 import { SendButton } from "./SendButton";
+import { bindDrafts, isEmptyDraft } from "./draftsPersist";
 import { statusLabel } from "../bits";
 import { useDisplay } from "../fields";
 import { useTicketViewers } from "../presence";
@@ -72,8 +73,16 @@ type Draft = {
   fromNote?: string;
 };
 
-// Drafts survive switching tickets (memory only).
+// Drafts survive switching tickets, a reload, another tab and closing the browser: each is kept
+// in localStorage for its workspace, member and ticket, for 14 days (draftsPersist.ts).
 const useDrafts = create<Record<string, Draft>>(() => ({}));
+const keptDrafts = bindDrafts(useDrafts, {
+  scope: () => {
+    const s = useSession.getState();
+    return s.workspaceId && s.user?.id ? `${s.workspaceId}:${s.user.id}` : null;
+  },
+  empty: isEmptyDraft,
+});
 const emptyDraft: Draft = {
   mode: "reply",
   html: "",
@@ -217,6 +226,8 @@ export const Composer = forwardRef<
   useEffect(() => () => clearTimeout(leaving.current), []);
   const draft = useDrafts((s) => s[ticket.id]) ?? emptyDraft;
   const setDraft = useCallback((p: Partial<Draft>) => useDrafts.setState((s) => ({ [ticket.id]: { ...(s[ticket.id] ?? emptyDraft), ...p } })), [ticket.id]);
+  // The draft left on an earlier visit comes back.
+  useEffect(() => keptDrafts.restore(ticket.id), [ticket.id]);
   const { mode } = draft;
 
   const { data: members } = useQuery(q.members());
