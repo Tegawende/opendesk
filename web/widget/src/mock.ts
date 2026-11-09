@@ -168,8 +168,11 @@ export function demoConfig(key: string, params = new URLSearchParams()): WidgetC
 export type MockOptions = {
   /** Language of the seeded content (?od_lang=). */
   lang?: string;
-  /** "demo": one past conversation; "preview": the dashboard preview's showcase conversation; "empty": none. */
-  seed?: "demo" | "preview" | "empty";
+  /**
+   * "demo": one past conversation; "history": a returning visitor's, open and finished, some months old;
+   * "preview": the dashboard preview's showcase conversation; "empty": none.
+   */
+  seed?: "demo" | "history" | "preview" | "empty";
   /** Answer GET /v1/widget/config with this (demo pages); the preview passes its config to boot. */
   config?: (key: string) => WidgetConfig;
   /** Network latency for API calls, ms. */
@@ -278,6 +281,23 @@ export function createMock(o: MockOptions = {}): Mock {
     const cv = uid();
     conversations.push({ id: cv, subject: copy.subject, status: "solved", last_message_preview: copy.a2, last_message_at: ago(60 * 26) });
     messages[cv] = [msg(cv, "inbound", copy.q1, 60 * 27), msg(cv, "outbound", "", 60 * 26.5, copy.a1), msg(cv, "inbound", copy.q2, 60 * 26.2), msg(cv, "outbound", copy.a2, 60 * 26)];
+    if (o.seed === "history") {
+      const day = 60 * 24;
+      const past: [string, string, string, number][] = [
+        ["A page is missing from my notebook", "open", "Could you check page 12? It came out blank.", 2 * 60],
+        ["Invoice with our VAT number", "pending", "Here is our VAT number: GB123456789.", 3 * day],
+        ["Changing the email on my account", "solved", "All set, thanks!", 12 * day],
+        ["Refund for a returned order", "closed", "The refund is on its way.", 45 * day],
+        ["Discount for 20 seats", "solved", "Great, we'll go with the yearly plan.", 80 * day],
+        ["Can't upload a cover image", "closed", "It works now, thank you.", 140 * day],
+      ];
+      for (const [subject, status, text, mins] of past) {
+        const id = uid();
+        conversations.push({ id, subject, status, last_message_preview: text, last_message_at: ago(mins) });
+        messages[id] = [msg(id, "inbound", text, mins)];
+      }
+      conversations.sort((a, b) => Date.parse(b.last_message_at) - Date.parse(a.last_message_at));
+    }
   }
 
   // One fake channel per topic; the fetch handler pushes into it.
@@ -548,7 +568,10 @@ export function createMock(o: MockOptions = {}): Mock {
 // The demo page's backend (main.tsx imports these in mock builds).
 let demo: Mock | null = null;
 const demoMock = () =>
-  (demo ??= createMock({ lang: typeof location === "undefined" ? "" : (new URLSearchParams(location.search).get("od_lang") ?? ""), seed: "demo" }));
+  (demo ??= (() => {
+    const params = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
+    return createMock({ lang: params.get("od_lang") ?? "", seed: params.has("od_history") ? "history" : "demo" });
+  })());
 export const mockFetch: Fetcher = (url, init) => demoMock().fetch(url, init);
 export const mockSocket: SocketFactory = (url, params) => demoMock().socket(url, params);
 /** The team takes back its latest reply in the demo (the proof flow dispatches `opendesk-mock:take-back`). */

@@ -195,6 +195,8 @@ img { display: block; }
 .link-row:hover { background: var(--bg-3); }
 .link-row svg { color: var(--fg-3); transition: transform .16s var(--ease); }
 .link-row:hover svg { transform: translate(1px, -1px); }
+/* "See older conversations" under the home screen's list, and "Back" under the full one. */
+.link-row.more { width: 100%; border-top: 1px solid var(--line); color: var(--fg-2); text-align: start; }
 
 /* Topics: one list of rows, on the home screen and before a new conversation's first message. */
 .topics { display: flex; flex-direction: column; }
