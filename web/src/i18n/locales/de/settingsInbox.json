@@ -48,7 +48,15 @@
       "slash": "Tippe im Editor / und ein Kürzel",
       "team": "Antworten sind für dein ganzes Team verfügbar"
     },
-    "variablesHint": "Variablen werden beim Einfügen des Textbausteins für jedes Ticket ausgefüllt."
+    "variablesHint": "Variablen werden beim Einfügen des Textbausteins für jedes Ticket ausgefüllt.",
+    "actionsTitle": "Aktionen beim Senden",
+    "actionsHint": "Werden auf das Ticket angewendet, wenn eine Nachricht mit dieser Antwort gesendet wird. Beim Verwerfen des Entwurfs passiert nichts.",
+    "addTags": "Labels hinzufügen",
+    "removeTags": "Labels entfernen",
+    "tagsPlaceholder": "label-a, label-b",
+    "setTeam": "In Team verschieben",
+    "setAssignee": "Zuweisen an",
+    "noChange": "Nicht ändern"
   },
   "views": {
     "reorderAria": "{{name}} neu anordnen. Halte Alt gedrückt und bewege es mit den Pfeiltasten.",

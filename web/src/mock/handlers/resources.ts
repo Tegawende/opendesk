@@ -180,6 +180,20 @@ export function registerResources() {
     return respond(204);
   });
 
+  // A saved reply's actions as the API keeps them: label names trimmed, a team or a member or nothing.
+  const replyActions = (v: unknown): SavedReply["actions"] => {
+    const a = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+    const names = (x: unknown) => (Array.isArray(x) ? [...new Set(x.map((t) => String(t).trim()).filter(Boolean))] : []);
+    const out: NonNullable<SavedReply["actions"]> = {};
+    const add = names(a.add_tags);
+    const remove = names(a.remove_tags).filter((t) => !add.includes(t));
+    if (add.length) out.add_tags = add;
+    if (remove.length) out.remove_tags = remove;
+    if (typeof a.team_id === "string" && a.team_id) out.team_id = a.team_id;
+    if (typeof a.assignee_id === "string" && a.assignee_id) out.assignee_id = a.assignee_id;
+    return out;
+  };
+
   crud<SavedReply>({
     path: "/v1/saved-replies",
     resource: "saved_reply",
@@ -188,9 +202,10 @@ export function registerResources() {
     sort: (a, b) => a.title.localeCompare(b.title),
     // A private team's replies are listed only to its members.
     filter: (ctx, rows) => rows.filter((r) => canSeeTeamScoped(ctx.ws, r.team_id)),
-    create: (ctx, id) => ({ id, title: required(ctx, "title").slice(0, 100), shortcut: slugify(s(ctx, "shortcut") ?? "").slice(0, 30), body_html: required(ctx, "body_html"), team_id: teamRef(ctx, ctx.body.team_id), created_at: nowIso(), updated_at: nowIso() }),
+    create: (ctx, id) => ({ id, title: required(ctx, "title").slice(0, 100), shortcut: slugify(s(ctx, "shortcut") ?? "").slice(0, 30), body_html: required(ctx, "body_html"), team_id: teamRef(ctx, ctx.body.team_id), actions: replyActions(ctx.body.actions), created_at: nowIso(), updated_at: nowIso() }),
     update: (ctx, row) => {
       assign(row, ctx.body, ["title", "body_html"]);
+      if ("actions" in ctx.body) row.actions = replyActions(ctx.body.actions);
       if ("team_id" in ctx.body) row.team_id = teamRef(ctx, ctx.body.team_id);
       if (s(ctx, "shortcut") !== undefined) row.shortcut = slugify(s(ctx, "shortcut")!).slice(0, 30);
       row.updated_at = nowIso();

@@ -577,7 +577,9 @@
     "replyToMailbox": "L’adresse du ticket ({{address}})",
     "replyToSearch": "Saisissez une adresse",
     "replyToEmpty": "Saisissez une adresse e-mail",
-    "replyToUse": "Utiliser"
+    "replyToUse": "Utiliser",
+    "replyActions": "À l’envoi :",
+    "dropReplyActions": "Retirer ces actions"
   },
   "sharedDraft": {
     "label": "Brouillon partagé",

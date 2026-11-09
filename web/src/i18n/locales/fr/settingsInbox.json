@@ -49,7 +49,15 @@
       "slash": "Saisissez / et un raccourci dans l’éditeur",
       "team": "Les réponses sont partagées avec toute votre équipe"
     },
-    "variablesHint": "Les variables sont renseignées pour chaque ticket au moment d’insérer la réponse."
+    "variablesHint": "Les variables sont renseignées pour chaque ticket au moment d’insérer la réponse.",
+    "actionsTitle": "Actions à l’envoi",
+    "actionsHint": "Appliquées au ticket quand un message utilisant cette réponse est envoyé. Rien ne se passe si le brouillon est abandonné.",
+    "addTags": "Ajouter des étiquettes",
+    "removeTags": "Retirer des étiquettes",
+    "tagsPlaceholder": "etiquette-a, etiquette-b",
+    "setTeam": "Déplacer vers l’équipe",
+    "setAssignee": "Attribuer à",
+    "noChange": "Ne pas changer"
   },
   "views": {
     "reorderAria": "Réorganiser {{name}}. Maintenez Alt et appuyez sur les touches fléchées pour déplacer cet élément.",

@@ -560,7 +560,9 @@
     "replyToMailbox": "Die Adresse des Tickets ({{address}})",
     "replyToSearch": "Adresse eingeben",
     "replyToEmpty": "E-Mail-Adresse eingeben",
-    "replyToUse": "Verwenden"
+    "replyToUse": "Verwenden",
+    "replyActions": "Beim Senden:",
+    "dropReplyActions": "Diese Aktionen entfernen"
   },
   "sharedDraft": {
     "label": "Geteilter Entwurf",

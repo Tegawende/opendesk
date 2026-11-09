@@ -36,6 +36,7 @@ type MessageInput struct {
 	MailboxID     string            `json:"mailbox_id,omitempty" doc:"Replies: send from this address of the ticket's brand (the caller must be allowed to send from it); it becomes the ticket's reply address"`
 	FromNoteID    string            `json:"from_note_id,omitempty" doc:"Replies: an internal note of yours, without files, this reply is written from. The note stays as a marker pointing at the reply; only admins read what it said"`
 	FromAccount   *FromAccountInput `json:"from_account,omitempty" doc:"Email replies: send from one of your own Collab addresses instead of the ticket's reply address, which stays as it is"`
+	SavedReplyIDs []string          `json:"saved_reply_ids,omitempty" maxItems:"10" doc:"Saved replies used in this message: their actions apply to the ticket once it is added"`
 }
 
 // FromAccountInput is the Collab address a reply goes out from (contracts/collab.md
@@ -408,6 +409,9 @@ func PostMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 		if err := notifyMentions(ctx, tx, wid, tid, msg, actor.UserID); err != nil {
 			return domain.Message{}, err
 		}
+	}
+	if err := applySavedReplyActions(ctx, tx, d, wid, tid, actor, b.SavedReplyIDs); err != nil {
+		return domain.Message{}, err
 	}
 	if b.Status != nil {
 		if _, err := applyPatch(ctx, tx, d, wid, tid, actor, Patch{Status: b.Status}, applyOpts{Enqueue: true, RequireFields: true}); err != nil {

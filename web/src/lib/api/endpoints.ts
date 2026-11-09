@@ -140,6 +140,8 @@ export type SendMessageBody = {
   from_note_id?: string;
   /** Email replies: send from one of your own Collab addresses instead; the ticket's reply address stays. */
   from_account?: { account_id: string; email?: string; reply_to?: string };
+  /** Saved replies used in this message: their actions apply to the ticket once it is added. */
+  saved_reply_ids?: string[];
 };
 
 /** Starts a third-party thread (contracts/api.md "Threads"). */
@@ -646,7 +648,7 @@ export const api = {
     remove: (id: string) => http.del(`/v1/custom-fields/${id}`),
     reorder: (entity: T.FieldEntity, ids: string[]) => http.post<T.Page<T.CustomField>>("/v1/custom-fields/reorder", { entity, ids }),
   },
-  savedReplies: crud<T.SavedReply, { title: string; shortcut: string; body_html: string; team_id?: string | null }>("/v1/saved-replies"),
+  savedReplies: crud<T.SavedReply, { title: string; shortcut: string; body_html: string; team_id?: string | null; actions?: T.SavedReplyActions }>("/v1/saved-replies"),
   views: crud<T.View, { name: string; filters: T.TicketFilters; shared: boolean; position?: number; team_id?: string | null; section?: string | null; icon?: T.ViewIcon | null }>("/v1/views"),
   slaPolicies: crud<T.SlaPolicy, Omit<T.SlaPolicy, "id" | "business_hours"> & { business_hours?: boolean }>("/v1/sla-policies"),
   automations: crud<T.Automation, Omit<T.Automation, "id" | "run_count">>("/v1/automations"),

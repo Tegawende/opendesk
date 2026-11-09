@@ -621,9 +621,13 @@ export type SavedReply = {
   body_html: string;
   /** Offered only on this team's tickets; null is everyone. */
   team_id?: string | null;
+  /** Applied to the ticket when a message using it is sent. */
+  actions?: SavedReplyActions;
   created_at: string;
   updated_at: string;
 };
+/** What a saved reply does to the ticket once a message using it is sent. */
+export type SavedReplyActions = { add_tags?: string[]; remove_tags?: string[]; team_id?: string | null; assignee_id?: string | null };
 export type TicketFilters = {
   status?: TicketStatus[];
   priority?: Priority[];

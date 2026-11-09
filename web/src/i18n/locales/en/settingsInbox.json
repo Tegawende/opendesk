@@ -48,7 +48,15 @@
       "slash": "Type / and a shortcut in the composer",
       "team": "Replies are shared with your whole team"
     },
-    "variablesHint": "Variables are filled in for each ticket when the reply is inserted."
+    "variablesHint": "Variables are filled in for each ticket when the reply is inserted.",
+    "actionsTitle": "Actions when sent",
+    "actionsHint": "Applied to the ticket when a message using this reply is sent. Nothing happens if the draft is discarded.",
+    "addTags": "Add labels",
+    "removeTags": "Remove labels",
+    "tagsPlaceholder": "label-a, label-b",
+    "setTeam": "Move to team",
+    "setAssignee": "Assign to",
+    "noChange": "Don't change"
   },
   "views": {
     "reorderAria": "Reorder {{name}}. Hold Alt and press the arrow keys to move it.",

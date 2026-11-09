@@ -564,7 +564,9 @@
     "replyToMailbox": "The ticket's address ({{address}})",
     "replyToSearch": "Type an address",
     "replyToEmpty": "Type an email address",
-    "replyToUse": "Use"
+    "replyToUse": "Use",
+    "replyActions": "When sent:",
+    "dropReplyActions": "Remove these actions"
   },
   "sharedDraft": {
     "label": "Shared draft",
