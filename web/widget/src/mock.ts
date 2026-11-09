@@ -352,6 +352,13 @@ export function createMock(o: MockOptions = {}): Mock {
     if (!c || c.ai_handoff || messages[tid]?.some((m) => m.author.type === "user")) return;
     if (/person|human|someone|agent|real/i.test(text)) {
       stream(tid, "Of course. I've asked the team to join; a person will reply right here.", { handoff: true });
+    } else if (/return|refund/i.test(text)) {
+      // Addresses written out, as models often do: the widget shows them as short links.
+      stream(
+        tid,
+        "You can start a return from this page: https://margin.opendeskhelp.com/a/returns/start-a-return?from=chat. Pick the items, print the label and drop the parcel at any post office. If anything goes wrong, write to returns@margin.test.",
+        { tool: "Knowledge search" },
+      );
     } else if (/order|address|deliver|ship|#\d+/i.test(text)) {
       if (/#?\d{4}|street|road|avenue/i.test(text)) stream(tid, ORDER.lookup, { tool: "Order lookup", action: ORDER.action, delay: 900 });
       else stream(tid, "Happy to help with that. What's your order number, and where should it go?", { tool: "Order lookup" });
