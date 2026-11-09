@@ -560,7 +560,11 @@
     "replyToMailbox": "Die Adresse des Tickets ({{address}})",
     "replyToSearch": "Adresse eingeben",
     "replyToEmpty": "E-Mail-Adresse eingeben",
-    "replyToUse": "Verwenden"
+    "replyToUse": "Verwenden",
+    "chatReply": "Im Chat · per E-Mail, falls der Besucher gegangen ist",
+    "chatReplyHint": "Ihre Antwort erscheint sofort im Chat des Besuchers. Hat er die Seite verlassen (2 Minuten ohne Aktivität), geht sie eine Minute später zusätzlich an seine E-Mail-Adresse, außer er kommt zurück.",
+    "chatReplyHere": "Im Chat",
+    "chatReplyAway": "Im Chat · per E-Mail, falls er sie nicht liest"
   },
   "sharedDraft": {
     "label": "Geteilter Entwurf",
@@ -1047,5 +1051,12 @@
     "attachments": "Anhänge",
     "nothing": "Nichts zu drucken",
     "nothingHint": "Mit diesen Optionen gibt es keine Nachrichten zum Drucken, oder die Nachricht ist nicht mehr im Ticket."
+  },
+  "visitorPresence": {
+    "here": "Gerade auf der Seite",
+    "away": "Vor {{time}} gegangen",
+    "never": "Nicht auf der Seite",
+    "email": "Ihre Antwort wird ihm auch per E-Mail geschickt",
+    "hint": "Nach der Aktivität des Chat-Widgets. Nach 2 Minuten ohne Aktivität gilt der Besucher als gegangen: Eine Antwort geht dann eine Minute später auch per E-Mail an ihn, außer er kommt zurück."
   }
 }

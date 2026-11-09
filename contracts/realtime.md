@@ -57,7 +57,7 @@ URL, where proxies and access logs keep it. A token in the query string is not r
 | | | Pushed envelopes omit `topics`: per-user events (`notification.created`) are told apart by the channel they arrive on (`user:<uid>`), not by `topics` |
 | `team:<wid>:<tid>`            | `ws` token that covers `wid` with `tid` among its private teams there | `"event"` envelopes of a private team's tickets in full (contracts/teams.md "Visibility"); `workspace:<wid>` gets their stand-in. They may arrive before or after the stand-in: apply them when they arrive, track `seq` on the workspace channel |
 | `user:<uid>`                  | `ws` token, `kind=user`, `sub == uid`          | `"event"` envelopes whose topics include `user:<uid>`, in full (their notifications and assignments, which go only to users who can see the ticket) |
-| `ticket:<wid>:<ticket_id>`    | `ws` token, `kind=user`, that covers `wid`; with `team_id` in the join params, that team among its private teams there. The channel acts with the role the token gives in `wid` | Presence (`presence_state`, `presence_diff`), `"typing"`, `"customer_typing"` and `"live"`; those of a private team's ticket only to sockets with the team (below) |
+| `ticket:<wid>:<ticket_id>`    | `ws` token, `kind=user`, that covers `wid`; with `team_id` in the join params, that team among its private teams there. The channel acts with the role the token gives in `wid` | Presence (`presence_state`, `presence_diff`), `"typing"`, `"customer_typing"`, `"customer_presence"` and `"live"`; those of a private team's ticket only to sockets with the team (below) |
 | `contact:<wid>:<contact_id>`  | widget socket: `widget_ws` token with `sub == contact_id`, same `wid` | `"event"` for public envelopes with that topic, `"typing"` from agents and `"live"`. Envelopes list `contact:<wid>:<contact_id>:<brand_id>` (the chat's brand) and live events carry `brand_id`: they are pushed only to sockets whose token's `bid` is that brand, without `brand_id`, so a visitor's chats of another brand never reach this widget (a token without `bid` gets every brand's) |
 
 Join params on `ticket:<wid>:<tid>`: `{"watch": true}` watches a ticket (the inbox list
@@ -104,7 +104,7 @@ NATS subject **`od.live.<wid>`**:
 ```jsonc
 { "workspace_id": "…", "ticket_id": "…", "contact_id": "…", "team_id": "…" /* only when the ticket's team is private */,
   "brand_id": "…" /* the chat's brand: the contact topic's copy goes only to widget sockets of that brand */,
-  "type": "ai.reply.started" | "ai.reply.delta" | "ai.reply.tool" | "ai.reply.ended" | "agent.typing" | "customer.typing",
+  "type": "ai.reply.started" | "ai.reply.delta" | "ai.reply.tool" | "ai.reply.ended" | "agent.typing" | "customer.typing" | "customer.presence",
   "data": { /* below */ } }
 ```
 
@@ -114,12 +114,13 @@ a reply preview as `"live"` with `{type, data}` to `contact:<wid>:<contact_id>` 
 sockets with that team in `teams`. There is no `seq` and no catch-up: a client that misses them still
 gets the posted message as `message.created`.
 
-Typing is pushed to one topic only, in the shape clients already handle:
+Typing and a visitor's coming back are pushed to one topic only, in the shape clients already handle:
 
 | type | published by | pushed |
 | --- | --- | --- |
 | `agent.typing` | `POST /v1/tickets/{id}/typing`, for a chat ticket with a contact the caller may see; `data: {user: {id, name}}` | `"typing"` `{ticket_id, user: {id, name}}` to `contact:<wid>:<contact_id>` (that brand's widget sockets) |
 | `customer.typing` | `POST /v1/widget/conversations/{id}/typing`, for the visitor's own conversation; `data: {}` | `"customer_typing"` `{ticket_id, contact_id}` to `ticket:<wid>:<ticket_id>` (with a `team_id`, only sockets with that team) |
+| `customer.presence` | the API, when a visitor's widget makes its first request after 2 minutes of quiet (back on the page, contracts/teams.md "Chat follow-up"), for each of their open chats (at most 5); `data: {}` | `"customer_presence"` `{ticket_id, contact_id}` to `ticket:<wid>:<ticket_id>` (with a `team_id`, only sockets with that team); clients read `GET /v1/tickets/{id}/visitor-presence` again |
 
 | type | data |
 | --- | --- |

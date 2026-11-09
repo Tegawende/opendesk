@@ -472,6 +472,21 @@ export function registerTickets() {
     return respond(204);
   });
 
+  // The visitor's widget is not simulated: an open chat that moved in the last two hours has its
+  // visitor on the page; any other left when the conversation last moved.
+  get("/v1/tickets/:id/visitor-presence", (ctx) => {
+    const t = ticket(ctx);
+    if (t.channel !== "chat" || !t.contact) return { chat: false, present: false, last_seen_at: null, away_after_seconds: 120, email_follow_up: false };
+    const present = t.status === "open" && Date.now() - Date.parse(t.updated_at) < 2 * 3600_000;
+    return {
+      chat: true,
+      present,
+      last_seen_at: present ? nowIso() : t.updated_at,
+      away_after_seconds: 120,
+      email_follow_up: !!t.contact.email,
+    };
+  });
+
   get("/v1/tickets/:id/messages", (ctx) => {
     const t = ticket(ctx);
     const role = ctx.ws.members.find((m) => m.user_id === db.meId)?.role;

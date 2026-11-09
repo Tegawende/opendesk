@@ -17,6 +17,7 @@ import { syncDiff, syncState, type PresenceDiff, type PresenceState } from "./pr
 import { SeqSync } from "./seq";
 import { applyLive, clearLive, clearPresence, noteCustomerTyping, noteTyping, setPresence, useRealtime } from "./store";
 import { createSocket, type RtChannel, type RtSocket } from "./transport";
+import { applyVisitorPresence } from "../visitorPresence";
 
 /** Query roots that realtime events keep current (see apply.ts). */
 const LIVE_ROOTS = new Set(["tickets", "contacts", "companies", "notifications", "members", "kb"]);
@@ -458,6 +459,12 @@ export class RealtimeManager {
         const contactId = (p as { contact_id?: string }).contact_id;
         const ticket = inWorkspace(wid, () => this.opts.qc.getQueryData<Ticket>(qk.ticket(id)));
         if (contactId && ticket?.contact?.id === contactId) noteCustomerTyping(id);
+      });
+      // The chat's visitor came back to the page: their presence reloads.
+      ch.on("customer_presence", (p) => {
+        const contactId = (p as { contact_id?: string }).contact_id;
+        const ticket = inWorkspace(wid, () => this.opts.qc.getQueryData<Ticket>(qk.ticket(id)));
+        if (contactId && ticket?.contact?.id === contactId) inWorkspace(wid, () => applyVisitorPresence(this.opts.qc, id));
       });
     }
     ch.join().receive("ok", () => {

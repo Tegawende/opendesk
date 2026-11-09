@@ -577,7 +577,11 @@
     "replyToMailbox": "L’adresse du ticket ({{address}})",
     "replyToSearch": "Saisissez une adresse",
     "replyToEmpty": "Saisissez une adresse e-mail",
-    "replyToUse": "Utiliser"
+    "replyToUse": "Utiliser",
+    "chatReply": "Dans le chat · par e-mail si le visiteur est parti",
+    "chatReplyHint": "Votre réponse s’affiche en direct dans le chat du visiteur. S’il a quitté la page (aucune activité depuis 2 minutes), elle part aussi à son adresse e-mail une minute plus tard, sauf s’il revient.",
+    "chatReplyHere": "Dans le chat",
+    "chatReplyAway": "Dans le chat · par e-mail s’il ne la lit pas"
   },
   "sharedDraft": {
     "label": "Brouillon partagé",
@@ -1033,5 +1037,12 @@
     "attachments": "Pièces jointes",
     "nothing": "Rien à imprimer",
     "nothingHint": "Aucun message à imprimer avec ces options, ou le message n’est plus dans le ticket."
+  },
+  "visitorPresence": {
+    "here": "Sur la page maintenant",
+    "away": "Parti il y a {{time}}",
+    "never": "Pas sur la page",
+    "email": "Votre réponse lui sera aussi envoyée par e-mail",
+    "hint": "D’après l’activité du widget de chat. Après 2 minutes sans activité, le visiteur compte comme parti : une réponse lui est alors aussi envoyée par e-mail une minute plus tard, sauf s’il revient."
   }
 }

@@ -28,6 +28,7 @@ import { variableText } from "./composerTemplates";
 import { ReplySignature } from "./ReplySignature";
 import { ReplyPreview } from "./ReplyPreview";
 import { SendButton } from "./SendButton";
+import { ChatReplyLine } from "./ChatReplyLine";
 import { statusLabel } from "../bits";
 import { useDisplay } from "../fields";
 import { useTicketViewers } from "../presence";
@@ -771,6 +772,8 @@ export const Composer = forwardRef<
               ) : (
                 <span className="min-w-0 flex-1 truncate text-xs text-fg-3">{t("composer.threadHint")}</span>
               )
+            ) : ticket.channel === "chat" ? (
+              <ChatReplyLine ticket={ticket} />
             ) : (
               <span className="min-w-0 flex-1 truncate text-xs text-fg-3">
                 {t("composer.to")} <span className="mono text-fg-2" data-ph-mask>{recipient}</span>

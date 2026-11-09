@@ -564,7 +564,11 @@
     "replyToMailbox": "The ticket's address ({{address}})",
     "replyToSearch": "Type an address",
     "replyToEmpty": "Type an email address",
-    "replyToUse": "Use"
+    "replyToUse": "Use",
+    "chatReply": "In the chat · by email if the visitor has left",
+    "chatReplyHint": "Your reply appears live in the visitor's chat. If they have left the page (no activity for 2 minutes), it is also sent to their email address a minute later, unless they come back.",
+    "chatReplyHere": "In the chat",
+    "chatReplyAway": "In the chat · by email if they don't read it"
   },
   "sharedDraft": {
     "label": "Shared draft",
@@ -1051,5 +1055,12 @@
     "attachments": "Attachments",
     "nothing": "Nothing to print",
     "nothingHint": "There are no messages to print with these options, or the message is no longer on the ticket."
+  },
+  "visitorPresence": {
+    "here": "On the page now",
+    "away": "Left {{time}} ago",
+    "never": "Not on the page",
+    "email": "Your reply will also be sent to them by email",
+    "hint": "From the chat widget's activity. After 2 minutes without it the visitor counts as gone, and a reply is also emailed a minute later unless they come back."
   }
 }

@@ -18,7 +18,7 @@ defmodule RealtimeWeb.TicketChannel do
 
   A private team's ticket reaches only its team: Presence metas and typing of
   joiners that named the team, and live previews and the visitor's typing
-  (`"customer_typing"`) the API marks with the team, carry `team_id`, and
+  (`"customer_typing"`, `"customer_presence"`) the API marks with the team, carry `team_id`, and
   `handle_out` drops them for sockets whose `teams` claim lacks it (and strips
   `team_id` from what it pushes). A socket that omits `team_id` therefore joins,
   but receives nothing scoped to a private team.
@@ -34,7 +34,7 @@ defmodule RealtimeWeb.TicketChannel do
 
   use Phoenix.Channel, log_join: false, log_handle_in: false
 
-  intercept ["live", "typing", "customer_typing", "presence_diff"]
+  intercept ["live", "typing", "customer_typing", "customer_presence", "presence_diff"]
 
   alias Realtime.Auth
   alias Realtime.Ids
@@ -95,7 +95,7 @@ defmodule RealtimeWeb.TicketChannel do
     {:noreply, socket}
   end
 
-  def handle_out(event, payload, socket) when event in ["live", "typing", "customer_typing"] do
+  def handle_out(event, payload, socket) when event in ["live", "typing", "customer_typing", "customer_presence"] do
     {team_id, payload} = pop_team(payload)
     if visible?(team_id, socket), do: push(socket, event, payload)
     {:noreply, socket}

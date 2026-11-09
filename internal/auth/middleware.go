@@ -25,6 +25,9 @@ type Resolver struct {
 	Tokens *Tokens
 	// ClientIP extracts the caller address (honors proxies only when configured).
 	ClientIP func(*http.Request) string
+	// VisitorSeen, when set, is called after a visitor's request refreshed their widget
+	// session's last_seen_at (at most once a minute a session). It must not block.
+	VisitorSeen func(ctx context.Context, wid, contactID uuid.UUID)
 
 	mu        sync.Mutex
 	lastTouch map[uuid.UUID]time.Time
@@ -133,6 +136,9 @@ func (rv *Resolver) resolveVisitor(ctx context.Context, token string, p *Princip
 	p.Kind = KindVisitor
 	if rv.shouldTouch(p.VisitorID) {
 		_, _ = rv.Pool.Exec(context.WithoutCancel(ctx), `UPDATE widget_sessions SET last_seen_at = now() WHERE id = $1`, p.VisitorID)
+		if rv.VisitorSeen != nil {
+			rv.VisitorSeen(ctx, p.WorkspaceID, p.ContactID)
+		}
 	}
 	return true
 }

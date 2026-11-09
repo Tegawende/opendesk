@@ -317,6 +317,13 @@ the session's `last_seen_at` (at most once a minute), and fetching a conversatio
 a reply arrives) refresh it at once. A visitor who only listens on the socket for longer than that
 counts as away.
 
+Agents see the same signal on the chat: `GET /v1/tickets/{id}/visitor-presence` (contracts/api.md) says
+whether the visitor is on the page and whether a reply would be emailed while they are away, and agents
+on the ticket get `"customer_presence"` when the visitor comes back (contracts/realtime.md "Live events").
+The app shows it above the conversation ("On the page now", "Left 5 min ago" and "Your reply will also
+be sent to them by email"), and the composer's delivery line reads "In the chat" or "In the chat · by
+email if they don't read it" instead of the contact's address.
+
 The email goes out like an email reply: from the ticket's reply address, else the brand's address whose
 default team is the ticket's team, else the brand's oldest active address that is not another private
 team's (none: no email), with the address's
