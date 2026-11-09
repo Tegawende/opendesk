@@ -141,6 +141,23 @@
     "you": "Du",
     "noMatch": "Keine passenden Mitglieder",
     "noMatchHint": "Versuche einen anderen Namen oder eine andere E-Mail-Adresse.",
+    "filter": {
+      "label": "Mitglieder filtern",
+      "allRoles": "Alle Rollen",
+      "roleLabel": "Rolle: {{value}}",
+      "searchRoles": "Rollen suchen",
+      "allTeams": "Alle Teams",
+      "noTeam": "Kein Team",
+      "unknownTeam": "Unbekanntes Team",
+      "teamLabel": "Team: {{value}}",
+      "searchTeams": "Teams suchen",
+      "anyStatus": "Jeder Status",
+      "statusLabel": "Status: {{value}}",
+      "searchStatuses": "Status suchen",
+      "shown": "{{shown}} von {{total}}",
+      "clear": "Filter zurücksetzen",
+      "noMatchHint": "Versuche andere Filter, oder setze sie zurück, um alle zu sehen."
+    },
     "emptyTitle": "Bisher nur du",
     "emptyHint": "Lade Teammitglieder ein, um den Posteingang zu teilen.",
     "columns": {

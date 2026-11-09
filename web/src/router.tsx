@@ -26,6 +26,7 @@ import { folderById, listQuery, parseInboxSearch, teamQuery } from "./lib/folder
 import { withRememberedSort } from "./lib/listSort";
 import { isMailRouteBox, mailListQuery, parseMailSearch } from "./lib/collab/boxes";
 import { parsePrintSearch } from "./lib/ticketPrint";
+import { parseMemberSearch } from "./lib/memberFilters";
 
 export type RouterContext = { queryClient: QueryClient };
 
@@ -657,9 +658,18 @@ const sWorkspaces = settingsPage("/workspaces", "workspaces", () => import("./pa
 const sWorkspace = settingsPage("/workspace", "general", () => import("./pages/settings/WorkspaceSettings"), (qc) =>
   Promise.all([qc.ensureQueryData(q.workspace()), qc.ensureQueryData(q.members())]),
 );
-const sMembers = settingsPage("/members", "members", () => import("./pages/settings/Members"), (qc) =>
-  Promise.all([qc.ensureQueryData(q.members()), qc.ensureQueryData(q.invitations())]),
-);
+// Filters live in the URL (lib/memberFilters.ts); the list is loaded whole and filtered in the page.
+const sMembers = createRoute({
+  getParentRoute: () => settingsLayout,
+  path: "/members",
+  validateSearch: parseMemberSearch,
+  loader: ({ context }) => {
+    void context.queryClient.prefetchQuery(q.teams());
+    return Promise.all([context.queryClient.ensureQueryData(q.members()), context.queryClient.ensureQueryData(q.invitations())]);
+  },
+  component: page(() => import("./pages/settings/Members")),
+  staticData: { title: "members" },
+});
 const sTeams = settingsPage("/teams", "teams", () => import("./pages/settings/Teams"), (qc) => {
   void qc.prefetchQuery(q.mailboxes());
   return Promise.all([qc.ensureQueryData(q.teams()), qc.ensureQueryData(q.members())]);
