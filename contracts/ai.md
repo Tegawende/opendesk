@@ -301,7 +301,8 @@ A summary also sets `custom.ai_sentiment`. `custom.ai_summary` is
 `{text, key_points, sentiment, updated_at, message_count}`.
 
 Messages and tickets also get `language` detection for free when triage runs
-(`custom.language`), which the web app uses for a "Translate" affordance.
+(`custom.language`), which the web app uses for a "Translate" affordance on replies, the
+customer's and the team's (a reply without its own language is taken to be in its ticket's).
 
 ## Decisions
 
