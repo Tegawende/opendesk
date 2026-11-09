@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowUpRight, AtSign, Building2, Copy, FolderClosed, Globe, Inbox, Lock, MoreHorizontal, Pencil, Plus, Search, Tag, Trash2, UserRound, Users, UsersRound, X } from "lucide-react";
+import { ArrowUpRight, AtSign, Building2, Copy, FolderClosed, FolderInput, Globe, Inbox, Lock, MoreHorizontal, Pencil, Plus, Search, Tag, Trash2, UserRound, Users, UsersRound, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsPage, Section, ListRow } from "@/components/layout";
@@ -11,15 +11,15 @@ import { Picker } from "@/components/ui/picker";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuTrigger } from "@/components/ui/menu";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
 import { IconTile, ListSkeleton } from "@/components/settings2/bits";
 import { Avatar } from "@/components/ui/avatar";
 import { TagChip } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
-import { orderBy, useListMutation } from "@/components/settings2/optimistic";
-import { SortableList } from "@/components/settings2/Sortable";
+import { useListMutation } from "@/components/settings2/optimistic";
+import { ViewOrderList } from "@/components/settings2/ViewOrderList";
 import { TeamChip, TeamPick, useTeams } from "@/components/settings2/teams";
 import { ViewIconField } from "@/components/settings2/ViewIconField";
 import { ViewIcon, viewIconTone, viewName } from "@/components/tickets/ViewIcon";
@@ -52,6 +52,7 @@ import type { Channel, Priority, Severity, TicketFilters, TicketStatus, View, Vi
 import { q, qk, upsertInList } from "@/lib/queries";
 import { atLeast, useRole, useUser } from "@/lib/session";
 import { cn } from "@/lib/cn";
+import { placeViews, sameLayout, sectionSpot, viewPatches, type Dragged, type ViewSpot } from "@/lib/viewMoves";
 import { cleanSection, clipSection, groupViews, matchSection, orderViews, sectionKey, sectionProblem, viewSections, type ViewEntry } from "@/lib/viewSections";
 
 const chip =
@@ -237,11 +238,15 @@ export default function Views() {
 
   // In the sidebar's order: a section's views together, at its first view's place.
   const sorted = useMemo(() => orderViews(views ?? []), [views]);
-  // What drags: a view on its own or a whole section; a section's views drag inside it.
-  const entries = useMemo(() => groupViews(views ?? []).map((e) => ({ id: e.kind === "view" ? e.view.id : `section:${e.key}`, entry: e })), [views]);
-  const idsOf = (e: ViewEntry) => (e.kind === "view" ? [e.view.id] : e.views.map((v) => v.id));
+  // The sections a view can be moved to from its menu.
+  const sections = useMemo(() => groupViews(views ?? []).flatMap((e: ViewEntry) => (e.kind === "section" ? [e] : [])), [views]);
   const { teams } = useTeams();
   const teamById = new Map(teams.map((x) => [x.id, x]));
+  // Which views the person may move: their own, a team's they lead, and any for admins.
+  const me = useUser();
+  const rights = viewRights(atLeast(role, "admin"), teams, me.id);
+  const canMove = (v: View) => canEdit && canWriteView(rights, v);
+  const [said, setSaid] = useState("");
 
   const toggleShared = useListMutation<View, { id: string; shared: boolean }>(
     qk.views,
@@ -249,16 +254,27 @@ export default function Views() {
     (rows, v) => rows.map((r) => (r.id === v.id ? { ...r, shared: v.shared } : r)),
     { errorText: t("views.updateFailed") },
   );
-  const reorder = useListMutation<View, string[]>(
+  // A view or a section moved: one PATCH per view that moved, among those the person may write
+  // (the moved view's section and position, the others' position).
+  const move = useListMutation<View, View[]>(
     qk.views,
-    async (ids) => {
-      const next = orderBy(sorted, ids);
-      const changed = next.filter((n) => sorted.find((o) => o.id === n.id)?.position !== n.position);
-      await Promise.all(changed.map((n) => api.views.update(n.id, { position: n.position })));
+    async (next) => {
+      const writable = new Set(sorted.filter(canMove).map((v) => v.id));
+      await Promise.all(viewPatches(sorted, next).flatMap(({ id, ...body }) => (writable.has(id) ? [api.views.update(id, body)] : [])));
     },
-    (rows, ids) => orderBy(rows, ids),
+    (rows, next) => rows.map((r) => next.find((n) => n.id === r.id) ?? r),
     { errorText: t("views.reorderFailed") },
   );
+  const moveTo = (dragged: Dragged, spot: ViewSpot) => {
+    const next = placeViews(sorted, dragged, spot);
+    if (sameLayout(sorted, next)) return;
+    move.mutate(next);
+    if (!("view" in dragged)) return;
+    const was = sorted.find((v) => v.id === dragged.view);
+    const now = next.find((v) => v.id === dragged.view);
+    if (!was || !now || cleanSection(was.section) === cleanSection(now.section)) return;
+    setSaid(now.section ? t("views.movedTo", { name: was.name, section: now.section }) : t("views.movedOut", { name: was.name }));
+  };
   const remove = useListMutation<View, string>(
     qk.views,
     (id) => api.views.remove(id),
@@ -292,35 +308,29 @@ export default function Views() {
             ]}
           />
         ) : (
-          <SortableList
-            items={entries}
-            disabled={!canEdit}
-            onReorder={(ids) => reorder.mutate(ids.flatMap((id) => idsOf(entries.find((x) => x.id === id)!.entry)))}
-            handleLabel={({ entry: e }) => (e.kind === "view" ? t("views.reorderAria", { name: e.view.name }) : t("views.reorderSectionAria", { name: e.name }))}
-            renderRow={({ entry: e }, handle) =>
-              e.kind === "view" ? (
-                viewRow(e.view, handle)
-              ) : (
-                <div role="group" aria-label={t("views.inSection", { name: e.name })}>
+          <ViewOrderList
+            views={sorted}
+            canMoveView={canMove}
+            // A section moves with every view in it.
+            canMoveSection={(e) => e.views.every(canMove)}
+            onMove={moveTo}
+            viewLabel={(v) => t("views.reorderAria", { name: v.name })}
+            sectionLabel={(e) => t("views.reorderSectionAria", { name: e.name })}
+            groupLabel={(e) => t("views.inSection", { name: e.name })}
+            renderView={viewRow}
+            renderHeader={(e, handle) => (
                   <div className="group relative flex h-9 items-center gap-2 border-b border-line-soft bg-sunken/60 px-4 text-[12.5px] font-medium text-fg-2">
                     {handle}
                     <FolderClosed className="size-3.5 shrink-0 text-fg-3" />
                     <span className="min-w-0 truncate">{e.name}</span>
                     <span className="mono text-[11px] font-normal text-fg-4">{e.views.length}</span>
                   </div>
-                  <SortableList
-                    items={e.views}
-                    disabled={!canEdit}
-                    // Inside a section only: the section keeps its place among the others.
-                    onReorder={(ids) => reorder.mutate(entries.flatMap((x) => (x.entry === e ? ids : idsOf(x.entry))))}
-                    handleLabel={(v) => t("views.reorderAria", { name: v.name })}
-                    renderRow={(v, h) => viewRow(v, h)}
-                  />
-                </div>
-              )
-            }
+            )}
           />
         )}
+        <span className="sr-only" aria-live="polite">
+          {said}
+        </span>
       </Section>
       {copyOf ? (
         <ViewDrawer key={copyOf.id} view={null} copyOf={copyOf} views={sorted} nextPosition={sorted.length} onClose={closeCopy} />
@@ -384,6 +394,22 @@ export default function Views() {
                           <MenuItem icon={<Copy />} onSelect={() => setCopying(v)}>
                             {t("views.duplicate")}
                           </MenuItem>
+                          {canMove(v) && (cleanSection(v.section) || sections.length > 0) && (
+                            <MenuSub label={t("views.moveTo")} icon={<FolderInput />}>
+                              {cleanSection(v.section) && (
+                                <MenuItem icon={<X />} onSelect={() => moveTo({ view: v.id }, sectionSpot(sorted, v.id, null))}>
+                                  {t("views.noSection")}
+                                </MenuItem>
+                              )}
+                              {sections
+                                .filter((s) => s.key !== sectionKey(v.section ?? ""))
+                                .map((s) => (
+                                  <MenuItem key={s.key} icon={<FolderClosed />} onSelect={() => moveTo({ view: v.id }, sectionSpot(sorted, v.id, s.key))}>
+                                    {s.name}
+                                  </MenuItem>
+                                ))}
+                            </MenuSub>
+                          )}
                           <MenuItem
                             icon={<ArrowUpRight />}
                             onSelect={() =>
