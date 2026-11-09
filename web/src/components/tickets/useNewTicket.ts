@@ -96,15 +96,21 @@ export function useNewTicket({ onCreated }: { onCreated?: () => void } = {}) {
 
 export type NewTicketState = ReturnType<typeof useNewTicket>;
 
-/** Opens the new ticket dialog set to start a chat, with the contact when given. */
-export function useStartChat() {
+/** Opens the new ticket dialog set to email or to chat, with the contact when given. */
+function useOpenNewTicket(channel: "email" | "chat") {
   const me = useSession((s) => s.user!.id);
   const wid = useSession((s) => s.workspaceId!);
   return useCallback(
     (contact?: Contact) => {
-      newTicketDrafts.patch(draftKey(me, wid), { kind: "reply", channel: "chat", ...(contact ? { to: { contact } } : {}) });
+      newTicketDrafts.patch(draftKey(me, wid), { kind: "reply", channel, ...(contact ? { to: { contact } } : {}) });
       shell.newTicket();
     },
-    [me, wid],
+    [me, wid, channel],
   );
 }
+
+/** Opens the new ticket dialog set to start a chat, with the contact when given. */
+export const useStartChat = () => useOpenNewTicket("chat");
+
+/** Opens the new ticket dialog set to email, as the New ticket button does, with the contact when given. */
+export const useNewTicketFor = () => useOpenNewTicket("email");

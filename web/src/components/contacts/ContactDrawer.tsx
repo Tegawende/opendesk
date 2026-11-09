@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { FileText, MessageCircle, Pencil, Ticket as TicketIcon, Trash2, UserRound } from "lucide-react";
+import { FileText, MessageCircle, Pencil, Ticket as TicketIcon, TicketPlus, Trash2, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dur, ease, springs } from "@/lib/motion";
@@ -31,7 +31,7 @@ import { useContactAvatar } from "@/lib/pictures";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { useProducts } from "@/lib/products";
-import { useStartChat } from "@/components/tickets/useNewTicket";
+import { useNewTicketFor, useStartChat } from "@/components/tickets/useNewTicket";
 import { CompanyPicker } from "./CompanyPicker";
 import { CompanyGlyph, Detail, fieldLabel, fieldsOf, fieldText, MiniStat, none } from "./bits";
 import { RecordFields, RecordLabels, useRecordFields } from "./LabelsAndFields";
@@ -48,6 +48,7 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
   const canEdit = atLeast(useRole(), "agent");
   const { tickets: ticketsOn } = useProducts();
   const startChat = useStartChat();
+  const newTicket = useNewTicketFor();
   const [tab, setTab] = useState<Tab>("overview");
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -154,6 +155,11 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
                 <RecordLabels kind="contact" record={c} />
               </div>
             </div>
+            {canEdit && !editing && ticketsOn && (
+              <Button size="sm" variant="secondary" icon={<TicketPlus className="size-3.5" />} onClick={() => newTicket(c)}>
+                {t("drawer.newTicket")}
+              </Button>
+            )}
             {canEdit && !editing && ticketsOn && c.chat_reachable && (
               <Button size="sm" variant="secondary" icon={<MessageCircle className="size-3.5" />} onClick={() => startChat(c)}>
                 {t("drawer.startChat")}
@@ -201,7 +207,7 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
                     <Overview c={c} onEdit={canEdit ? () => setEditing(true) : undefined} />
                   </TabsContent>
                   <TabsContent value="tickets" className="flex-1 outline-none">
-                    <Tickets contactId={c.id} />
+                    <Tickets contactId={c.id} onNew={canEdit && ticketsOn ? () => newTicket(c) : undefined} />
                   </TabsContent>
                 </Tabs>
               </motion.div>
@@ -292,7 +298,7 @@ function Overview({ c, onEdit }: { c: Contact; onEdit?: () => void }) {
   );
 }
 
-function Tickets({ contactId }: { contactId: string }) {
+function Tickets({ contactId, onNew }: { contactId: string; onNew?: () => void }) {
   const { t } = useTranslation("contacts");
   useTranslation("indicators");
   const { data, isLoading } = useQuery(q.contactTickets(contactId));
@@ -303,7 +309,22 @@ function Tickets({ contactId }: { contactId: string }) {
         <Skeleton className="h-3 w-2/3" />
       </div>
     );
-  if (!data?.length) return <EmptyState compact lit={0} title={t("drawer.noTickets")} description={t("drawer.noTicketsHint")} />;
+  if (!data?.length)
+    return (
+      <EmptyState
+        compact
+        lit={0}
+        title={t("drawer.noTickets")}
+        description={t("drawer.noTicketsHint")}
+        action={
+          onNew && (
+            <Button size="sm" variant="secondary" icon={<TicketPlus className="size-3.5" />} onClick={onNew}>
+              {t("drawer.newTicket")}
+            </Button>
+          )
+        }
+      />
+    );
   return (
     <div role="list" className="py-1">
       <PresenceList>
