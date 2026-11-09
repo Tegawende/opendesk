@@ -224,12 +224,17 @@ func TestWidgetAgent(t *testing.T) {
 		t.Fatalf("handoff %+v", got.Custom)
 	}
 
-	// Asking for a person hands off without a model call.
+	// Asking for a person hands off with the agent's line first; that line is not one for review.
+	e.F.queue("widget", "A person from the team will reply here.\n@tool handoff_to_human {\"reason\":\"asked\"}")
 	before := e.F.calls()
 	_, tid6, _ := widgetConversation(e, "I want to talk to a real person please")
 	e.runWidgetJobs()
-	if got := e.loadTicket(tid6); e.F.calls() != before || got.Custom["ai_handoff"] != true || len(publicMessages(e, tid6)) != 1 {
+	if got := e.loadTicket(tid6); e.F.calls() != before+1 || got.Custom["ai_handoff"] != true || len(publicMessages(e, tid6)) != 2 ||
+		!strings.Contains(lastMessage(e, tid6).BodyText, "person from the team") {
 		t.Fatalf("%+v", got.Custom)
+	}
+	if !strings.Contains(userText(e.F.last()), "order number") {
+		t.Fatal("the line does not ask for what the team needs")
 	}
 
 	// Assigned conversations are left to the assignee.
@@ -245,9 +250,11 @@ func TestWidgetAgent(t *testing.T) {
 	va8, tid8, _ := widgetConversation(e, "How do I reset my password?")
 	e.runWidgetJobs()
 	e.Do("POST", "/v1/widget/conversations/"+tid8.String()+"/messages", va8, map[string]any{"body": "And on mobile?"}).Want(t, 201)
+	e.F.queue("widget", "A person from the team will reply here.\n@tool handoff_to_human {\"reason\":\"limit\"}")
 	before = e.F.calls()
 	e.runWidgetJobs()
-	if got := e.loadTicket(tid8); e.F.calls() != before || got.Custom["ai_handoff"] != true {
+	if got := e.loadTicket(tid8); e.F.calls() != before+1 || got.Custom["ai_handoff"] != true ||
+		!strings.Contains(lastMessage(e, tid8).BodyText, "person from the team") {
 		t.Fatalf("max replies %+v", got.Custom)
 	}
 	e.settings(map[string]any{"widget_max_replies": 20})
