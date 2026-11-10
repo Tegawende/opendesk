@@ -35,7 +35,11 @@
     "teamCounts": "{{unassigned}} non attribués, {{open}} ouverts",
     "manageTeams": "Gérer les équipes",
     "switchTeam": "Changer d’équipe",
-    "teamHint": "Équipe"
+    "teamHint": "Équipe",
+    "pages": "Pages",
+    "newTeam": "Nouvelle équipe",
+    "newView": "Nouvelle vue",
+    "editView": "Modifier la vue"
   },
   "workspaces": {
     "title": "Espaces de travail",
@@ -66,11 +70,17 @@
     "logoutAll": "Se déconnecter de tous les comptes"
   },
   "breadcrumb": "Fil d’Ariane",
+  "crumbs": { "more_one": "{{count}} autre page dans le chemin", "more_many": "{{count}} autres pages dans le chemin", "more_other": "{{count}} autres pages dans le chemin" },
   "search": {
     "open": "Recherche et commandes",
     "label": "Rechercher"
   },
   "newTicket": "Nouveau ticket",
+  "chatPopup": {
+    "title": "Nouveau chat",
+    "open": "Ouvrir",
+    "close": "Fermer"
+  },
   "notifications": {
     "allow": {
       "title": "Soyez prévenu des nouveaux tickets et des réponses.",
@@ -130,7 +140,15 @@
       "importAnd": "{{a}} et {{b}}",
       "importSource": "historique",
       "supportChannel": "Canal de support",
-      "supportChannelUnhealthy": "{{name}} nécessite une intervention"
+      "supportChannelUnhealthy": "{{name}} nécessite une intervention",
+      "wikiMention": "{{who}} vous a mentionné sur une page du wiki",
+      "wikiMentionAnon": "Vous avez été mentionné sur une page du wiki",
+      "wikiMentionComment": "{{who}} vous a mentionné dans un commentaire du wiki",
+      "wikiMentionCommentAnon": "Vous avez été mentionné dans un commentaire du wiki",
+      "wikiComment": "{{who}} a commenté une page du wiki",
+      "wikiCommentAnon": "Nouveau commentaire sur une page du wiki",
+      "wikiReminder": "Rappel : {{label}}",
+      "wikiReminderAnon": "Votre rappel du wiki arrive à échéance"
     },
     "hold": {
       "paused": "En pause jusqu’à {{when}} : aucune notification par e-mail, sur téléphone ou sur ordinateur",
@@ -144,7 +162,8 @@
     "goMine": "Aller à mes tickets",
     "goReports": "Aller aux rapports",
     "goWiki": "Aller au wiki",
-    "switchWorkspace": "Ouvrir l’espace de travail 1 à 9"
+    "switchWorkspace": "Ouvrir l’espace de travail 1 à 9",
+    "editSidebar": "Modifier la barre latérale"
   },
   "route": {
     "loading": "Chargement",
@@ -207,5 +226,11 @@
     "popupBlocked": "Votre navigateur a bloqué la fenêtre {{name}}. Autorisez les fenêtres contextuelles depuis la barre d’adresse pour y terminer la connexion.",
     "popupThisTab": "Continuer dans cet onglet",
     "changePassword": "Votre mot de passe figure dans une liste de mots de passe divulgués ou est plus court que la longueur désormais requise. Choisissez-en un nouveau."
-  }
+  },
+  "wikiPresence": {
+    "editing": "{{name}} modifie"
+  },
+  "newMore": "Autres créations",
+  "newPage": "Nouvelle page",
+  "importPages": "Importer des pages"
 }

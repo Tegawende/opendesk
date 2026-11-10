@@ -28,6 +28,7 @@ import { variableText } from "./composerTemplates";
 import { ReplySignature } from "./ReplySignature";
 import { ReplyPreview } from "./ReplyPreview";
 import { SendButton } from "./SendButton";
+import { ChatReplyLine } from "./ChatReplyLine";
 import { statusLabel } from "../bits";
 import { useDisplay } from "../fields";
 import { useTicketViewers } from "../presence";
@@ -35,9 +36,12 @@ import { useUpdateTicket } from "../useTicketActions";
 import { ComposerAiMenu, ComposerAiStatus, ComposerSources, useComposerAi } from "@/components/ai/ticket/ComposerAi";
 import { SuggestedReplyCard } from "./SuggestedReply";
 import { SharedDraftBar } from "./SharedDraft";
+import { useReplyDraftSync } from "./replyDraft";
 import { backToNote, deliver, hold, undoSeconds as undoSecondsFor, useUnsent, type Upload } from "./outbox";
 import { EmailChips, SavedReplyButton, UploadChip, uploadFiles } from "./composerParts";
-import { addressLabel, fromLine, replyAddresses, TeamDot, useTeamsCtx, type TeamsCtx } from "../teams";
+import { mergeReplyActions, ReplyActionChips, replyActionLabels } from "./ReplyActions";
+import { NoFollowUpSender } from "./NoFollowUpSender";
+import { addressLabel, followUpMailbox, fromLine, replyAddresses, TeamDot, useTeamsCtx, type TeamsCtx } from "../teams";
 import { AccountDot } from "@/components/collab/bits";
 import { conversationMaxWidth, useConversationWidth } from "@/lib/conversationWidth";
 import { identitySignature } from "@/lib/collab/identities";
@@ -70,6 +74,8 @@ type Draft = {
   threadForward?: string;
   /** The note this reply is written from: it is removed once the reply is sent. */
   fromNote?: string;
+  /** Saved replies used: their actions apply to the ticket once the message is sent. */
+  savedReplyIds?: string[];
 };
 
 // Drafts survive switching tickets (memory only).
@@ -234,9 +240,13 @@ export const Composer = forwardRef<
   const viewers = useTicketViewers(ticket.id);
   const others = viewers.filter((v) => v.state === "replying");
 
+  // The address a reply goes out from: the one picked, else the ticket's. A chat's is emailed only from
+  // an address that can still send, as the follow-up picks it, and none when the brand has no such address.
+  const replyMailboxId = draft.mailboxId ?? (ticket.channel === "chat" ? (followUpMailbox(teams, ticket)?.id ?? null) : ticket.mailbox_id);
+
   // Variables in replies: "{{" offers them with this ticket's values, from the address the reply goes out from.
   const catalog = useCatalog("reply");
-  const { data: vars } = useQuery({ ...q.ticketVariables(ticket.id, draft.mailboxId ?? ticket.mailbox_id), enabled: mode === "reply" });
+  const { data: vars } = useQuery({ ...q.ticketVariables(ticket.id, replyMailboxId), enabled: mode === "reply" });
   const varItems: VarItem[] = catalog.variables.map((v) => {
     const value = vars?.values[v.key];
     return { key: v.key, label: v.label, group: templateGroupLabel(v.group), value: vars ? (v.html && value ? t("composer.valueSet") : (value ?? "")) : undefined };
@@ -266,8 +276,17 @@ export const Composer = forwardRef<
   // In a side conversation the server fills them without the customer's or the ticket's details.
   // A reply that can't be filled goes in as written (the server fills it on send).
   const [filling, setFilling] = useState(0);
-  const insertSavedReply = useCallback((html: string, clear?: () => void) => {
+  const insertSavedReply = useCallback((html: string, clear?: () => void, replyId?: string) => {
     clear?.();
+    // Its actions go with the message, once sent.
+    if (replyId && modeRef.current !== "thread") {
+      const tid = ticketRef.current;
+      useDrafts.setState((s) => {
+        const d = s[tid] ?? emptyDraft;
+        const used = d.savedReplyIds ?? [];
+        return used.includes(replyId) ? {} : { [tid]: { ...d, savedReplyIds: [...used, replyId] } };
+      });
+    }
     if (modeRef.current === "note") return editor.current?.insertHtml(html);
     const id = ticketRef.current;
     setFilling((n) => n + 1);
@@ -284,7 +303,7 @@ export const Composer = forwardRef<
   const extensions = useMemo(
     () => [
       mentionExtension(() => membersRef.current, () => modeRef.current === "note"),
-      savedReplyExtension(() => repliesRef.current, insertSavedReply),
+      savedReplyExtension(() => repliesRef.current, (html, clear, replyId) => insertSavedReply(html, clear, replyId)),
       templateExtension({
         known: () => knownRef.current,
         items: (query) => matchVars(varItemsRef.current, query, (g) => g),
@@ -392,9 +411,22 @@ export const Composer = forwardRef<
     [setDraft],
   );
   const dropShared = useCallback(() => {
-    setDraft({ html: "" });
+    setDraft({ html: "", savedReplyIds: undefined });
     editor.current?.clear();
   }, [setDraft]);
+
+  // My own unsent reply is kept on the server, so it follows me to another device and survives a refresh.
+  const ownDraft = useReplyDraftSync({
+    ticketId: ticket.id,
+    enabled: mode === "reply" && !disabled,
+    html: draft.html,
+    attachmentIds: uploads.filter((u) => u.status === "done" && u.attachment).map((u) => u.attachment!.id),
+    onRestore: (d) => {
+      setDraft({ mode: "reply", html: d.body_html });
+      editor.current?.setHtml(d.body_html);
+      setUploads(d.attachments.map((a) => ({ key: a.id, file: new File([], a.filename, { type: a.content_type }), status: "done" as const, attachment: a })));
+    },
+  });
 
   // Presence: "replying" while a draft exists, "viewing" otherwise.
   const hasDraft = !!draft.html;
@@ -506,7 +538,7 @@ export const Composer = forwardRef<
       void backToNote(tempMessage({ kind: "note", body_html: draft.html }, `tmp-${Date.now().toString(36)}`), draft.fromNote, draft.html, attachments, me);
       uploads.forEach((u) => u.preview && URL.revokeObjectURL(u.preview));
       setUploads([]);
-      setDraft({ html: "", cc: [], bcc: [], showCc: false, mailboxId: undefined, fromAccount: undefined, fromNote: undefined, mode: "reply" });
+      setDraft({ html: "", cc: [], bcc: [], showCc: false, mailboxId: undefined, fromAccount: undefined, fromNote: undefined, savedReplyIds: undefined, mode: "reply" });
       editor.current?.clear();
       ai.dismissSources();
       return;
@@ -524,6 +556,7 @@ export const Composer = forwardRef<
           ? { account_id: personalSender.account.id, email: personalSender.identity.email, reply_to: personalFrom.replyTo || undefined }
           : undefined,
       from_note_id: reply ? draft.fromNote : undefined,
+      saved_reply_ids: draft.savedReplyIds?.length ? draft.savedReplyIds : undefined,
     };
     const tempId = `tmp-${Date.now().toString(36)}`;
     retries.current.set(tempId, body);
@@ -545,7 +578,7 @@ export const Composer = forwardRef<
     setSentWith(status);
     setSent(true);
     setUploads([]);
-    setDraft({ html: "", cc: [], bcc: [], showCc: false, mailboxId: undefined, fromAccount: undefined, fromNote: undefined, ...(opts.as ? { mode: "reply" } : {}) });
+    setDraft({ html: "", cc: [], bcc: [], showCc: false, mailboxId: undefined, fromAccount: undefined, fromNote: undefined, savedReplyIds: undefined, ...(opts.as ? { mode: "reply" } : {}) });
     editor.current?.clear();
     ai.dismissSources();
     // A held reply's toast says what it will do; it sets the status only once it is sent.
@@ -569,7 +602,6 @@ export const Composer = forwardRef<
   const threadMode = mode === "thread";
   const recipient = ticket.contact?.email ?? ticket.contact?.name ?? t("composer.theCustomer");
   // An email reply: from one of my own addresses, or from a team address.
-  const replyMailboxId = draft.mailboxId ?? ticket.mailbox_id;
   const replyMailbox = teams.mailbox(replyMailboxId);
   const emailReply = mode === "reply" && (!!personalSender || (!!replyMailbox && (ticket.channel === "email" || !!ticket.mailbox_id)));
   // The signature it carries, filled by the server: the team's, else the address's, else mine; from my own address, that address's.
@@ -606,7 +638,7 @@ export const Composer = forwardRef<
             }}
           />
         )}
-        {!disabled && <SharedDraftBar ticket={ticket} html={draft.html} onUse={takeShared} onClear={dropShared} />}
+        {!disabled && <SharedDraftBar ticket={ticket} html={draft.html} onUse={takeShared} onClear={dropShared} hold={!ownDraft.settled} />}
         <AnimatePresence initial={false}>
           {others.length > 0 && mode === "reply" && (
             <motion.div
@@ -636,7 +668,7 @@ export const Composer = forwardRef<
               size="xs"
               variant="ghost"
               onClick={() => {
-                setDraft({ html: "", fromNote: undefined });
+                setDraft({ html: "", fromNote: undefined, savedReplyIds: undefined });
                 editor.current?.clear();
               }}
             >
@@ -771,6 +803,8 @@ export const Composer = forwardRef<
               ) : (
                 <span className="min-w-0 flex-1 truncate text-xs text-fg-3">{t("composer.threadHint")}</span>
               )
+            ) : ticket.channel === "chat" ? (
+              <ChatReplyLine ticket={ticket} />
             ) : (
               <span className="min-w-0 flex-1 truncate text-xs text-fg-3">
                 {t("composer.to")} <span className="mono text-fg-2" data-ph-mask>{recipient}</span>
@@ -823,7 +857,7 @@ export const Composer = forwardRef<
             <ReplyingAs
               ticket={ticket}
               ctx={teams}
-              mailboxId={draft.mailboxId ?? ticket.mailbox_id}
+              mailboxId={replyMailboxId}
               chosen={!personalSender && !!draft.mailboxId && draft.mailboxId !== ticket.mailbox_id}
               onChange={(id) => setDraft({ mailboxId: id === ticket.mailbox_id ? undefined : id, fromAccount: personal.sticky ? null : undefined })}
               senders={personal.senders}
@@ -832,6 +866,7 @@ export const Composer = forwardRef<
               onPersonal={(f) => setDraft({ fromAccount: f, mailboxId: undefined })}
             />
           )}
+          {mode === "reply" && !replyMailboxId && <NoFollowUpSender ticket={ticket} ctx={teams} />}
           <div ref={writingArea}>
             <RichEditor
               ref={editor}
@@ -878,7 +913,7 @@ export const Composer = forwardRef<
                       <Paperclip className="size-[15px]" />
                     </button>
                   </Tooltip>
-                  <SavedReplyButton replies={replies} filling={filling > 0} onPick={(r) => insertSavedReply(r.body_html)} />
+                  <SavedReplyButton replies={replies} filling={filling > 0} onPick={(r) => insertSavedReply(r.body_html, undefined, r.id)} />
                   {emailReply && (
                     <Tooltip content={draft.html ? t("composer.previewEmail") : t("composer.previewEmpty")}>
                       <button
@@ -912,6 +947,12 @@ export const Composer = forwardRef<
           </div>
           {!threadMode && <ComposerSources ai={ai} />}
           {!threadMode && <ComposerAiStatus ai={ai} />}
+          {!threadMode && !!draft.savedReplyIds?.length && (
+            <ReplyActionChips
+              labels={replyActionLabels(mergeReplyActions(allReplies ?? [], draft.savedReplyIds), (id) => teams.team(id)?.name, members ?? [])}
+              onDrop={() => setDraft({ savedReplyIds: undefined })}
+            />
+          )}
           {(uploads.length > 0 || (starting && (include.history || include.picked.length > 0))) && (
             <div className="flex flex-wrap gap-1.5 px-3 pb-2.5">
               {starting && <SideIncludedChips inc={include} />}

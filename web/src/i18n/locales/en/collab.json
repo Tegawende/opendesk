@@ -31,6 +31,7 @@
     "assigned": "Assigned to me",
     "needs_action": "Needs action",
     "snoozed": "Snoozed",
+    "ai_review": "Ready for review",
     "folder": "Folder"
   },
   "customize": {
@@ -43,7 +44,8 @@
       "inbox": "Inbox",
       "teams": "Teams",
       "views": "Views",
-      "workspace": "Workspace"
+      "workspace": "Workspace",
+      "pages": "Pages"
     },
     "show": "Show {{name}}",
     "hide": "Hide {{name}}",
@@ -82,6 +84,15 @@
       "urgent": "Urgent",
       "overdue": "Overdue",
       "none": "None"
+    },
+    "pages": {
+      "workspace": "Workspace pages",
+      "teamspaces": "Teamspaces",
+      "private": "Private pages",
+      "today": "Today's note",
+      "templates": "Templates",
+      "trash": "Trash",
+      "untitled": "Untitled"
     }
   },
   "list": {
@@ -124,6 +135,8 @@
       "sharedHint": "When a teammate shares a conversation or an account with you, it shows up here.",
       "assigned": "Nothing assigned to you",
       "assignedHint": "Conversations teammates assign to you show up here.",
+      "aiReview": "No AI drafts to review",
+      "aiReviewHint": "When an AI client drafts a reply, the conversation waits here until someone sends, edits or discards the draft.",
       "starred": "No starred conversations",
       "starredHint": "Star a conversation with s to keep it close."
     },
@@ -349,13 +362,15 @@
     "people": "People",
     "addTeams": "Add teams",
     "addPeople": "Add people",
-    "needSomeone": "Pick at least one team or person, or share with everyone",
+    "nobodyYet": "No one added yet. Only you see it until you add teams or people, here now or later in the account's settings.",
+    "nobodyYetHere": "No one added yet. Only you see it until you add teams or people.",
+    "changeLater": "You can change who sees it later in the account's settings.",
     "summaryEveryone": "Everyone",
     "summaryTeams_one": "{{count}} team",
     "summaryTeams_other": "{{count}} teams",
     "summaryPeople_one": "{{count}} person",
     "summaryPeople_other": "{{count}} people",
-    "onlyYou": "Only you"
+    "summaryNobody": "No one added yet"
   },
   "accounts": {
     "title": "Mail accounts",
@@ -415,6 +430,7 @@
     "imap": "Other (IMAP)",
     "imapHint": "Any server with IMAP and SMTP",
     "none": "No provider is set up on this instance yet. Ask whoever runs it to add a Google or Microsoft client, or turn on IMAP.",
+    "missing": "{{providers}} accounts need an OAuth app on this instance first. Whoever runs it sets {{vars}} (Self-hosting → OAuth apps in the docs).",
     "continueWith": "Continue with {{provider}}",
     "continue": "Continue",
     "back": "Back",
@@ -873,5 +889,130 @@
     "betterPlaceholder": "How you would have answered",
     "privacy": "Only the AI client that wrote this draft reads your note and answer.",
     "save": "Save feedback"
+  },
+  "ownSections": {
+    "addTo": "Add to sidebar",
+    "newSection": "New section…",
+    "untitled": "Untitled section",
+    "full": "That section is full: a section holds 60 rows, and your sections 300 in all.",
+    "addSection": "Add section",
+    "menu": "Options for {{name}}",
+    "rename": "Rename",
+    "addRows": "Add rows",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "delete": "Delete section",
+    "deleteConfirm": "Delete {{name}}? Its rows leave your sidebar. What they open stays as it is.",
+    "deleteAction": "Delete",
+    "newTitle": "New section",
+    "renameTitle": "Rename section",
+    "nameLabel": "Name",
+    "namePlaceholder": "Launch, customers, reading list",
+    "nameHint": "Your sections are yours alone: nobody else sees them.",
+    "create": "Create section",
+    "save": "Save",
+    "addRowsTitle": "Add to {{name}}",
+    "addRowsHint": "Anything in {{workspace}}: inbox folders, teams, views, mail and pages. A row in another of your sections moves here.",
+    "done": "Done",
+    "empty": "Nothing here yet",
+    "row": {
+      "rename": "Rename in sidebar",
+      "remove": "Remove from sidebar",
+      "moveTo": "Move to section"
+    },
+    "drag": "Drag to move {{name}}",
+    "yours": "Your sections",
+    "fromSpace": "Start from a Space",
+    "fromSpaceHint": "Copies a Space's sections with the rows of this workspace.",
+    "copied_one": "Added {{count}} section",
+    "copied_other": "Added {{count}} sections",
+    "nothingToCopy": "That Space has no rows of this workspace",
+    "tooMany": "You have 20 sections of your own, the most there can be.",
+    "dragHere": "Drag rows here or add some"
+  },
+  "edit": {
+    "title": "Edit sidebar",
+    "done": "Done",
+    "reset": "Reset",
+    "more": "More",
+    "resetConfirm": "Reset the sidebar? Every section goes back to its place and shows again, and rows come back in their usual order. Your own sections and favorites stay.",
+    "resetAction": "Reset",
+    "resetDone": "Sidebar reset",
+    "undo": "Undo",
+    "layouts": "Start from a layout",
+    "copySpace": "Copy a Space",
+    "options": "More options",
+    "move": "Move {{name}}",
+    "rename": "Rename {{name}}",
+    "icon": "Icon for {{name}}",
+    "remove": "Remove {{name}}",
+    "unstar": "Remove {{name}} from favorites",
+    "removed": "{{name}} removed from the sidebar",
+    "hidden": "{{name}} hidden",
+    "unpinned": "{{name}} removed from favorites",
+    "sectionDeleted": "{{name}} deleted",
+    "add": "Add",
+    "newSection": "New section",
+    "newSectionTitle": "New section",
+    "emptySection": "Drag rows here or add some",
+    "emptyFavorites": "Drag rows here to make them favorites",
+    "spaceSettings": "Space settings",
+    "editingSpace": "Editing {{name}}",
+    "hintTitle": "Make the sidebar yours",
+    "hintBody": "Drag rows and sections to move them, and double-click a name to rename it. Customize, below, has everything else.",
+    "hintDismiss": "Dismiss",
+    "dropNew": "Drop here for a new section",
+    "rowMenu": "More for {{name}}",
+    "renameRow": "Rename",
+    "pickIcon": "Change icon",
+    "resetName": "Reset name and icon",
+    "moveToSection": "Add to a section",
+    "show": "Show in sidebar",
+    "renameInSidebar": "Rename in sidebar",
+    "renameTitle": "Rename in your sidebar",
+    "renameHint": "Only you see this name. {{name}} keeps its own for everyone else.",
+    "renameLabel": "Name",
+    "renameSave": "Save",
+    "favoritesTitle": "Add to favorites",
+    "favoritesHint": "Inbox folders, teams, views, mail boxes and pages can be favorites.",
+    "notFavorite": "This can't be a favorite. Add it to a section of your own instead.",
+    "customize": "Customize",
+    "customizeHint": "Arrange your sidebar: drag, rename, hide",
+    "doneHint": "Done arranging the sidebar",
+    "doneEditing": "Done",
+    "layoutsShort": "Layouts",
+    "barHint": "Drag to move. Click a name to rename it. The eye hides it."
+  },
+  "layouts": {
+    "title": "Start from a layout",
+    "description": "Pick one to see the sidebar with it. Your own sections, favorites and hidden rows stay.",
+    "use": "Use this layout",
+    "cancel": "Cancel",
+    "current": "Current",
+    "preview": "Preview",
+    "applied": "{{name}} layout applied",
+    "more_one": "{{count}} more",
+    "more_other": "{{count}} more",
+    "support": {
+      "name": "Support desk",
+      "hint": "Tickets first, with your teams and views close by. Mail and Pages are hidden."
+    },
+    "mail": {
+      "name": "Mail first",
+      "hint": "Your inboxes on top, then tickets and the rest."
+    },
+    "docs": {
+      "name": "Docs first",
+      "hint": "Pages on top, then the desk."
+    },
+    "minimal": {
+      "name": "Minimal",
+      "hint": "Favorites, the inbox, mail and pages. Teams, views and Workspace are hidden."
+    }
+  },
+  "section": {
+    "hide": "Hide section"
   }
 }

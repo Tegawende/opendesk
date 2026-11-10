@@ -481,7 +481,7 @@
     "agentOn": "Ollie answers new chats first",
     "agentOff": "The AI agent is off",
     "agentHint": "Name, instructions, tools and guardrails are in AI agent settings.",
-    "identifyBody": "Compute user_hash on your server as the hex HMAC-SHA256 of the user_id, keyed with your widget secret. Never put the secret in browser code. Sessions without a valid hash still work, but are marked unverified.",
+    "identifyBody": "Compute user_hash on your server as the hex HMAC-SHA256 of the user_id, keyed with your widget secret. Never put the secret in browser code. Sessions without a valid hash still work, but are marked unverified. With a valid hash, company links the user to the company with that external id, if there is one, and fields sets contact fields whose key starts with widget_. Call opendesk('update', …) again when they change.",
     "rotate": "Rotate secret",
     "rotateTitle": "Rotate the widget secret?",
     "rotateBody": "Identified sessions stop verifying until you deploy the new secret. Existing chats keep working.",

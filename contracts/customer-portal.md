@@ -31,6 +31,102 @@ The page loads public brand configuration from `GET /v1/public/help/{workspace_s
 
 Authenticated ticket operations are `GET /v1/customer/portal/tickets`, `GET /v1/customer/portal/tickets/{id}`, `GET /v1/customer/portal/tickets/{id}/messages`, and `POST /v1/customer/portal/tickets/{id}/messages`. Lists use bounded cursor pagination. Message history includes public replies only, as text; it omits notes, side conversations, internal activities, deleted or purged messages, and messages whose sender check failed. Customer replies accept plain text and use the normal ticket message transaction, event, and customer-replied automation path.
 
-The first release does not create tickets, change ticket status, upload files, add CCs, show organization-wide tickets, or expose side conversations. The customer routes are noindex and API responses are not stored in shared caches.
+A signed-in customer can start a request (below). The portal does not change ticket status, take files, add CCs, show organization-wide tickets, or expose side conversations. The customer routes are noindex and API responses are not stored in shared caches.
 
 See [API routes](api.md#customer-portal-tickets) and [token rules](tokens.md#customer-portal) for wire details.
+
+## Per-brand OIDC configuration and identity ownership
+
+Brands default to `portal_auth.mode: "local"`. Admins can choose `local`, `oidc`, or
+`local_and_oidc` when creating or updating a brand. OIDC scopes are fixed to
+`openid email profile`. Provider settings are read separately through the admin-only
+`GET /v1/brands/{id}/portal/auth`; ordinary brand reads expose only the mode.
+
+An OIDC configuration supplies an HTTPS issuer, client ID and write-only client secret.
+Saving loads bounded discovery metadata through the public-address guarded HTTP client,
+refuses redirects, checks the exact issuer, and validates the authorization, token and
+JWKS HTTPS endpoints. Secrets are sealed with `d.Box`, included in credential-key rotation,
+and never included in responses, events or audit metadata. Omitting a secret preserves
+it only for the same issuer and client ID. Selecting `local` clears the provider settings.
+Configuration changes are audited; configuration events go to admins only.
+
+External identities belong to a workspace and contact, keyed uniquely by
+`(workspace_id, issuer, subject)`, with the originating brand recorded. A revoked link
+retains that key as a tombstone. Email matching cannot transfer an identity between
+contacts. A contact's `customer_oidc_relink_required` state prevents normal first-time
+email matching from bypassing administrative recovery. Contact deletion removes its
+identity data, and workspace deletion removes all workspace identity data. Brand deletion
+clears only the optional originating brand reference: active ownership and revoked
+tombstones remain workspace-scoped, so another brand cannot remap the subject. Brand
+configuration and brand-bound relink authorizations are removed with the brand.
+
+An admin with a recent user sign-in and MFA when enabled can authorize one relink through
+`POST /v1/brands/{id}/portal/relink-authorizations` with `contact_id`. The server checks
+both workspace boundaries and rejects blocked contacts. The authorization expires in
+15 minutes; creating another revokes the previous unused authorization for that brand
+and contact. It is server-side permission, not a bearer credential. The callback must
+consume it atomically with a link only after verifying the provider email matches the
+contact's current email. The actor and target are audited without credentials.
+
+## Provider sign-in
+
+A brand in `oidc` or `local_and_oidc` mode signs customers in through its provider.
+`GET .../portal/sso/start` redirects to the provider with an authorization code request
+(PKCE S256, a nonce and a signed `oauth_state` token that names the brand), and sets a
+short-lived cookie scoped to that brand's sso routes. `GET .../portal/sso/callback` accepts a
+result only with that state, that cookie, the brand's own redirect URI and an ID token whose
+signature, issuer, audience, expiry and nonce check out; the provider is reached through the
+public-address guarded client. Where the customer returns to is a path under `/portal/{slug}`
+chosen at start; any other value is the portal's home. A failure sends the customer back to the
+portal with `?sso_error={code}`; codes carry no provider claims.
+
+Matching, in order:
+
+1. A live `(issuer, subject)` link wins, whatever address the provider now reports.
+2. A revoked link refuses (`identity_revoked`).
+3. A first sign-in needs a verified address (`email_unverified`) and finds the contact by it.
+   A contact with no link of that issuer is linked. A contact marked
+   `customer_oidc_relink_required`, or already linked to another subject of the issuer, needs
+   a live relink authorization for the brand and contact, consumed in the same transaction
+   (`relink_required` without one); the replaced link is revoked.
+4. No contact: refused (`unknown_customer`), or created from the verified address and name when
+   the brand's `create_contacts` is on (off by default).
+5. A blocked contact never signs in (`blocked`).
+
+A provider sign-in opens a `customer_sessions` row with `method = 'oidc'` and no password row;
+the session, refresh cookie and access token are otherwise the password sign-in's. A changed
+address or a block removes the contact's sessions and live links, and a contact that lost a
+link is marked `customer_oidc_relink_required`: its next provider sign-in, the same subject
+included, needs a relink authorization, which clears the mark. An `oidc` session needs its
+brand to still take a provider: switching it to `local` ends it at the next refresh. A brand in
+`oidc` mode refuses password sign-in, password links and resets. Audit events:
+`customer.sso.login`, `customer.sso.login.failed` (reason code only), `customer.sso.linked`.
+
+## Starting a request
+
+`POST /v1/customer/portal/tickets` with `{workspace_slug, subject, body}` opens a ticket for the signed-in
+customer. The workspace and the customer are the session's own, and the body has no place for either;
+`workspace_slug` only names the portal's brand and must be a help center of that workspace. The ticket is
+`Channel: portal` on that brand. The subject is trimmed with its spaces collapsed (1..200 characters), the body
+is plain text (1..10000, converted to HTML as a portal reply is). The words are written through
+`domain.AddMessage` as an inbound contact reply, so ticket events and the `ticket_created` trigger run as for any
+ticket, and routing (`routing.Resolve`, channel `portal`) puts it in a team. The customer sets nothing else:
+status, priority, severity, team, assignee, labels and fields are the team's. A blocked customer or a suspended
+workspace is refused by the same session checks as every portal route, and the contact row is locked while the
+ticket is written. A customer starts at most 10 requests an hour, counted for the whole instance (`429`).
+The answer is the same `CustomerTicket` the list returns.
+
+### Files
+
+`POST /v1/customer/portal/attachments` (multipart, field `file`) stores one file for the signed-in customer and
+answers `201` with the attachment (`id`, `filename`, `content_type`, `size_bytes`, `url`). It is an unattached
+upload of that contact, as the widget's is: only they can attach it, once, to a request. Programs and scripts are
+refused (`422 file_type_refused`) and active types are stored as plain text, as for every upload; a file over
+10 MB is `413`, an empty one `422`; a customer uploads at most 30 files an hour, counted for the whole instance.
+`POST /v1/customer/portal/tickets` takes `attachment_ids` (at most 5, `422 too_many_files`); a file that is not the
+customer's own unsent upload is `422`, and another customer's file is never read. The files go on the first message.
+`CustomerMessage` carries `attachments: [{id, filename, content_type, size_bytes, url}]` for the public replies the
+customer reads (never inline pictures of an email's layout, a deleted or purged message's files, or a note's).
+`url` is a link signed for one to two hours, like every attachment link, so an image can show in the page; reading
+the conversation again signs a fresh one. Replies take no files.
+

@@ -7,14 +7,16 @@ Scopes: `contacts:read` to read, `contacts:write` to change.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/v1/contacts` | List contacts. Filters: `q`, `company_id`, `tag`, `field.<key>` |
+| `GET` | `/v1/contacts` | List contacts. Filters: `q`, `company_id`, `tag`, `blocked`, `field.<key>`. `sort`: `-created` (default), `created`, `name`, `-name`, `-tickets`, `tickets` |
 | `POST` | `/v1/contacts` | Create a contact |
 | `GET` | `/v1/contacts/{id}` | Get a contact |
 | `PATCH` | `/v1/contacts/{id}` | Update a contact |
 | `DELETE` | `/v1/contacts/{id}` | Delete a contact |
 | `GET` | `/v1/contacts/{id}/tickets` | The contact's tickets |
-| `GET`, `POST` | `/v1/companies` | List or create companies. Filters: `q`, `tag`, `field.<key>` |
+| `POST` | `/v1/contacts/bulk` | Label, set the company of, or delete many contacts: `ids` (up to 100) or `query` (the list's filters, at most 1000 contacts), with `patch` or `delete: true` |
+| `GET`, `POST` | `/v1/companies` | List or create companies. Filters: `q`, `tag`, `field.<key>`. `sort`: `name` (default), `-name`, `created`, `-created`, `contacts`, `-contacts` |
 | `GET`, `PATCH`, `DELETE` | `/v1/companies/{id}` | Get, update or delete a company |
+| `POST` | `/v1/companies/bulk` | Label or delete many companies, by `ids` or `query` (`q`, `tag`) |
 
 ## Objects
 
@@ -22,6 +24,7 @@ Scopes: `contacts:read` to read, `contacts:write` to change.
 type Contact = {
   id: string;
   email: string | null;
+  emails: string[];            // extra addresses beside the primary email
   name: string;
   phone: string;
   avatar_url: string;
@@ -41,6 +44,7 @@ type Company = {
   id: string;
   name: string;
   domain: string;
+  external_id: string | null;
   notes: string;
   custom: Record<string, unknown>;
   tags: { id: string; name: string; color: LabelColor; group_id: string | null }[];
@@ -51,7 +55,25 @@ type Company = {
 };
 ```
 
-A contact's email is unique within the workspace, and so is its `external_id`, your own id for the person (set by [verified widget sessions](/guides/live-chat/identity-verification/)). A company's domain is unique within the workspace.
+A contact's email is unique within the workspace, and so is its `external_id`, your own id for the person (set by [verified widget sessions](/guides/live-chat/identity-verification/)). A company's domain is unique within the workspace, and so is its `external_id`, your own id for the account. Set it so [verified widget sessions](/guides/live-chat/identity-verification/#send-the-users-company-and-attributes) can link people to the company; `null` clears it.
+
+## Several email addresses
+
+A person who writes from more than one address stays one contact. Besides the primary `email`, a contact has extra addresses in `emails`. Mail from any of them lands on the contact, and a search finds it by any. An address belongs to one contact, primary or extra: adding one that another contact (or this one) already has is `409`.
+
+| Method | Path | |
+| --- | --- | --- |
+| `POST` | `/v1/contacts/{id}/emails` | `{ "email": "..." }` adds an extra address (`201`, at most 20) |
+| `DELETE` | `/v1/contacts/{id}/emails/{email}` | takes an extra address off (the primary changes with `PATCH`) |
+| `POST` | `/v1/contacts/{id}/emails/{email}/make-primary` | swaps an extra address with the primary; the old primary becomes an extra |
+
+Each answers with the contact. Blocking a contact blocks every address. Customer-portal sign-in uses the primary address only, so making another address the primary ends the contact's portal sessions.
+
+## Merge two contacts
+
+`POST /v1/contacts/{id}/merge` with `{ "into": "<contact id>" }` merges the contact in the path into another one (admin role). The contact in the path is removed, and its tickets, messages, calls, labels and email addresses move to the one that stays; its addresses become extra addresses there, and its chat widget sessions end. The contact that stays keeps its own name, phone, company, external id and primary email, takes the other's where it has none, joins the notes, and merges `custom` and `fields` with its own values winning. It answers with the contact that stays.
+
+A blocked and a not blocked contact (`422`), two contacts with different `external_id` values (`409`), and a result with more than 20 extra addresses (`422`) are refused. A merge cannot be undone.
 
 Writes to contacts and companies take `tags` (replaces), `add_tags`, `remove_tags` and `fields` (merged, `null` clears), with the same rules as tickets. See [Labels and custom fields](/api/resources/labels-fields/).
 

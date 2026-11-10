@@ -157,6 +157,7 @@ type ticketCreateBody struct {
 	WidgetID      string              `json:"widget_id,omitempty" doc:"chat only: the widget the chat opens in. Default: the contact's latest, else the brand's first"`
 	BodyHTML      string              `json:"body_html,omitempty" maxLength:"500000"`
 	Kind          string              `json:"kind,omitempty" enum:"reply,note" doc:"Default reply"`
+	Direction     string              `json:"direction,omitempty" enum:"inbound,outbound" doc:"Default outbound. inbound (replies only, for a ticket with a contact) stores the message as that contact's own words, as if they had emailed it; nothing is sent"`
 	Priority      string              `json:"priority,omitempty" enum:"low,normal,high,urgent"`
 	Severity      string              `json:"severity,omitempty" enum:"sev1,sev2,sev3,sev4"`
 	AssigneeID    string              `json:"assignee_id,omitempty"`
@@ -391,7 +392,7 @@ func registerTickets(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			id, err := resolveVisible(ctx, d.DB.Pool, p, in.ID)
+			id, err := domain.ResolveVisibleTicket(ctx, d.DB.Pool, p, in.ID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -421,7 +422,7 @@ func registerTickets(d *deps.Deps, api huma.API) {
 			}
 			var t domain.Ticket
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				id, err := resolveVisible(ctx, tx, p, in.ID)
+				id, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
@@ -464,7 +465,7 @@ func registerTickets(d *deps.Deps, api huma.API) {
 				return nil, httpx.Wrap(err)
 			}
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				id, err := resolveVisible(ctx, tx, p, in.ID)
+				id, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
@@ -533,7 +534,7 @@ func registerTickets(d *deps.Deps, api huma.API) {
 				}
 				seen := map[uuid.UUID]bool{}
 				for _, raw := range ids {
-					id, err := resolveVisible(ctx, tx, p, raw)
+					id, err := domain.ResolveVisibleTicket(ctx, tx, p, raw)
 					if err != nil {
 						return err
 					}
@@ -589,11 +590,11 @@ func registerTickets(d *deps.Deps, api huma.API) {
 			}
 			var t domain.Ticket
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				src, err := resolveVisible(ctx, tx, p, in.ID)
+				src, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
-				dst, err := resolveVisible(ctx, tx, p, in.Body.IntoID)
+				dst, err := domain.ResolveVisibleTicket(ctx, tx, p, in.Body.IntoID)
 				if err != nil {
 					return httpx.Validation("into_id is not a ticket in this workspace")
 				}
@@ -716,6 +717,19 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 	if kind == "" {
 		kind = "reply"
 	}
+	inbound := b.Direction == "inbound"
+	if inbound {
+		switch {
+		case kind != "reply":
+			return domain.Ticket{}, httpx.Validation("an inbound message is a reply, not a note")
+		case nt.ContactID == nil:
+			return domain.Ticket{}, httpx.Validation("an inbound message needs a contact to speak for")
+		case len(b.Cc)+len(b.Bcc) > 0:
+			return domain.Ticket{}, httpx.Validation("cc and bcc are for messages sent")
+		case nt.Channel == domain.ChannelChat:
+			return domain.Ticket{}, httpx.Validation("a chat's visitor writes their own messages in the widget")
+		}
+	}
 	if nt.Channel != domain.ChannelChat && b.WidgetID != "" {
 		return domain.Ticket{}, httpx.Validation("widget_id is for a chat")
 	}
@@ -728,7 +742,7 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 		if nt.MailboxID == nil {
 			return domain.Ticket{}, httpx.Validation("an email ticket needs mailbox_id")
 		}
-		if kind == "reply" && (contactEmail == nil || *contactEmail == "") {
+		if kind == "reply" && !inbound && (contactEmail == nil || *contactEmail == "") {
 			return domain.Ticket{}, httpx.Validation("an email reply needs a contact with an email address")
 		}
 	}
@@ -872,7 +886,16 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 		}
 	}
 
-	if bodyText != "" || len(attIDs) > 0 {
+	if inbound && (bodyText != "" || len(attIDs) > 0) {
+		nm, err := inboundMessage(ctx, tx, p, t.ID, *nt.ContactID, t.Subject, b.BodyHTML, attIDs)
+		if err != nil {
+			return domain.Ticket{}, err
+		}
+		nm.Trigger = jobs.TriggerTicketCreated
+		if _, err := domain.AddMessage(ctx, tx, d.Jobs, nm); err != nil {
+			return domain.Ticket{}, err
+		}
+	} else if bodyText != "" || len(attIDs) > 0 {
 		// An API key may speak as a bot: the bot is then the agent its reply is filled and sent as.
 		bot, err := keyBot(ctx, tx, p)
 		if err != nil {
@@ -985,7 +1008,7 @@ func liveMergeTarget(ctx context.Context, tx pgx.Tx, p *auth.Principal, src, dst
 		if *next == src {
 			return dst, httpx.Conflict("the target ticket was merged into this one")
 		}
-		if _, err := resolveVisible(ctx, tx, p, next.String()); err != nil {
+		if _, err := domain.ResolveVisibleTicket(ctx, tx, p, next.String()); err != nil {
 			return dst, httpx.Validation("the target ticket was merged into a ticket you cannot see")
 		}
 		dst = *next

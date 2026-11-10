@@ -1,6 +1,7 @@
 // Contacts, companies, tags, saved replies, views, SLA, automations, the
 // knowledge base, mailboxes and the public help center / CSAT pages.
 
+import { registerPortalRoutes } from "./portal";
 import type {
   Action,
   Automation,
@@ -24,7 +25,7 @@ import { isOneEmoji } from "@/components/tickets/ViewIcon";
 import { viewIconDef } from "@/components/tickets/viewIcons";
 import { chatReachable, db, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
-import { HttpError, del, get, invalid, notFound, paginate, patch, post, required, respond, s, strArr, type Ctx } from "../router";
+import { HttpError, del, forbidden, get, invalid, notFound, paginate, patch, post, required, respond, s, strArr, type Ctx } from "../router";
 import { applyLabels, canCreateLabels, fieldFiltersFromQuery, fieldsText, matchFields, mergeFields } from "../labels";
 import { addActivity, publishTicketUpdated, sortTickets } from "../tickets";
 import { isRecord, nowIso, randomToken, slugify, uuid } from "../util";
@@ -86,6 +87,7 @@ function syncContactRefs(ws: WsData, c: Contact) {
 }
 
 export function registerResources() {
+  registerPortalRoutes();
   // Contacts.
   get("/v1/contacts", (ctx) => {
     const q = (ctx.query.get("q") ?? "").toLowerCase().trim();
@@ -93,8 +95,20 @@ export function registerResources() {
     let list = ctx.ws.contacts;
     if (company) list = list.filter((c) => c.company?.id === company);
     list = recordFilter(ctx, "contact", list);
-    if (q) list = list.filter((c) => [c.name, c.email ?? "", c.company?.name ?? "", c.phone, fieldsText(c.fields)].join(" ").toLowerCase().includes(q));
-    list = list.slice().sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+    const blocked = ctx.query.get("blocked");
+    if (blocked) list = list.filter((c) => c.blocked === (blocked === "true"));
+    if (q) list = list.filter((c) => [c.name, c.email ?? "", ...c.emails, c.company?.name ?? "", c.phone, fieldsText(c.fields)].join(" ").toLowerCase().includes(q));
+    const sort = ctx.query.get("sort") ?? "";
+    const byName = (a: Contact, b: Contact) => a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    const order: Record<string, (a: Contact, b: Contact) => number> = {
+      created: (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at),
+      "-created": (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
+      name: byName,
+      "-name": (a, b) => byName(b, a),
+      tickets: (a, b) => a.ticket_count - b.ticket_count,
+      "-tickets": (a, b) => b.ticket_count - a.ticket_count,
+    };
+    list = list.slice().sort(order[sort] ?? ((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)));
     const page = paginate(ctx, list);
     return { ...page, data: page.data.map((c) => contactOut(ctx.ws, c)) };
   });
@@ -103,8 +117,8 @@ export function registerResources() {
     const email = s(ctx, "email")?.trim().toLowerCase() || null;
     const name = s(ctx, "name")?.trim() || email?.split("@")[0] || "";
     if (!name) throw invalid("Name or email is required");
-    if (email && ctx.ws.contacts.some((c) => c.email === email)) throw new HttpError(409, "conflict", "A contact with this email already exists");
-    const c: Contact = { id: uuid(), email, name: name.slice(0, 80), phone: s(ctx, "phone") ?? "", avatar_url: null, avatar_source: null, company: null, external_id: s(ctx, "external_id") ?? null, notes: s(ctx, "notes") ?? "", custom: isRecord(ctx.body.custom) ? ctx.body.custom : {}, tags: [], fields: {}, blocked: false, ticket_count: 0, created_at: nowIso(), updated_at: nowIso() };
+    if (email && holder(ctx.ws, email)) throw new HttpError(409, "conflict", "A contact with this email already exists");
+    const c: Contact = { id: uuid(), email, emails: [], name: name.slice(0, 80), phone: s(ctx, "phone") ?? "", avatar_url: null, avatar_source: null, company: null, external_id: s(ctx, "external_id") ?? null, notes: s(ctx, "notes") ?? "", custom: isRecord(ctx.body.custom) ? ctx.body.custom : {}, tags: [], fields: {}, blocked: false, ticket_count: 0, created_at: nowIso(), updated_at: nowIso() };
     setCompany(ctx.ws, c, ctx.body.company_id);
     writeLabels(ctx, "contacts", c);
     writeFields(ctx, "contact", c);
@@ -117,7 +131,8 @@ export function registerResources() {
     if ("name" in ctx.body && !s(ctx, "name")?.trim()) throw invalid("Name can't be empty");
     if (s(ctx, "email")) {
       const email = s(ctx, "email")!.trim().toLowerCase();
-      if (ctx.ws.contacts.some((x) => x.email === email && x.id !== c.id)) throw new HttpError(409, "conflict", "Another contact already uses this email");
+      const held = holder(ctx.ws, email);
+      if (held && !(held === c && c.email === email)) throw new HttpError(409, "conflict", "Another contact already uses this email");
       c.email = email;
     }
     writeLabels(ctx, "contacts", c);
@@ -135,6 +150,117 @@ export function registerResources() {
     publish(ctx.ws, "contact.deleted", { contact_id: c.id });
     return respond(204);
   });
+  // Bulk: ids or the list's filters; one thing at a time, all or nothing, 1000 at most by filter.
+  function bulkRows<R extends Contact | Company>(ctx: Ctx, rows: R[], matches: (r: R) => boolean, what: string): R[] {
+    const ids = strArr(ctx.body.ids);
+    const hasQuery = isRecord(ctx.body.query);
+    if ((ctx.body.delete === true) === isRecord(ctx.body.patch)) throw invalid("send either patch or delete: true");
+    if ((ids?.length ?? 0) === 0 === !hasQuery) throw invalid("send either ids or query");
+    if (ids) {
+      if (ids.length > 100) throw invalid("ids: at most 100");
+      const found = ids.map((id) => rows.find((r) => r.id === id));
+      if (found.some((r) => !r)) throw notFound(what);
+      return found as R[];
+    }
+    const hit = rows.filter(matches);
+    if (hit.length > 1000) throw new HttpError(422, "too_many_records", "That filter matches more than 1000 records. Narrow it and try again.");
+    return hit;
+  }
+  post("/v1/contacts/bulk", (ctx) => {
+    const query = isRecord(ctx.body.query) ? ctx.body.query : {};
+    const needle = String(query.q ?? "").toLowerCase().trim();
+    const rows = bulkRows(
+      ctx,
+      ctx.ws.contacts,
+      (c) =>
+        (!needle || [c.name, c.email ?? "", ...c.emails, c.company?.name ?? "", c.phone, fieldsText(c.fields)].join(" ").toLowerCase().includes(needle)) &&
+        (!query.company_id || c.company?.id === query.company_id) &&
+        (!query.tag || c.tags.some((x) => x.name.toLowerCase() === String(query.tag).toLowerCase())) &&
+        (!query.blocked || c.blocked === (query.blocked === "true")),
+      "Contact",
+    );
+    if (ctx.body.delete === true) {
+      const gone = new Set(rows.map((c) => c.id));
+      ctx.ws.contacts = ctx.ws.contacts.filter((c) => !gone.has(c.id));
+      for (const id of gone) publish(ctx.ws, "contact.deleted", { contact_id: id });
+      return { updated: 0, deleted: rows.length };
+    }
+    const patch = ctx.body.patch as Record<string, unknown>;
+    const sub = { ...ctx, body: { add_tags: patch.add_tags, remove_tags: patch.remove_tags } } as Ctx;
+    for (const c of rows) {
+      writeLabels(sub, "contacts", c);
+      if ("company_id" in patch) setCompany(ctx.ws, c, patch.company_id);
+      c.updated_at = nowIso();
+      syncContactRefs(ctx.ws, c);
+      publish(ctx.ws, "contact.updated", { contact: contactOut(ctx.ws, c) });
+    }
+    return { updated: rows.length, deleted: 0 };
+  });
+  // Extra addresses (contracts/api.md "Contact emails"): an address belongs to one contact, primary or extra.
+  const changed = (ctx: Ctx, c: Contact) => {
+    c.updated_at = nowIso();
+    syncContactRefs(ctx.ws, c);
+    publish(ctx.ws, "contact.updated", { contact: contactOut(ctx.ws, c) });
+    return contactOut(ctx.ws, c);
+  };
+  const addressOf = (raw: string | undefined) => {
+    const email = raw?.trim().toLowerCase() ?? "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw invalid("email is not a valid address");
+    return email;
+  };
+  post("/v1/contacts/:id/emails", (ctx) => {
+    const c = findContact(ctx);
+    const email = addressOf(s(ctx, "email"));
+    if (!c.email) throw invalid("give the contact an email address before adding other addresses");
+    if (holder(ctx.ws, email)) throw new HttpError(409, "conflict", "A contact with this email already exists");
+    if (c.emails.length >= 20) throw invalid("a contact can have at most 20 extra email addresses");
+    c.emails.push(email);
+    return respond(201, changed(ctx, c));
+  });
+  del("/v1/contacts/:id/emails/:email", (ctx) => {
+    const c = findContact(ctx);
+    const email = addressOf(ctx.params.email);
+    if (!c.emails.includes(email)) throw notFound("Email");
+    c.emails = c.emails.filter((x) => x !== email);
+    return changed(ctx, c);
+  });
+  post("/v1/contacts/:id/emails/:email/make-primary", (ctx) => {
+    const c = findContact(ctx);
+    const email = addressOf(ctx.params.email);
+    if (!c.emails.includes(email)) throw notFound("Email");
+    c.emails = [...c.emails.filter((x) => x !== email), ...(c.email ? [c.email] : [])];
+    c.email = email;
+    return changed(ctx, c);
+  });
+  // Merging a contact into another (contracts/api.md "Merging contacts"): admins only.
+  post("/v1/contacts/:id/merge", (ctx) => {
+    if (!isAdmin(ctx.ws, db.meId)) throw forbidden("Only admins can merge contacts");
+    const from = findContact(ctx);
+    const into = ctx.ws.contacts.find((x) => x.id === s(ctx, "into"));
+    if (!into) throw notFound("Contact");
+    if (into.id === from.id) throw invalid("a contact can't be merged into itself");
+    if (from.blocked !== into.blocked) throw new HttpError(422, "contacts_blocked_differ", "A blocked contact can't be merged with one that is not blocked.");
+    if (from.external_id && into.external_id && from.external_id !== into.external_id) throw new HttpError(409, "external_id_conflict", "These contacts have different external ids.");
+    const addresses = [...(from.email ? [from.email] : []), ...from.emails];
+    // A contact without a primary address takes the other's first one as its primary.
+    const primary = into.email ?? addresses.shift() ?? null;
+    if (into.emails.length + addresses.length > 20) throw invalid("the merged contact would have more than 20 extra email addresses");
+    into.email = primary;
+    into.emails.push(...addresses);
+    into.name ||= from.name;
+    into.phone ||= from.phone;
+    into.external_id ??= from.external_id;
+    if (!into.company && from.company) into.company = from.company;
+    if (from.notes.trim()) into.notes = into.notes.trim() ? `${into.notes.trimEnd()}\n\n${from.notes}` : from.notes;
+    into.custom = { ...from.custom, ...into.custom };
+    into.fields = { ...from.fields, ...into.fields };
+    for (const tag of from.tags) if (!into.tags.some((x) => x.id === tag.id)) into.tags.push(tag);
+    for (const t of ctx.ws.tickets) if (t.contact?.id === from.id) t.contact = { id: into.id, email: into.email, name: into.name, avatar_url: into.avatar_url };
+    into.ticket_count = ctx.ws.tickets.filter((t) => t.contact?.id === into.id).length;
+    ctx.ws.contacts = ctx.ws.contacts.filter((x) => x !== from);
+    publish(ctx.ws, "contact.deleted", { contact_id: from.id });
+    return respond(200, changed(ctx, into));
+  });
   get("/v1/contacts/:id/tickets", (ctx) => {
     const c = findContact(ctx);
     const list = ctx.ws.tickets.filter((t) => t.contact?.id === c.id && !ctx.ws.deletedTickets.has(t.id));
@@ -147,14 +273,23 @@ export function registerResources() {
     let list = ctx.ws.companies;
     list = recordFilter(ctx, "company", list);
     if (q) list = list.filter((c) => [c.name, c.domain, fieldsText(c.fields)].join(" ").toLowerCase().includes(q));
-    list = list.slice().sort((a, b) => a.name.localeCompare(b.name));
+    const byName = (a: Company, b: Company) => a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    const size = (c: Company) => ctx.ws.contacts.filter((p) => p.company?.id === c.id).length;
+    const order: Record<string, (a: Company, b: Company) => number> = {
+      "-name": (a, b) => byName(b, a),
+      created: (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at),
+      "-created": (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
+      contacts: (a, b) => size(a) - size(b),
+      "-contacts": (a, b) => size(b) - size(a),
+    };
+    list = list.slice().sort(order[ctx.query.get("sort") ?? ""] ?? byName);
     const page = paginate(ctx, list);
     return { ...page, data: page.data.map((c) => companyOut(ctx.ws, c)) };
   });
   get("/v1/companies/:id", (ctx) => companyOut(ctx.ws, findCompany(ctx)));
   post("/v1/companies", (ctx) => {
     const name = required(ctx, "name").slice(0, 80);
-    const c: Company = { id: uuid(), name, domain: (s(ctx, "domain") ?? "").toLowerCase(), avatar_url: null, avatar_source: null, notes: s(ctx, "notes") ?? "", custom: isRecord(ctx.body.custom) ? ctx.body.custom : {}, tags: [], fields: {}, contact_count: 0, created_at: nowIso(), updated_at: nowIso() };
+    const c: Company = { id: uuid(), name, domain: (s(ctx, "domain") ?? "").toLowerCase(), external_id: s(ctx, "external_id")?.trim() || null, avatar_url: null, avatar_source: null, notes: s(ctx, "notes") ?? "", custom: isRecord(ctx.body.custom) ? ctx.body.custom : {}, tags: [], fields: {}, contact_count: 0, created_at: nowIso(), updated_at: nowIso() };
     writeLabels(ctx, "companies", c);
     writeFields(ctx, "company", c);
     ctx.ws.companies.push(c);
@@ -167,6 +302,7 @@ export function registerResources() {
     writeLabels(ctx, "companies", c);
     writeFields(ctx, "company", c);
     assign(c, ctx.body, ["name", "domain", "notes", "custom"]);
+    if ("external_id" in ctx.body) c.external_id = s(ctx, "external_id")?.trim() || null;
     c.updated_at = nowIso();
     for (const ct of ctx.ws.contacts) if (ct.company?.id === c.id) ct.company = { id: c.id, name: c.name, domain: c.domain, avatar_url: c.avatar_url };
     publish(ctx.ws, "company.updated", { company: companyOut(ctx.ws, c) });
@@ -180,6 +316,47 @@ export function registerResources() {
     return respond(204);
   });
 
+  // A saved reply's actions as the API keeps them: label names trimmed, a team or a member or nothing.
+  const replyActions = (v: unknown): SavedReply["actions"] => {
+    const a = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+    const names = (x: unknown) => (Array.isArray(x) ? [...new Set(x.map((t) => String(t).trim()).filter(Boolean))] : []);
+    const out: NonNullable<SavedReply["actions"]> = {};
+    const add = names(a.add_tags);
+    const remove = names(a.remove_tags).filter((t) => !add.includes(t));
+    if (add.length) out.add_tags = add;
+    if (remove.length) out.remove_tags = remove;
+    if (typeof a.team_id === "string" && a.team_id) out.team_id = a.team_id;
+    if (typeof a.assignee_id === "string" && a.assignee_id) out.assignee_id = a.assignee_id;
+    return out;
+  };
+  post("/v1/companies/bulk", (ctx) => {
+    const query = isRecord(ctx.body.query) ? ctx.body.query : {};
+    const needle = String(query.q ?? "").toLowerCase().trim();
+    const rows = bulkRows(
+      ctx,
+      ctx.ws.companies,
+      (c) =>
+        (!needle || [c.name, c.domain, fieldsText(c.fields)].join(" ").toLowerCase().includes(needle)) &&
+        (!query.tag || c.tags.some((x) => x.name.toLowerCase() === String(query.tag).toLowerCase())),
+      "Company",
+    );
+    if (ctx.body.delete === true) {
+      const gone = new Set(rows.map((c) => c.id));
+      ctx.ws.companies = ctx.ws.companies.filter((c) => !gone.has(c.id));
+      for (const ct of ctx.ws.contacts) if (ct.company && gone.has(ct.company.id)) ct.company = null;
+      for (const id of gone) publish(ctx.ws, "company.deleted", { company_id: id });
+      return { updated: 0, deleted: rows.length };
+    }
+    const patch = ctx.body.patch as Record<string, unknown>;
+    const sub = { ...ctx, body: { add_tags: patch.add_tags, remove_tags: patch.remove_tags } } as Ctx;
+    for (const c of rows) {
+      writeLabels(sub, "companies", c);
+      c.updated_at = nowIso();
+      publish(ctx.ws, "company.updated", { company: companyOut(ctx.ws, c) });
+    }
+    return { updated: rows.length, deleted: 0 };
+  });
+
   crud<SavedReply>({
     path: "/v1/saved-replies",
     resource: "saved_reply",
@@ -188,9 +365,10 @@ export function registerResources() {
     sort: (a, b) => a.title.localeCompare(b.title),
     // A private team's replies are listed only to its members.
     filter: (ctx, rows) => rows.filter((r) => canSeeTeamScoped(ctx.ws, r.team_id)),
-    create: (ctx, id) => ({ id, title: required(ctx, "title").slice(0, 100), shortcut: slugify(s(ctx, "shortcut") ?? "").slice(0, 30), body_html: required(ctx, "body_html"), team_id: teamRef(ctx, ctx.body.team_id), created_at: nowIso(), updated_at: nowIso() }),
+    create: (ctx, id) => ({ id, title: required(ctx, "title").slice(0, 100), shortcut: slugify(s(ctx, "shortcut") ?? "").slice(0, 30), body_html: required(ctx, "body_html"), team_id: teamRef(ctx, ctx.body.team_id), actions: replyActions(ctx.body.actions), created_at: nowIso(), updated_at: nowIso() }),
     update: (ctx, row) => {
       assign(row, ctx.body, ["title", "body_html"]);
+      if ("actions" in ctx.body) row.actions = replyActions(ctx.body.actions);
       if ("team_id" in ctx.body) row.team_id = teamRef(ctx, ctx.body.team_id);
       if (s(ctx, "shortcut") !== undefined) row.shortcut = slugify(s(ctx, "shortcut")!).slice(0, 30);
       row.updated_at = nowIso();
@@ -220,6 +398,14 @@ export function registerResources() {
     }
   };
 
+  /** A view section's key: its name in lower case, as views match it. */
+  const sectionKeyOf = (s: string | null | undefined) => (s ?? "").toLocaleLowerCase();
+  /** The view with its section's icon, as the API reads it. */
+  const withSectionIcon = (ws: WsData, v: View): View => {
+    v.section_icon = v.section ? (ws.viewSectionIcons?.[sectionKeyOf(v.section)] ?? null) : null;
+    return v;
+  };
+
   crud<View>({
     path: "/v1/views",
     resource: "view",
@@ -229,7 +415,7 @@ export function registerResources() {
     filter: (ctx, rows) => rows.filter((v) => !v.team_id || isAdmin(ctx.ws, db.meId) || !!teamOfId(ctx.ws, v.team_id, db.meId)),
     create: (ctx, id) => {
       const team_id = teamRef(ctx, ctx.body.team_id);
-      return { id, name: required(ctx, "name").slice(0, 60), shared: team_id ? false : ctx.body.shared === true, team_id, section: viewSection(ctx.body.section), filters: isRecord(ctx.body.filters) ? (ctx.body.filters as TicketFilters) : {}, position: typeof ctx.body.position === "number" ? ctx.body.position : ctx.ws.views.length, icon: viewIcon(ctx.body.icon) };
+      return withSectionIcon(ctx.ws, { id, name: required(ctx, "name").slice(0, 60), shared: team_id ? false : ctx.body.shared === true, team_id, section: viewSection(ctx.body.section), filters: isRecord(ctx.body.filters) ? (ctx.body.filters as TicketFilters) : {}, position: typeof ctx.body.position === "number" ? ctx.body.position : ctx.ws.views.length, icon: viewIcon(ctx.body.icon) });
     },
     update: (ctx, row) => {
       assign(row, ctx.body, ["name", "shared", "position"]);
@@ -238,7 +424,35 @@ export function registerResources() {
       if (row.team_id) row.shared = false;
       if (isRecord(ctx.body.filters)) row.filters = ctx.body.filters as TicketFilters;
       if ("icon" in ctx.body) row.icon = viewIcon(ctx.body.icon);
+      withSectionIcon(ctx.ws, row);
     },
+  });
+
+  // A view section's icon and name (contracts/api.md, PATCH /v1/view-sections): admins only.
+  patch("/v1/view-sections", (ctx) => {
+    if (!isAdmin(ctx.ws, db.meId)) throw new HttpError(403, "forbidden", "Only admins change a view section.");
+    const from = viewSection(ctx.body.section);
+    if (!from) throw invalid("section is required");
+    const to = "name" in ctx.body ? viewSection(ctx.body.name) : from;
+    if (!to) throw invalid("name is required");
+    const fromKey = sectionKeyOf(from);
+    const toKey = sectionKeyOf(to);
+    const inSection = ctx.ws.views.filter((v) => sectionKeyOf(v.section) === fromKey);
+    if (!inSection.length) throw notFound("View section");
+    const icons = (ctx.ws.viewSectionIcons ??= {});
+    const set = "icon" in ctx.body;
+    let next: ViewIcon | null = set ? viewIcon(ctx.body.icon) : (icons[fromKey] ?? null);
+    for (const v of inSection) v.section = to;
+    if (toKey !== fromKey) {
+      // Into a section with an icon of its own, without a new one: it keeps its own.
+      if (!set && icons[toKey]) next = icons[toKey];
+      delete icons[fromKey];
+    }
+    if (next) icons[toKey] = next;
+    else delete icons[toKey];
+    const named = ctx.ws.views.filter((v) => sectionKeyOf(v.section) === toKey);
+    for (const v of named) publish(ctx.ws, "view.updated", { view: withSectionIcon(ctx.ws, v) });
+    return { name: to, icon: next, views: named.length };
   });
 
   crud<SlaPolicy>({
@@ -457,6 +671,7 @@ export function registerResources() {
     patchConnection(ctx, m);
     patchMailboxAI(ctx, m);
     patchFormSenders(ctx, m);
+    if (typeof ctx.body.keep_automatic_mail === "boolean") m.keep_automatic_mail = ctx.body.keep_automatic_mail;
     if ("bot_id" in ctx.body) m.bot_id = checkBotId(ctx.ws, ctx.body.bot_id);
     if (ctx.body.password || ctx.body.smtp_password) {
       m.status = "active";
@@ -682,14 +897,14 @@ function checkActionTrigger(ws: WsData, trigger: Automation["trigger"], acts: Ac
   if (acts.some((a) => a.type === "run_procedure" && !known.has(a.value))) throw invalid("ai procedure not found in this workspace");
 }
 
-function uniqueSlug(rows: { slug: string }[], base: string): string {
+export function uniqueSlug(rows: { slug: string }[], base: string): string {
   const b = base || "untitled";
   let slug = b;
   for (let i = 2; rows.some((r) => r.slug === slug); i++) slug = `${b}-${i}`;
   return slug;
 }
 
-function recountCollections(ws: WsData) {
+export function recountCollections(ws: WsData) {
   for (const c of ws.collections) c.article_count = ws.articles.filter((a) => a.collection_id === c.id).length;
 }
 
@@ -814,13 +1029,14 @@ function patchReceiving(ctx: Ctx, m: Mailbox) {
   throw invalid(kind === "imap" ? "Add the mailbox again to receive over IMAP." : "Reconnect the mailbox to sync it.");
 }
 
-function mailbox(ws: WsData, init: Pick<Mailbox, "name" | "email" | "display_name" | "inbound_kind" | "outbound_kind" | "config" | "team_id">): Mailbox {
+export function mailbox(ws: WsData, init: Pick<Mailbox, "name" | "email" | "display_name" | "inbound_kind" | "outbound_kind" | "config" | "team_id">): Mailbox {
   const m: Mailbox = {
     ...init,
     brand_id: defaultBrand(ws)?.id ?? "",
     aliases: [],
     alias_teams: {},
     trusted_form_senders: [],
+    keep_automatic_mail: false,
     from_name_format: "{agent} at {mailbox}",
     private: !!init.team_id && !!ws.teams.find((t) => t.id === init.team_id)?.private,
     id: uuid(),
@@ -859,7 +1075,7 @@ function publicBrand(ctx: Ctx): { ws: WsData; brand: Brand | undefined } {
 }
 
 /** A KB brand_id from the body: a brand of the workspace, or null (""/null) for every brand. */
-function kbBrandRef(ctx: Ctx, v: unknown): string | null {
+export function kbBrandRef(ctx: Ctx, v: unknown): string | null {
   if (v === null || v === undefined || v === "") return null;
   if (typeof v !== "string" || !ctx.ws.brands.some((b) => b.id === v)) throw invalid("brand_id must be a brand of the workspace");
   return v;
@@ -957,6 +1173,10 @@ function writeAddressing(ctx: Ctx, m: Mailbox) {
   }
 }
 
+/** The contact an address belongs to, as its primary or one of its extras. */
+function holder(ws: WsData, email: string): Contact | undefined {
+  return ws.contacts.find((x) => x.email === email || x.emails.includes(email));
+}
 function findContact(ctx: Ctx): Contact {
   const c = ctx.ws.contacts.find((x) => x.id === ctx.params.id);
   if (!c) throw notFound("Contact");

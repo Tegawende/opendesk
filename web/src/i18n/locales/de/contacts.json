@@ -67,9 +67,36 @@
     "notes": "Notizen",
     "notesHint": "Für dein Team bei jedem Ticket dieses Kontakts sichtbar.",
     "externalId": "Externe ID",
+    "companyExternalIdHint": "Die ID dieses Kontos in deinem Produkt. Angemeldete Nutzer, die das Chat-Widget mit ihr identifiziert, werden mit diesem Unternehmen verknüpft.",
     "status": "Status",
     "block": "Kontakt blockieren",
     "blockHint": "Neue E-Mails und Chats von dieser Person landen im Spam."
+  },
+  "emails": {
+    "label": "Weitere E-Mail-Adressen",
+    "hint": "E-Mails von diesen Adressen werden diesem Kontakt zugeordnet.",
+    "placeholder": "name@example.com",
+    "add": "Hinzufügen",
+    "added": "Adresse hinzugefügt",
+    "removed": "Adresse entfernt",
+    "madePrimary": "Hauptadresse geändert",
+    "failed": "Die Adresse konnte nicht geändert werden",
+    "makePrimary": "Zur Hauptadresse machen",
+    "remove": "Entfernen",
+    "removeLabel": "{{email}} entfernen",
+    "primaryTitle": "Als Hauptadresse festlegen?",
+    "primaryBody": "{{email}} wird zur E-Mail-Adresse des Kontakts, {{old}} bleibt als weitere Adresse erhalten. Die Anmeldung im Kundenportal läuft dann über {{email}}."
+  },
+  "merge": {
+    "title": "{{name}} mit einem anderen Kontakt zusammenführen",
+    "description": "Wähle den Kontakt, der bleibt. {{name}} wird entfernt, und Tickets, Nachrichten und E-Mail-Adressen wandern zum gewählten Kontakt.",
+    "search": "Kontakte suchen",
+    "merge": "Zusammenführen",
+    "into": "Mit {{name}} zusammenführen",
+    "none": "Keine anderen Kontakte",
+    "noneHint": "Suche nach Name oder E-Mail.",
+    "warning": "Das lässt sich nicht rückgängig machen. Die Angaben von {{name}} ergänzen, was beim anderen Kontakt fehlt.",
+    "done": "Mit {{name}} zusammengeführt"
   },
   "empty": {
     "title": "Noch keine Kontakte",
@@ -114,7 +141,8 @@
     "discard": "Verwerfen",
     "discardBody": "Deine Änderungen an diesem Kontakt gehen verloren.",
     "discardCompany": "Deine Änderungen an diesem Unternehmen gehen verloren.",
-    "pictureRefresh": "Suche nach einem neuen Bild. Es erscheint hier, sobald eines gefunden wird."
+    "pictureRefresh": "Suche nach einem neuen Bild. Es erscheint hier, sobald eines gefunden wird.",
+    "merge": "Zusammenführen mit…"
   },
   "confirm": {
     "deleteTitle": "{{name}} löschen?",
@@ -145,5 +173,65 @@
     "search": "um alles zu durchsuchen",
     "domains": "Unternehmen gruppieren Kontakte nach ihrer E-Mail-Domain"
   },
-  "callWith": "Mit {{provider}} anrufen"
+  "callWith": "Mit {{provider}} anrufen",
+  "filter": {
+    "labels": "Label",
+    "label": "Label: {{name}}",
+    "clearLabel": "Label-Filter entfernen",
+    "searchLabels": "Label suchen",
+    "noLabels": "Für diese Liste gibt es noch keine Labels.",
+    "blockedTitle": "Gesperrt",
+    "blockedAny": "Gesperrt oder nicht",
+    "blockedOnly": "Nur gesperrte",
+    "notBlocked": "Nicht gesperrt"
+  },
+  "sort": {
+    "label": "Sortiert nach {{by}}",
+    "title": "Sortieren nach",
+    "-created": "Neueste zuerst",
+    "created": "Älteste zuerst",
+    "name": "Name, A bis Z",
+    "-name": "Name, Z bis A",
+    "-tickets": "Meiste Tickets",
+    "tickets": "Wenigste Tickets",
+    "-contacts": "Meiste Personen",
+    "contacts": "Wenigste Personen"
+  },
+  "bulk": {
+    "toolbar": "Aktionen für die ausgewählten Zeilen",
+    "selectedWord_one": "ausgewählt",
+    "selectedWord_other": "ausgewählt",
+    "selectAll": "Alle Treffer auswählen",
+    "allMatching": "Alle Treffer",
+    "addLabel": "Label hinzufügen",
+    "removeLabel": "Label entfernen",
+    "setCompany": "Unternehmen festlegen",
+    "noCompany": "Kein Unternehmen",
+    "delete": "Löschen",
+    "clear": "Auswahl aufheben",
+    "selectRow": "{{name}} auswählen",
+    "selectPage": "Alle angezeigten Zeilen auswählen",
+    "updated_one": "{{count}} Eintrag aktualisiert",
+    "updated_other": "{{count}} Einträge aktualisiert",
+    "deleted_one": "{{count}} Eintrag gelöscht",
+    "deleted_other": "{{count}} Einträge gelöscht",
+    "failed": "Die Änderung war nicht möglich. Es wurde nichts geändert.",
+    "deleteTitle": {
+      "contacts_one": "{{count}} Person löschen",
+      "contacts_other": "{{count}} Personen löschen",
+      "companies_one": "{{count}} Unternehmen löschen",
+      "companies_other": "{{count}} Unternehmen löschen"
+    },
+    "deleteBody": {
+      "contacts_one": "Diese Person wird endgültig gelöscht. Ihre Tickets bleiben ohne Kunden erhalten. Das lässt sich nicht rückgängig machen.",
+      "contacts_other": "Diese {{count}} Personen werden endgültig gelöscht. Ihre Tickets bleiben ohne Kunden erhalten. Das lässt sich nicht rückgängig machen.",
+      "companies_one": "Dieses Unternehmen wird endgültig gelöscht. Seine Personen bleiben ohne Unternehmen erhalten. Das lässt sich nicht rückgängig machen.",
+      "companies_other": "Diese {{count}} Unternehmen werden endgültig gelöscht. Ihre Personen bleiben ohne Unternehmen erhalten. Das lässt sich nicht rückgängig machen."
+    },
+    "deleteAllTitle": "Alle Treffer löschen",
+    "deleteAllBody": {
+      "contacts": "Alle Personen, die zur Suche und den Filtern passen, werden endgültig gelöscht, höchstens 1000. Ihre Tickets bleiben ohne Kunden erhalten. Das lässt sich nicht rückgängig machen.",
+      "companies": "Alle Unternehmen, die zur Suche und den Filtern passen, werden endgültig gelöscht, höchstens 1000. Ihre Personen bleiben ohne Unternehmen erhalten. Das lässt sich nicht rückgängig machen."
+    }
+  }
 }

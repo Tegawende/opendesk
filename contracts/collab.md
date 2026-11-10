@@ -505,6 +505,9 @@ Ollie off for an account they manage (`ai: false`) whatever the workspace locks.
 - A **private** account and its conversations are visible to the member who connected it, and
   nobody else, admins included. A **shared** account to that member and its audience:
   `everyone` (every member of the workspace) or the listed teams (their members) and people.
+  The audience may be empty ("no one added yet"), as when an account is connected before the team
+  joins: the member sees it alone until teams or people are added, and it is managed like any
+  shared account.
 - A conversation is also visible to whoever it is shared with on its own (`shares`: everyone,
   teams, people) and to its assignees.
 - Viewers read; acting (actions, sending, sharing, assigning, comments) needs agent or above and
@@ -589,7 +592,9 @@ with a claim that expires on its own, and reports back. Nobody has to assign it.
   the skip (`collab_ai_skips`).
 - **Approval**: an AI draft does not clear Needs action (only a sent reply does), so the
   conversation waits in Needs action, its draft labelled "AI draft by <name>", until a person sends
-  or discards it.
+  or discards it. **Ready for review** (`box=ai_review`, `boxes.ai_review`) lists the conversations
+  in an inbox with such a draft, on any account the member sees, so a person can find them without
+  opening each Needs action conversation. Saving the draft takes it over and takes it off the list.
 
 ### AI draft outcomes
 
@@ -853,8 +858,13 @@ interface CollabStatus {
 }
 
 interface SidebarPrefs {
-  order: string[]              // section ids, top to bottom: "favorites", "inbox", "mail", "teams", "views", "workspace" (the default)
-  hidden: string[]             // "section:<id>", "box:<box>", "account:<id>", "folder:<id>", "folder:<inbox|starred|...>", "view:<id>", "team:<id>", "ticket_folder:<id>", "row:waiting_chats"
+  order: string[]              // section ids, top to bottom: "favorites", "inbox", "mail", "teams", "views", "pages", "workspace" (the default),
+                               // "custom:<id>" for the member's own sections, and "mailbox:<id>" or "team:<id | mine>" for a ticket
+                               // inbox or team shown as a section of its own ("Inboxes as sections"); at most 80
+  hidden: string[]             // "section:<id>", "box:<box>", "account:<id>", "folder:<id>", "folder:<inbox|starred|...>", "view:<id>", "team:<id>", "ticket_folder:<id>",
+                               // "mailbox:<id>:<folder>" for a folder of a ticket inbox shown as a section of its own,
+                               // and in Pages "pages:<workspace|teamspaces|private|today|templates|trash>", "wiki_page:<id>", "wiki_space:<team id>" (contracts/wiki.md "In the main sidebar"),
+                               // and in Workspace "page:<contacts|knowledge|wiki|reports>"
   pinned: { kind: "box" | "folder" | "account" | "view" | "team" | "ticket_folder" | "view_section"; id: string }[]  // shown under Favorites, in order, at most 30
   expanded_accounts: string[]  // account ids whose folders show in the sidebar; folded by default (the mail page has every folder)
   mark_read_on_open: boolean   // default true
@@ -862,17 +872,115 @@ interface SidebarPrefs {
   badges: Record<string, "unread" | "total" | "count" | "awaiting" | "urgent" | "overdue" | "open" | "none">  // the number beside a row; default {}
   mail_tabs: string[]          // the mail page's folder bar, in order; default ["inbox","starred","sent","drafts","archive"]
   auto_pins: string[]          // pins the sidebar added once by itself, so one unpinned stays so; default []
+  sections: SidebarSection[]   // the member's own sections ("Your own sections"); default []
+  row_order: Record<"inbox" | "mail" | "teams" | "workspace", string[]>  // the member's order of a built-in section's rows ("Row order"); default {}
+  names: Record<string, string>  // the member's own labels: "section:<id>" for a built-in section, a row key as in `hidden`; default {}
+  icons: Record<string, string>  // the member's own emoji, keyed like `names`; default {}
+  show_waiting_chats: boolean  // default false: the red row on top of Inbox while visitors wait in live chat with nobody on it ("Waiting chats")
+}
+
+interface SidebarSection {
+  id: string                   // made by the client, 1..40 of [A-Za-z0-9_-], once
+  title: string                // 0..40 characters, a name people choose (internal/displayname, Workspace)
+  collapsed: boolean
+  icon?: string                // one emoji beside the title; left out: none
+  items: SidebarItem[]         // at most 60; at most 300 across the sections
+}
+
+// A Space row (contracts/spaces.md SpaceItem) without its workspace, which is this one;
+// never "section" or "everywhere".
+interface SidebarItem {
+  kind: "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "wiki_page" | "wiki_space" | "mailbox"
+  id: string                   // the ids of SpaceItem; a team row may also be "mine" (My teams)
+  name?: string                // the member's own label for the row, 1..64 characters
+  badge?: SidebarBadge         // the number beside the row; left out: the row's default
+  icon?: string                // one emoji in place of the row's own icon; left out: the row's own
 }
 ```
+
+**Names and icons.** `names` and `icons` give any built-in section (`section:<id>`) and any row (its
+key as in `hidden`: `ticket_folder:mine`, `row:waiting_chats`, `box:inbox`, `account:<id>`, `folder:<id>`,
+`team:<id>`, `view:<id>`, `page:knowledge`, `pages:<part>`, `wiki_page:<id>`, `wiki_space:<id>`) a label and an
+emoji of the member's own. They show wherever the sidebar draws that section or row (Favorites, its own
+section, a Space showing the whole section) and never rename the team, view or page for anyone else. A row
+of the member's own sections keeps its own `name` and `icon` first. An empty name or icon is dropped.
+
+**Inboxes as sections.** A ticket inbox (a mailbox, the reply address of its tickets) or a team can
+also show as a section of its own, as the member chooses: `order` holds `mailbox:<id>` or `team:<id>`
+(`team:mine` for My teams) where it shows, after the section before it. Tickets and Teams keep
+everything. The section is titled with the inbox's or team's name (`names` and `icons` take
+`section:mailbox:<id>` and `section:team:<id>`). A mailbox's holds its folders, Unassigned, Mine, Open,
+Pending, Solved and Spam, each listing that reply address's tickets (`/inbox/<folder>?mailbox=<id>`) and
+numbered from `TicketCounts.mailboxes` (contracts/api.md); a team's holds its inbox's tabs
+(`/teams/<id>?tab=`), Unassigned numbered from `TicketCounts.teams`. An entry naming a mailbox or team
+that is gone, or a private team the member is not on, is kept and skipped. Each row can be hidden as
+`mailbox:<id>:<folder>` or `team:<id>:<tab>`, and the whole section as `section:mailbox:<id>` or
+`section:team:<id>`. It is one of the sidebar's sections like the others: it moves among them (a
+reorder writes it into `order` where it lands), and edit mode and Customize list it with Back into
+Tickets or Teams, which takes its entry out of `order`. A `mailbox` row in the member's own sections or a Space
+opens that inbox's Unassigned folder, numbered like it.
+
+**Row order.** `row_order` keeps the member's order of the rows inside a built-in section, by
+section id, as row keys spelled like `hidden`'s: `ticket_folder:<id>` and `row:waiting_chats` in
+Inbox, `box:<box>` and `account:<id>` in Mail, `team:<id>` (`team:mine` for My teams) in Teams,
+`page:<id>` in Workspace. Rows it does not name follow in their usual order, and a key naming
+nothing is kept and skipped. Views follow the workspace's own view order and sections
+(contracts/api.md `/v1/views`) and Pages the page tree's order, which every member shares.
+
+**Your own sections.** A member adds sections of their own to a workspace's sidebar, among the
+built-in ones: rows of anything the workspace offers, as a Space's (contracts/spaces.md), all of this
+workspace. `order` places each as `custom:<id>`; one the order lacks shows last, and an order entry
+naming no section is kept and skipped. A row names a thing by id; one gone or out of the member's sight
+(a deleted view, a private team they left, a page in the trash) is kept and skipped, as in a Space, and
+mail rows show only with Collab. A row sits in one of the member's sections at most. The web app adds
+rows from any row's menu ("Add to sidebar": Favorites, each section, a new section), a page's menu, the
+button beside an inbox folder's, team's or view's title, and a section's own "Add rows" popup with
+everything the workspace offers; rows drag to reorder and between sections. A section's menu renames,
+adds rows, moves, folds and deletes it; Customize sidebar lists the sections with the built-in ones,
+and copies a Space's sections with this workspace's rows ("Start from a Space"). Nothing of it is
+added from Settings. A page's title and an inbox folder's, team's or view's title also drag into the
+sidebar (`application/x-od-sidebar-row`): onto Favorites, a section of the member's own, or a spot at
+the end that makes a new section named after it.
+
+**Arranging in place.** Outside edit mode the sidebar arranges itself where it is too
+(`web/src/components/collab/SidebarDrag.tsx`, `SidebarRow.tsx`, `SectionMenu.tsx`): a row or a section's title
+drags as itself past a few pixels (a finger holds still first, so the sidebar still scrolls) with edit mode's
+rules and drop line; a double-click on a row or a section's title renames it in place (F2 on the focused row:
+`sidebarEdit.renameFocused()`); each section's ⋯ renames it, gives it an emoji, adds rows (Favorites and the
+member's own sections), moves it up or down, hides or deletes it; a row's menu renames it in place, changes its
+icon and moves it up or down where its section keeps the member's order. Every sidebar menu ends with Edit
+sidebar and Customize sidebar, and a Customize button sits at the bottom of the sidebar, in the rail too. With
+a Space picked, its sections and rows move and rename the same way.
+
+**Edit mode.** The web app arranges the sidebar where it is (`web/src/components/collab/SidebarEditor.tsx`),
+entered from Edit sidebar (the Customize button, a row's or section's menu, the user menu, the sidebar's
+right-click menu, `g e`) and left with Done or Escape. Every section and row has a handle (pointer events, so touch drags too; arrow keys move one
+place) and an eye; hidden ones stay listed, dimmed. Sections reorder among sections; a row reorders within
+its section (`row_order` for Inbox, Mail accounts, Teams and Workspace), goes into Favorites (pinned, or a
+page starred) or into a section of the member's own. Own sections and rows are renamed inline and take an
+emoji. The bar has Reset (order, `hidden` and `row_order` back to the defaults; own sections and favorites
+stay), Start from a layout (a preview of the sidebar with each), Copy a Space and the customize dialog.
+Removing, hiding and deleting show Undo. With a Space picked, the same mode edits that Space
+(contracts/spaces.md). When one target is a row in several places (a view under Views and in Favorites), the
+row clicked lights up alone, like a tab.
 
 These arrange a workspace's own sidebar. A Space (contracts/spaces.md) picked in the switcher shows
 its own rows instead; a whole section in a Space follows these preferences.
 
+A saved order that lacks a section (one saved before Pages) shows it where the default puts it,
+after the nearest section before it in the default order.
+
 Every member has them, with or without Collab. Without Collab they arrange the ticket side: the
-order of Favorites, Inbox, Teams, Views and Workspace, hidden rows and sections, favorites of inbox
-folders, teams, views and view sections, and their numbers. `row:waiting_chats` hides the red row on top of
-Inbox that shows while visitors wait in live chat with nobody on it. The Mail section, mail rows and favorites, `unified_inbox`,
+order of Favorites, Inbox, Teams, Views, Pages and Workspace, hidden rows and sections, favorites of inbox
+folders, teams, views and view sections, and their numbers. The Mail section, mail rows and favorites, `unified_inbox`,
 `mark_read_on_open`, `mail_tabs` and `auto_pins` are Collab's: kept as saved, used once it is on.
+
+**Waiting chats.** The red row on top of Inbox that shows while visitors wait in live chat with nobody on
+it is shown by choice: `show_waiting_chats`, off by default, so a member who never turned it on (preferences
+saved before it included) doesn't see it. The web app lists it as a hidden row of Inbox: edit mode shows it
+dimmed with its eye, and Customize sidebar has its switch. Its row key stays `row:waiting_chats` in `names`,
+`icons` and `row_order`; in `hidden` it is not used. A client that leaves `show_waiting_chats` out keeps the
+saved value. The ticket lists' own notice of waiting visitors is not this row and stays.
 
 **View sections in Favorites.** A `view_section` favorite names a view section (contracts/api.md,
 `/v1/views` `section`) by its name in lower case with spaces collapsed, as the sidebar matches views to
@@ -977,7 +1085,7 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | POST | `/v1/collab/accounts/oauth/{provider}/start` | agent+ | `{visibility, shared_with? (at most 40 teams and people: it travels in the signed state; add more afterwards), name?, email? (login hint), account_id? (reconnect, manage), history?: {since: string \| null} (older mail to import once connected, as `PUT …/history`; left out, none; kept when the account already has an import)}` → `{url}`; sets the flow cookie (send with credentials). `422 provider_not_configured` |
 | GET | `/v1/collab/accounts/oauth/{provider}/callback` | provider | redirects to `APP_URL/settings/mail-accounts?connected=<id>` or `?error=<code>`: `oauth_state`, `access_denied`, `provider_error`, `account_conflict` (the address is already connected in this workspace by someone else), `feature_disabled`, `forbidden`, `internal` |
 | POST | `/v1/collab/accounts/imap` | agent+ | `{email, name?, display_name?, imap_host, imap_port, imap_tls, imap_username?, password, smtp_host, smtp_port, smtp_tls, smtp_username?, smtp_password?, visibility, shared_with?, history?}` → `MailAccount` (`history` as on the OAuth start). Both servers are tried first: `422 connection_failed` with `detail`. `409 account_conflict`. `422 imap_unavailable` with `COLLAB_IMAP` off |
-| PATCH | `/v1/collab/accounts/{id}` | manage | `{name?, display_name?, color?, signature_html?, visibility?, handling_enabled?, reply_all?, shared_with?, imap? {…same fields, password?, smtp_password?}, default_from?}` → `MailAccount`; `handling_enabled` is available on shared accounts only and clears when an account becomes private. `reply_all` is kept in opendesk only and applies to everyone answering from the account. `default_from` must be one of its addresses that can send (`422 validation_failed`) and is kept in opendesk (Gmail's own change of its default still comes in, "Addresses"); new IMAP settings are tried first. A changed `signature_html` or `display_name` that syncs `two_way` is made at Gmail first (sanitized): a refusal is `502 provider_error` and nothing of the change is saved. `read_only` and `none` save in opendesk only. A changed `display_name` stops a Microsoft account following its profile name. A `display_name` or `signature_html` with variables ("Who sends") is checked (`422 validation_failed`) and saved in opendesk only, never at Gmail |
+| PATCH | `/v1/collab/accounts/{id}` | manage | `{name?, display_name?, color?, signature_html?, visibility?, handling_enabled?, reply_all?, shared_with?, imap? {…same fields, password?, smtp_password?}, default_from?}` → `MailAccount`; a shared account's `shared_with` may be empty ("Who sees what"). `handling_enabled` is available on shared accounts only and clears when an account becomes private. `reply_all` is kept in opendesk only and applies to everyone answering from the account. `default_from` must be one of its addresses that can send (`422 validation_failed`) and is kept in opendesk (Gmail's own change of its default still comes in, "Addresses"); new IMAP settings are tried first. A changed `signature_html` or `display_name` that syncs `two_way` is made at Gmail first (sanitized): a refusal is `502 provider_error` and nothing of the change is saved. `read_only` and `none` save in opendesk only. A changed `display_name` stops a Microsoft account following its profile name. A `display_name` or `signature_html` with variables ("Who sends") is checked (`422 validation_failed`) and saved in opendesk only, never at Gmail |
 | POST | `/v1/collab/accounts/{id}/identities` | manage | Add an address ("Addresses"): `{email, display_name?, signature_html?, reply_to?}` → `MailAccount`. Microsoft and IMAP only (`422 identities_from_provider` for Gmail); `409 identity_conflict` for the account's own or an existing address; at most 50 |
 | PATCH | `/v1/collab/accounts/{id}/identities/{identity_id}` | manage | `{display_name?, signature_html?, reply_to? (hand-added only)}` → `MailAccount`. Saved in opendesk; a Gmail address's From name and signature are replaced by Gmail's when they next change there (`pull`) |
 | POST | `/v1/collab/accounts/{id}/identities/preview` | manage | `{email?, display_name, signature_html?}` → `{from_name, from, signature_html, from_name_problem, problems: TemplateProblem[]}`: what is typed, filled for the caller and checked, nothing saved ("Who sends"). `email` is the address (default the account's own); an empty `display_name` uses the account's |
@@ -998,8 +1106,8 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | POST | `/v1/collab/accounts/{id}/folders` | act | `{name: 1..100, parent_id?, kind?: "folder" \| "label", color?: tone}` → `MailFolder`, created at the provider first (`502 provider_error` with detail). Gmail makes labels either way; Microsoft makes a folder, or with `kind: "label"` an Outlook category (no `parent_id`); IMAP only folders (`422 labels_unsupported` for a label). `color` only for labels ("Labels and colours") |
 | PATCH | `/v1/collab/folders/{id}` | act | `{name?, color?: tone}`, at least one → `MailFolder`; at the provider first, then stored. `422` for a special folder; `color` only on a Gmail label or an Outlook category (`422 validation_error` otherwise); an Outlook category cannot be renamed (`422 rename_unsupported`) |
 | DELETE | `/v1/collab/folders/{id}` | act | → 204; its conversations stay in their other folders; `422` for a special folder |
-| GET | `/v1/collab/threads` | member | `?box=&account_id=&folder_id=&q=&to=&with=&category=&limit=(1..100, 50)&cursor=` → `Page<MailThread>`, newest first. `category`: one tab of the inbox ("Categories"), with `box=inbox` only (`422` otherwise). `to`: only conversations with that address on a message (From, To, Cc or where it was delivered), case-insensitive: one alias's mail. `box`: `inbox` (default), `unread`, `starred`, `sent`, `drafts`, `archive`, `trash`, `spam`, `all`, `shared`, `assigned`, `needs_action`, `snoozed` ("Snooze"). Without `account_id` it spans every account the caller sees (for `shared`, `assigned`, and `needs_action`, every conversation they see). `folder_id` replaces `box`. `unread` and `all` leave out trash and spam, `starred` leaves out trash, and `shared`, `assigned`, and `needs_action` count conversations still in an inbox. `archive` is the Archive folder, and for Gmail, which archives by removing `INBOX`, what is in none of inbox, trash, spam and drafts. `q` matches each message's subject, sender and text and the conversation's subject and participants ("Search"). `with`: only conversations with that person on a message, like `to`; without `account_id` it spans every conversation the caller sees, those shared with them on their own included ("People") |
-| GET | `/v1/collab/counts` | member | `{boxes: {inbox, unread, shared, assigned, drafts, needs_action, snoozed}: number, accounts: Record<id, number>, folders: Record<id, number>, assigned: Record<account id, number>, addresses: Record<id, Record<address, number>>, categories: Record<account id, Record<key, number>>}`: unread conversations; `shared`, `assigned`, `needs_action` and `snoozed` count those still in an inbox, `drafts` every draft conversation; `folders` lists only folders with unread conversations, and `assigned` (`boxes.assigned` by account) only accounts with some (missing = 0); `addresses`, for each account with addresses besides its own, the unread conversations in its inbox with each of its addresses (its own included, lower case) on a message, matched like `to=` (missing = 0); `categories`, for each split account, the unread conversations in its inbox by category key, `primary` included (missing = 0) |
+| GET | `/v1/collab/threads` | member | `?box=&account_id=&folder_id=&q=&to=&with=&category=&limit=(1..100, 50)&cursor=` → `Page<MailThread>`, newest first. `category`: one tab of the inbox ("Categories"), with `box=inbox` only (`422` otherwise). `to`: only conversations with that address on a message (From, To, Cc or where it was delivered), case-insensitive: one alias's mail. `box`: `inbox` (default), `unread`, `starred`, `sent`, `drafts`, `archive`, `trash`, `spam`, `all`, `shared`, `assigned`, `needs_action`, `snoozed` ("Snooze"), `ai_review` (conversations in an inbox whose draft an AI client saved and no person has saved, sent or discarded since: "Ready for review", "AI queue"). Without `account_id` it spans every account the caller sees (for `shared`, `assigned`, and `needs_action`, every conversation they see). `folder_id` replaces `box`. `unread` and `all` leave out trash and spam, `starred` leaves out trash, and `shared`, `assigned`, and `needs_action` count conversations still in an inbox. `archive` is the Archive folder, and for Gmail, which archives by removing `INBOX`, what is in none of inbox, trash, spam and drafts. `q` matches each message's subject, sender and text and the conversation's subject and participants ("Search"). `with`: only conversations with that person on a message, like `to`; without `account_id` it spans every conversation the caller sees, those shared with them on their own included ("People") |
+| GET | `/v1/collab/counts` | member | `{boxes: {inbox, unread, shared, assigned, drafts, needs_action, snoozed, ai_review}: number, accounts: Record<id, number>, folders: Record<id, number>, assigned: Record<account id, number>, addresses: Record<id, Record<address, number>>, categories: Record<account id, Record<key, number>>, ai_review: Record<account id, number>}`: unread conversations; `shared`, `assigned`, `needs_action`, `snoozed` and `ai_review` count those still in an inbox, `drafts` every draft conversation; `ai_review` (`boxes.ai_review` by account) lists only accounts with some (missing = 0); `folders` lists only folders with unread conversations, and `assigned` (`boxes.assigned` by account) only accounts with some (missing = 0); `addresses`, for each account with addresses besides its own, the unread conversations in its inbox with each of its addresses (its own included, lower case) on a message, matched like `to=` (missing = 0); `categories`, for each split account, the unread conversations in its inbox by category key, `primary` included (missing = 0) |
 | GET | `/v1/collab/threads/{id}` | see | `MailThreadDetail` |
 | GET | `/v1/collab/person` | member | `?email=&exclude=&limit=` → `MailPerson` ("People"); `422 validation_failed` for an address that is not one |
 | POST | `/v1/collab/threads/actions` | act | `{thread_ids: string[1..100], action, folder_id?, category?, until?}` → `{threads: MailThread[]}`. `done`, `needs_action` and `snooze` are available only for a shared account with handling enabled and do not create a provider job; `snooze` needs `until` in the future ("Snooze"). Threads the caller cannot act on are `404` (all or nothing). `categorize` needs a `category` every one of their accounts has (`422 validation_failed`) |
@@ -1027,7 +1135,7 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | GET | `/v1/collab/messages/{id}/details` | see | `MessageDetails` ("Message details"), read from the message's source (stored, else the provider: `502 provider_error`) |
 | GET | `/v1/collab/attachments/{message_id}/{index}` | signed (`exp`, `sig`) | the file, `Content-Disposition: attachment` unless an image; `?inline=1` for images. `404` when the signature is wrong or expired |
 | GET | `/v1/collab/sidebar` | member | `SidebarPrefs` (defaults when never saved); with or without Collab; with Collab, pins All inboxes once at a second account ("All inboxes in Favorites") |
-| PUT | `/v1/collab/sidebar` | member | `SidebarPrefs` → `SidebarPrefs`; with or without Collab; at most 16 KB; unknown ids are kept (an id of something gone is ignored by the app). `badges`: at most 300, keys of at most 100 characters with the prefixes above, values `unread`, `total`, `count`, `awaiting`, `urgent`, `overdue`, `open` or `none`; `mail_tabs`: at most 30, each a box above or `folder:<uuid>`, once. Leaving out `badges`, `mail_tabs` or `auto_pins` keeps the saved value; `422` otherwise |
+| PUT | `/v1/collab/sidebar` | member | `SidebarPrefs` → `SidebarPrefs`; with or without Collab; at most 16 KB besides `sections`, which hold at most 32 KB; unknown ids are kept (an id of something gone is ignored by the app). `badges`: at most 300, keys of at most 100 characters with the prefixes above, values `unread`, `total`, `count`, `awaiting`, `urgent`, `overdue`, `open` or `none`; `mail_tabs`: at most 30, each a box above or `folder:<uuid>`, once. `sections`: the limits above, item ids as SpaceItem's, each `icon` one emoji. `row_order`: keys the built-in section ids, at most 300 rows each, each 1..100 characters once, at most 16 KB. `names` and `icons`: at most 300 each, keys 1..100 characters, names checked like a name people choose (1..64 characters, `422 invalid_name`), icons one emoji, at most 48 KB together. Leaving out `badges`, `mail_tabs`, `auto_pins`, `sections`, `row_order`, `names`, `icons` or `show_waiting_chats` keeps the saved value; `422` otherwise |
 
 Errors: `403 feature_disabled` (with product and reason), `404 not_found`, `422 labels_unsupported`, `422 connection_failed`,
 `409 account_conflict`, `502 provider_error`, `502 send_failed`, `422 provider_not_configured`,
@@ -1234,6 +1342,31 @@ and the customer's answers come back to the ticket.
   "Visibility"), and the conversation links to it. On the ticket a reply sent this way says which
   address it went from (`Message.from_account`).
 
+## Using an account for tickets
+
+A shared address read in Mail can become a ticket inbox: `POST /v1/collab/accounts/{id}/use-for-tickets`
+(admins, a signed-in person) makes a support mailbox (contracts/api.md "Mailboxes") of an account. The
+caller must be the member who connected the account: anyone else's account is `404`, shared with them or
+not, and a member below admin is `403`. A sample account is `422`.
+
+- **The connection carries over.** A Google or Microsoft account's tokens belong to the Collab OAuth
+  client, so the mailbox reads its inbox through the provider's API with them (`oauth_grant: "api"`,
+  `oauth_client: "collab"`; `422 api_sync_unavailable` when the workspace cannot, as on connecting); an
+  account that needs reconnecting is `422 reconnect_needed`. An IMAP account brings its IMAP and SMTP
+  servers and passwords (`422 imap_off` while IMAP is off for the workspace). The secrets go from one
+  sealed column to the other (`d.Box`) and never leave the server.
+- **From now on.** The mailbox's first sync starts with new mail (`config.sync_start: "new"`): what the
+  account already holds stays in Mail and never becomes tickets.
+- **The body**: `{name?, team_id?, brand_id?, signature_html?, auto_reply_enabled?, auto_reply_subject?,
+  auto_reply_html?, keep_account?}`, checked as on creating a mailbox (the name defaults to the account's,
+  never an address; a team or brand of the workspace; an address another mailbox has is `409`). →
+  `201 {mailbox_id, account_removed}`.
+- **The account.** Unless `keep_account`, it is removed in the same transaction, with its mail in
+  opendesk, so nothing shows in both places; its grant is not revoked, since the mailbox goes on using
+  it. Kept, the address is read in both.
+- Audit-logged `mailbox.created_from_collab` (`{account_id, provider, email, account_removed}`), with
+  `mailbox.created` and `collab.accounts` events.
+
 ## Events
 
 Collab events carry ids only and reach only the members who see what changed: they are
@@ -1245,6 +1378,7 @@ webhooks.
 | --- | --- | --- |
 | `collab.changed` | `{account_id: string \| null, thread_ids: string[], folders: boolean}`: conversations changed (synced, acted on, sent, shared, assigned, commented, or their account's `reply_all` changed); `folders` when folders or counts changed. Refetch what is shown | who sees the account, plus who sees the conversations |
 | `collab.accounts` | `{account_id}`: an account was connected, changed, removed, or changed status | its owner and audience, before and after |
+| `collab.sidebar` | `{}`: the member saved their sidebar preferences (`PUT /v1/collab/sidebar`, with or without Collab). Refetch them | that member alone |
 
 ## Audit
 
@@ -1252,7 +1386,7 @@ webhooks.
 names; `signature_html` with `from_provider` for a pull, `out_of_office` for the automatic reply,
 `default_from` for the default address; an address added, changed or removed is `fields: ["identities"]`
 with its `identity_id` and `added`, `removed` or the changed `identity_fields`),
-`collab.account_disconnected`, `collab.categories_updated` (`{scope: "workspace" | "team", team_id?, enabled, keys}`; an
+`collab.account_disconnected`, `mailbox.created_from_collab` ("Using an account for tickets"), `collab.categories_updated` (`{scope: "workspace" | "team", team_id?, enabled, keys}`; an
 account's own choice is `collab.account_updated` with `fields: ["categories"]`), `collab.category_rule`
 (`{account_id, action: "added" | "removed", category}`, never the sender), `collab.history_import` (`{action: "started" | "paused" | "resumed" | "canceled",
 since, include_spam_trash}`), `collab.thread_shared` (`{thread_id, everyone, team_ids,

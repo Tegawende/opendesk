@@ -11,7 +11,7 @@ import { useSession } from "@/lib/session";
 import type { Contact } from "@/lib/api/types";
 import { shell } from "@/app/shellStore";
 import { useTeamsCtx } from "./teams";
-import { createTicketBody, draftKey, isChat, isDirty, newTicketDrafts, newTicketProblem, useNewTicketDraft, type NewTicketDraft } from "./newTicket";
+import { createTicketBody, draftKey, isChat, isDirty, isLog, newTicketDrafts, newTicketProblem, useNewTicketDraft, type NewTicketDraft } from "./newTicket";
 
 /**
  * Writing a new ticket, in the dialog or on its page: the workspace's draft, the
@@ -44,11 +44,12 @@ export function useNewTicket({ onCreated }: { onCreated?: () => void } = {}) {
     if (next?.id !== mailbox) set({ mailbox: next?.id });
   }, [fromChoices.map((m) => m.id).join(), mailbox]); // eslint-disable-line react-hooks/exhaustive-deps
   const chat = isChat(draft);
+  const log = isLog(draft);
   // The team follows the address's default team until someone picks one; a chat's comes from routing.
   const teamId = draft.team !== undefined ? draft.team : chat ? null : (teams.mailbox(mailbox)?.team_id ?? null);
   const teamRow = teams.team(teamId);
-  // An address with no way to send cannot email the first message (mailbox_cannot_send).
-  const noSender = draft.kind === "reply" && !chat && teams.mailbox(mailbox)?.sending === "system_off";
+  // An address with no way to send cannot email the first message (mailbox_cannot_send); a logged request sends nothing.
+  const noSender = draft.kind === "reply" && !chat && !log && teams.mailbox(mailbox)?.sending === "system_off";
   const assignee = draft.assignee === undefined ? me : draft.assignee;
 
   const create = useMutation({
@@ -76,6 +77,7 @@ export function useNewTicket({ onCreated }: { onCreated?: () => void } = {}) {
     me,
     draft,
     chat,
+    log,
     set,
     discard: () => newTicketDrafts.clear(key),
     dirty: isDirty(draft),

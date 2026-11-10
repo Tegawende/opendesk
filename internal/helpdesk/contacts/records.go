@@ -3,6 +3,7 @@ package contacts
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
@@ -32,14 +33,38 @@ type contactListIn struct {
 	Q         string `query:"q" maxLength:"200" doc:"Search name, email, phone and custom field values"`
 	CompanyID string `query:"company_id" doc:"Only contacts of this company"`
 	Tag       string `query:"tag" maxLength:"50" doc:"Label name"`
+	Blocked   string `query:"blocked" enum:"true,false," doc:"Only blocked contacts, or only those who are not"`
+	Sort      string `query:"sort" enum:"-created,created,name,-name,-tickets,tickets," doc:"Newest first by default"`
 	fieldParams
 }
 
 type companyListIn struct {
 	httpx.ListParams
-	Q   string `query:"q" maxLength:"200" doc:"Search name, domain and custom field values"`
-	Tag string `query:"tag" maxLength:"50" doc:"Label name"`
+	Q    string `query:"q" maxLength:"200" doc:"Search name, domain and custom field values"`
+	Tag  string `query:"tag" maxLength:"50" doc:"Label name"`
+	Sort string `query:"sort" enum:"name,-name,-created,created,-contacts,contacts," doc:"By name, A to Z, by default"`
 	fieldParams
+}
+
+// offsetCursor pages a list sorted by something other than its default order. The default
+// orders page by key; these are for a person looking through a list, so a position is enough.
+type offsetCursor struct {
+	O int `json:"o"`
+}
+
+// listOrder is the ORDER BY of a requested sort ("" or the default: the caller's own keyset
+// order), with a tie-break on the id so every page of it is stable. Only fixed text from
+// the table below reaches the query.
+func listOrder(sort string, orders map[string]string, id string) string {
+	order, ok := orders[sort]
+	if !ok {
+		return ""
+	}
+	dir := " ASC"
+	if strings.HasPrefix(sort, "-") {
+		dir = " DESC"
+	}
+	return order + dir + ", " + id + dir
 }
 
 // recordFilters builds the extra " AND ..." clauses for label and custom field filters on
