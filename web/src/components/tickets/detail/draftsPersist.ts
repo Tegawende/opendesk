@@ -84,7 +84,7 @@ export function isEmptyDraft(d: {
   threadId?: string;
   threadForward?: string;
 }): boolean {
-  const text = d.html.replace(/<[^>]*>/g, "").replace(/&nbsp;|\s/g, "");
+  const text = d.html ? (new DOMParser().parseFromString(d.html, "text/html").body.textContent ?? "").replace(/\s/g, "") : "";
   const media = /<(img|video|iframe|hr)\b/i.test(d.html);
   return (
     !text &&
