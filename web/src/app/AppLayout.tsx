@@ -1,12 +1,14 @@
 import { useTranslation } from "react-i18next";
+import { useSidebarEdit } from "@/lib/collab/sidebarEdit";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWaitingAlerts } from "@/components/tickets/useWaitingAlerts";
 import { Outlet, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useRef, type CSSProperties } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Dialog as D } from "radix-ui";
 import { identify } from "@/lib/analytics";
 import { formatUsd } from "@/lib/format";
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
+import { useGlobalShortcuts } from "./globalShortcuts";
 import { useHeartbeat } from "@/lib/pictures";
 import { playAlertOnce, type AlertSound } from "@/lib/alertSound";
 import { realtime, startRealtime, stopRealtime } from "@/lib/realtime/manager";
@@ -22,7 +24,7 @@ import { q, qk } from "@/lib/queries";
 import { subscribeWebPush } from "@/lib/webPush";
 import { afterOwnCreations, wantsTicketSound } from "@/lib/ownTickets";
 import { i18n } from "@/i18n";
-import { collabThread, describe, joinedTeam, ticketFolder } from "./Notifications";
+import { collabThread, describe, joinedTeam, ticketFolder, wikiTarget } from "./Notifications";
 import { Sidebar } from "./Sidebar";
 import { SuspendedWorkspace } from "./SuspendedWorkspace";
 import { AppHeader } from "./AppHeader";
@@ -36,10 +38,12 @@ import { notifyDesktop, useDesktopBadge, useDesktopPreferences } from "./useDesk
 import { AiBalanceBanner } from "@/components/billing/AiBalanceBanner";
 import { DesktopUpdateBanner } from "@/components/desktop/UpdateBanner";
 import { AllowNotificationsBanner } from "@/components/notifications/AllowBanner";
-import { NEW_TICKET_PATH, shell, toggleNav, useNav, useShell } from "./shellStore";
+import { NEW_TICKET_PATH, shell, useNav, useShell } from "./shellStore";
+import { quickAddOpen, useQuickAdd } from "./quickAdd";
 import { useCollab } from "@/lib/collab/hooks";
 import { useProducts } from "@/lib/products";
 import { useSpaceUi } from "@/lib/spaces/store";
+import { useOwnSectionsUi } from "@/lib/collab/ownSectionsUi";
 import { compose } from "@/lib/collab/compose";
 
 const NewTicketDialog = lazy(() => import("@/components/tickets/NewTicketDialog"));
@@ -48,7 +52,11 @@ const CollabRoot = lazy(() => import("@/components/collab/CollabRoot"));
 // Customize sidebar is every member's, with or without Collab.
 const CustomizeSidebar = lazy(() => import("@/components/collab/CustomizeSidebar").then((m) => ({ default: m.CustomizeSidebar })));
 const SpaceEditorRoot = lazy(() => import("@/components/spaces/SpaceEditor"));
+const OwnSectionDialogs = lazy(() => import("@/components/collab/OwnSectionDialogs").then((m) => ({ default: m.OwnSectionDialogs })));
+const LayoutsDialog = lazy(() => import("@/components/collab/LayoutsDialog").then((m) => ({ default: m.LayoutsDialog })));
 const UpgradeDialog = lazy(() => import("@/components/billing/UpgradeDialog"));
+// The sidebar's and the header's add dialogs, loaded the first time one opens.
+const QuickAddRoot = lazy(() => import("./QuickAddRoot"));
 
 function notificationText(n: Notification) {
   const subject = n.ticket ? `#${n.ticket.number}` : "";
@@ -82,6 +90,9 @@ function notificationText(n: Notification) {
     case "support_channel_unhealthy":
     case "collab_assigned":
     case "collab_mention":
+    case "wiki_mention":
+    case "wiki_comment":
+    case "wiki_reminder":
       return describe(n, i18n.getFixedT(null, "shell"));
     default:
       return `Notification ${subject}`;
@@ -104,6 +115,9 @@ const notificationSound: Partial<Record<Notification["type"], AlertSound>> = {
   sla_breached: "assigned",
   collab_assigned: "assigned",
   collab_mention: "assigned",
+  wiki_mention: "assigned",
+  wiki_comment: "reply",
+  wiki_reminder: "assigned",
 };
 
 /** What a stopped import says went wrong, for its toast. */
@@ -176,7 +190,7 @@ function useRealtimeConnection() {
         const body =
           n.type === "ai_cap_reached"
             ? "Chats go to your team until the cap resets or you raise it."
-            : (billingNoticeBody[n.type] ?? importProblem(n) ?? n.ticket?.subject ?? (typeof n.data.subject === "string" ? n.data.subject : undefined));
+            : (billingNoticeBody[n.type] ?? importProblem(n) ?? n.ticket?.subject ?? (typeof n.data.subject === "string" ? n.data.subject : undefined) ?? wikiTarget(n)?.title ?? undefined);
         toast.info(notificationText(n), {
           description: name ? [name, body].filter(Boolean).join(" · ") : body,
           action: n.ticket
@@ -204,6 +218,14 @@ function useRealtimeConnection() {
                       () =>
                         void navigate({ to: "/mail/$box/{-$threadId}", params: { box: n.type === "collab_assigned" ? "assigned" : "all", threadId: collabThread(n)! }, search: {} }),
                     ),
+                  }
+              : wikiTarget(n)?.pageId
+                ? {
+                    label: "Open",
+                    onClick: go(() => {
+                      const w = wikiTarget(n)!;
+                      void navigate({ to: "/wiki/$pageId", params: { pageId: w.pageId! }, search: w.thread ? { comment: w.thread } : {} });
+                    }),
                   }
               : n.type === "ai_cap_reached" || n.type === "ai_key_failed"
               ? { label: "Settings", onClick: go(() => void navigate({ to: n.type === "ai_key_failed" ? "/settings/ai" : "/settings/ai/behaviour" })) }
@@ -246,7 +268,6 @@ export function AppLayout() {
   useDesktopBadge();
   useDesktopPreferences();
   useWebPushSubscription();
-  const navigate = useNavigate();
   const newTicketOpen = useShell((s) => s.newTicketOpen);
   const sidebarOpen = useShell((s) => s.sidebarOpen);
   const upgradeReason = useUpgrade((s) => s.reason);
@@ -265,6 +286,14 @@ export function AppLayout() {
   const collab = useCollab();
   const { tickets: ticketsOn } = useProducts();
   const spaceEditor = useSpaceUi((s) => !!s.editor);
+  const ownSectionPopup = useOwnSectionsUi((s) => !!s.naming || !!s.adding || !!s.addingToSpace || s.addingFavorites || !!s.renamingRow);
+  const editingSidebar = useSidebarEdit((s) => s.editing);
+  // Once loaded the add dialogs stay, so one closing plays its animation.
+  const quickAddAsked = useQuickAdd(quickAddOpen);
+  const [quickAddLoaded, setQuickAddLoaded] = useState(false);
+  useEffect(() => {
+    if (quickAddAsked) setQuickAddLoaded(true);
+  }, [quickAddAsked]);
   // On the mail pages, c writes new mail and g i goes to the mail inbox.
   const onMail = collab.enabled && section === "mail";
   // The new ticket page is the dialog's draft on a full page: New ticket there opens nothing more.
@@ -273,26 +302,15 @@ export function AppLayout() {
     if (onNewTicket && newTicketOpen) shell.newTicket(false);
   }, [onNewTicket, newTicketOpen]);
 
-  useHotkeys({
-    "mod+k": () => shell.palette(!useShell.getState().paletteOpen),
-    "?": () => shell.shortcuts(),
-    "shift+?": () => shell.shortcuts(),
-    c: () => {
+  useShortcuts({
+    "global.palette": () => shell.palette(!useShell.getState().paletteOpen),
+    "global.help": () => shell.shortcuts(),
+    "global.new": () => {
       if (onMail) compose.open();
       else if (ticketsOn && !onNewTicket) shell.newTicket();
     },
-    b: () => toggleNav(),
-    "g i": () =>
-      onMail
-        ? void navigate({ to: "/mail/$box/{-$threadId}", params: { box: "inbox", threadId: undefined }, search: (prev: { account?: string }) => ({ account: prev.account }) })
-        : void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "unassigned", ticketId: undefined } }),
-    "g m": () => void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "mine", ticketId: undefined } }),
-    "g c": () => void navigate({ to: "/contacts/{-$contactId}", params: { contactId: undefined } }),
-    "g k": () => void navigate({ to: "/kb" }),
-    "g w": () => void navigate({ to: "/wiki" }),
-    "g r": () => void navigate({ to: "/reports" }),
-    "g s": () => void navigate({ to: "/settings" }),
   });
+  useGlobalShortcuts(onMail);
 
   if (!authed) return null;
   if (suspended) return <SuspendedWorkspace />;
@@ -369,9 +387,24 @@ export function AppLayout() {
       <Suspense fallback={null}>
         <CustomizeSidebar />
       </Suspense>
+      {editingSidebar && (
+        <Suspense fallback={null}>
+          <LayoutsDialog />
+        </Suspense>
+      )}
+      {ownSectionPopup && (
+        <Suspense fallback={null}>
+          <OwnSectionDialogs />
+        </Suspense>
+      )}
       {spaceEditor && (
         <Suspense fallback={null}>
           <SpaceEditorRoot />
+        </Suspense>
+      )}
+      {(quickAddAsked || quickAddLoaded) && (
+        <Suspense fallback={null}>
+          <QuickAddRoot />
         </Suspense>
       )}
     </div>

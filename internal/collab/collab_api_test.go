@@ -145,8 +145,14 @@ func TestAPIAccountSharingAndDelete(t *testing.T) {
 	a := w.account(w.agent, ProviderGoogle, VisibilityPrivate, Audience{})
 	srv := w.api(w.agent)
 	var out MailAccount
-	if st := doJSON(t, "PATCH", srv.URL+"/v1/collab/accounts/"+a.ID.String(), map[string]any{"visibility": "shared"}, nil); st != 422 {
-		t.Fatalf("shared with nobody: %d, want 422", st)
+	// Shared with no one added yet (the team has not joined): only its owner sees it.
+	if st := doJSON(t, "PATCH", srv.URL+"/v1/collab/accounts/"+a.ID.String(), map[string]any{"visibility": "shared"}, &out); st != 200 ||
+		out.Visibility != VisibilityShared || !out.SharedWith.Empty() {
+		t.Fatalf("shared with no one yet: %d %+v", st, out)
+	}
+	var seen []MailAccount
+	if st := doJSON(t, "GET", w.api(w.agent2).URL+"/v1/collab/accounts", nil, &seen); st != 200 || len(seen) != 0 {
+		t.Fatalf("a teammate sees an account shared with no one yet: %d %+v", st, seen)
 	}
 	if st := doJSON(t, "PATCH", srv.URL+"/v1/collab/accounts/"+a.ID.String(), map[string]any{"visibility": "shared",
 		"shared_with": Audience{UserIDs: []uuid.UUID{uuid.New()}}}, nil); st != 422 {
@@ -352,7 +358,7 @@ func TestAPISidebarWithoutCollab(t *testing.T) {
 	w.account(w.agent, ProviderGoogle, VisibilityPrivate, Audience{})
 	w.account(w.agent2, ProviderGoogle, VisibilityShared, Audience{Everyone: true})
 	var prefs SidebarPrefs
-	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || len(prefs.Order) != 6 ||
+	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || len(prefs.Order) != 7 ||
 		len(prefs.Pinned) != 0 || len(prefs.AutoPins) != 0 {
 		t.Fatalf("defaults without Collab: %d %+v", st, prefs)
 	}
@@ -937,7 +943,7 @@ func TestAPISidebar(t *testing.T) {
 	srv := w.api(w.agent)
 	var prefs SidebarPrefs
 	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || !prefs.MarkReadOnOpen || !prefs.UnifiedInbox ||
-		len(prefs.Order) != 6 || prefs.Order[0] != "favorites" || prefs.Pinned == nil {
+		strings.Join(prefs.Order, ",") != "favorites,inbox,mail,teams,views,pages,workspace" || prefs.Pinned == nil {
 		t.Fatalf("defaults: %d %+v", st, prefs)
 	}
 	in := SidebarPrefs{Order: []string{"mail", "favorites"}, Hidden: []string{"box:spam"}, Pinned: []SidebarPin{{Kind: "box", ID: "inbox"}},
@@ -953,6 +959,21 @@ func TestAPISidebar(t *testing.T) {
 	// Someone else's is their own.
 	if st := doJSON(t, "GET", w.api(w.agent2).URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || !prefs.MarkReadOnOpen {
 		t.Fatalf("other member: %+v", prefs)
+	}
+	// The waiting chats row is off until the member turns it on, and a client that leaves it out keeps it.
+	if prefs.ShowWaitingChats == nil || *prefs.ShowWaitingChats {
+		t.Fatalf("waiting chats by default: %v", prefs.ShowWaitingChats)
+	}
+	on := true
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", SidebarPrefs{Order: []string{"inbox"}, ShowWaitingChats: &on}, &prefs); st != 200 || !*prefs.ShowWaitingChats {
+		t.Fatalf("waiting chats on: %d %v", st, prefs.ShowWaitingChats)
+	}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", SidebarPrefs{Order: []string{"inbox"}}, &prefs); st != 200 || !*prefs.ShowWaitingChats {
+		t.Fatalf("waiting chats left out: %d %v", st, prefs.ShowWaitingChats)
+	}
+	off := false
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", SidebarPrefs{Order: []string{"inbox"}, ShowWaitingChats: &off}, &prefs); st != 200 || *prefs.ShowWaitingChats {
+		t.Fatalf("waiting chats off: %d %v", st, prefs.ShowWaitingChats)
 	}
 	big := SidebarPrefs{Hidden: make([]string, 0, 450)}
 	for i := range 450 {
@@ -1013,6 +1034,156 @@ func TestAPISidebarPinsAllInboxes(t *testing.T) {
 	w.account(w.agent2, ProviderGoogle, VisibilityPrivate, Audience{})
 	if st := doJSON(t, "GET", b.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || len(prefs.Pinned) != 0 || len(prefs.AutoPins) != 1 {
 		t.Fatalf("hidden: %d %+v", st, prefs)
+	}
+}
+
+// TestAPISidebarSections: a member's own sections hold rows of anything the workspace
+// offers, sit in the order as custom:<id>, and stay when a client leaves them out.
+func TestAPISidebarSections(t *testing.T) {
+	w := newWorld(t)
+	srv := w.api(w.agent)
+	var prefs SidebarPrefs
+	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || prefs.Sections == nil || len(prefs.Sections) != 0 {
+		t.Fatalf("defaults: %d %+v", st, prefs.Sections)
+	}
+	page, inbox := uuid.New(), uuid.New()
+	base := func() SidebarPrefs {
+		p := defaultSidebar()
+		p.Order = append([]string{"custom:launch", "mailbox:" + inbox.String(), "team:mine"}, p.Order...)
+		p.Sections = []SidebarSection{{ID: "launch", Title: "  Launch  ", Items: []SidebarItem{
+			{Kind: "folder", ID: strings.ToUpper(uuid.NewString())}, {Kind: "view", ID: uuid.NewString(), Name: "Bugs", Badge: "urgent"},
+			{Kind: "wiki_page", ID: page.String()}, {Kind: "wiki_space", ID: uuid.NewString()}, {Kind: "box", ID: "inbox"},
+			{Kind: "ticket_folder", ID: "mine"}, {Kind: "team", ID: "mine"}, {Kind: "page", ID: "reports"},
+			{Kind: "mailbox", ID: uuid.NewString()},
+		}}, {ID: "later", Collapsed: true}}
+		return p
+	}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", base(), &prefs); st != 200 {
+		t.Fatalf("put: %d", st)
+	}
+	prefs = SidebarPrefs{}
+	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || len(prefs.Sections) != 2 || prefs.Order[0] != "custom:launch" {
+		t.Fatalf("roundtrip: %d %+v", st, prefs)
+	}
+	got := prefs.Sections[0]
+	if got.Title != "Launch" || len(got.Items) != 9 || got.Items[0].ID != strings.ToLower(got.Items[0].ID) || got.Items[1].Name != "Bugs" ||
+		got.Items[1].Badge != "urgent" || !prefs.Sections[1].Collapsed || prefs.Sections[1].Items == nil {
+		t.Fatalf("stored: %+v", prefs.Sections)
+	}
+	// A client that leaves them out keeps them.
+	old := map[string]any{"order": []string{"mail"}, "hidden": []string{}, "pinned": []any{}, "expanded_accounts": []string{},
+		"mark_read_on_open": true, "unified_inbox": true}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", old, &prefs); st != 200 || len(prefs.Sections) != 2 {
+		t.Fatalf("left out: %d %+v", st, prefs.Sections)
+	}
+	// Up to 300 rows fit, past the 16 KB of the rest.
+	full := base()
+	full.Sections = nil
+	for i := range 5 {
+		sec := SidebarSection{ID: "s" + strconv.Itoa(i), Title: "Section " + strconv.Itoa(i)}
+		for range 60 {
+			sec.Items = append(sec.Items, SidebarItem{Kind: "wiki_page", ID: uuid.NewString()})
+		}
+		full.Sections = append(full.Sections, sec)
+	}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", full, nil); st != 200 {
+		t.Fatalf("300 rows: %d", st)
+	}
+
+	bad := map[string]func(p *SidebarPrefs){
+		"kind":          func(p *SidebarPrefs) { p.Sections[0].Items[0].Kind = "everywhere" },
+		"section kind":  func(p *SidebarPrefs) { p.Sections[0].Items[0] = SidebarItem{Kind: "section", ID: "inbox"} },
+		"fixed id":      func(p *SidebarPrefs) { p.Sections[0].Items[0] = SidebarItem{Kind: "box", ID: "spam"} },
+		"uuid":          func(p *SidebarPrefs) { p.Sections[0].Items[0].ID = "nope" },
+		"badge":         func(p *SidebarPrefs) { p.Sections[0].Items[0].Badge = "all" },
+		"section id":    func(p *SidebarPrefs) { p.Sections[0].ID = "no spaces" },
+		"duplicate id":  func(p *SidebarPrefs) { p.Sections[1].ID = "launch" },
+		"long title":    func(p *SidebarPrefs) { p.Sections[0].Title = strings.Repeat("x", 41) },
+		"title link":    func(p *SidebarPrefs) { p.Sections[0].Title = "see example.com" },
+		"long name":     func(p *SidebarPrefs) { p.Sections[0].Items[1].Name = strings.Repeat("x", 65) },
+		"too many rows": func(p *SidebarPrefs) { p.Sections[1].Items = make([]SidebarItem, 61) },
+		"too many in all": func(p *SidebarPrefs) {
+			*p = full
+			p.Sections = append(p.Sections, SidebarSection{ID: "more", Items: []SidebarItem{{Kind: "box", ID: "inbox"}}})
+		},
+		"too many sections": func(p *SidebarPrefs) {
+			for i := range 19 {
+				p.Sections = append(p.Sections, SidebarSection{ID: "x" + strconv.Itoa(i)})
+			}
+		},
+		"section icon":      func(p *SidebarPrefs) { p.Sections[0].Icon = "rocket" },
+		"row icon":          func(p *SidebarPrefs) { p.Sections[0].Items[0].Icon = "🚀🚀" },
+		"row order section": func(p *SidebarPrefs) { p.RowOrder = map[string][]string{"custom:launch": {"team:mine"}} },
+		"row order duplicate": func(p *SidebarPrefs) {
+			p.RowOrder = map[string][]string{"inbox": {"ticket_folder:mine", "ticket_folder:mine"}}
+		},
+		"row order empty id": func(p *SidebarPrefs) { p.RowOrder = map[string][]string{"teams": {""}} },
+		"row order too long": func(p *SidebarPrefs) { p.RowOrder = map[string][]string{"teams": make([]string, 301)} },
+		"inbox section id":   func(p *SidebarPrefs) { p.Order = append(p.Order, "mailbox:support") },
+		"team section id":    func(p *SidebarPrefs) { p.Order = append(p.Order, "team:billing") },
+	}
+	for name, f := range bad {
+		p := base()
+		f(&p)
+		if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", p, nil); st != 422 {
+			t.Errorf("%s: %d", name, st)
+		}
+	}
+}
+
+// Own sections and rows wear an emoji, and the member orders the rows of built-in sections;
+// a client that leaves the order out keeps it.
+func TestAPISidebarIconsAndRowOrder(t *testing.T) {
+	w := newWorld(t)
+	srv := w.api(w.agent)
+	var prefs SidebarPrefs
+	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || prefs.RowOrder == nil || len(prefs.RowOrder) != 0 {
+		t.Fatalf("defaults: %d %+v", st, prefs.RowOrder)
+	}
+	p := defaultSidebar()
+	p.Order = append(p.Order, "custom:mine")
+	p.Sections = []SidebarSection{{ID: "mine", Title: "Mine", Icon: " 🚀 ", Items: []SidebarItem{{Kind: "box", ID: "inbox", Icon: "📥"}}}}
+	p.RowOrder = map[string][]string{"inbox": {"ticket_folder:open", "ticket_folder:mine"}, "workspace": {"page:reports"}}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", p, &prefs); st != 200 {
+		t.Fatalf("put: %d", st)
+	}
+	if prefs.Sections[0].Icon != "🚀" || prefs.Sections[0].Items[0].Icon != "📥" || len(prefs.RowOrder["inbox"]) != 2 {
+		t.Fatalf("stored: %+v %+v", prefs.Sections, prefs.RowOrder)
+	}
+	// The member's other tabs and devices hear of it, and nobody else.
+	if n := w.count(`SELECT count(*) FROM events WHERE workspace_id = $1 AND type = 'collab.sidebar' AND user_ids = ARRAY[$2::uuid]`, w.wid, w.agent.UserID); n != 1 {
+		t.Fatalf("sidebar events: %d", n)
+	}
+	// Names and emoji of the member's own for built-in sections and rows; an empty one goes.
+	p.Names = map[string]string{"section:inbox": "  My  desk ", "view:" + uuid.NewString(): "Hot", "box:inbox": ""}
+	p.Icons = map[string]string{"section:inbox": "🛎️", "team:mine": ""}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", p, &prefs); st != 200 || prefs.Names["section:inbox"] != "My desk" || len(prefs.Names) != 2 ||
+		prefs.Icons["section:inbox"] != "🛎️" || len(prefs.Icons) != 1 {
+		t.Fatalf("labels: %d %+v %+v", st, prefs.Names, prefs.Icons)
+	}
+	for name, f := range map[string]func(q *SidebarPrefs){
+		"long name": func(q *SidebarPrefs) { q.Names = map[string]string{"section:inbox": strings.Repeat("x", 65)} },
+		"link name": func(q *SidebarPrefs) { q.Names = map[string]string{"section:inbox": "see example.com"} },
+		"empty key": func(q *SidebarPrefs) { q.Names = map[string]string{"": "x"} },
+		"icon":      func(q *SidebarPrefs) { q.Icons = map[string]string{"section:inbox": "bell"} },
+		"too many": func(q *SidebarPrefs) {
+			q.Names = map[string]string{}
+			for i := range 301 {
+				q.Names["view:"+strconv.Itoa(i)] = "x"
+			}
+		},
+	} {
+		q := p
+		f(&q)
+		if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", q, nil); st != 422 {
+			t.Errorf("%s: %d", name, st)
+		}
+	}
+	old := map[string]any{"order": []string{"inbox"}, "hidden": []string{}, "pinned": []any{}, "expanded_accounts": []string{},
+		"mark_read_on_open": true, "unified_inbox": true}
+	prefs = SidebarPrefs{}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", old, &prefs); st != 200 || prefs.RowOrder["workspace"][0] != "page:reports" || prefs.Names["section:inbox"] != "My desk" {
+		t.Fatalf("left out: %d %+v", st, prefs.RowOrder)
 	}
 }
 

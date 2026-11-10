@@ -22,6 +22,7 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	registerTickets(d, api)
 	registerMessages(d, api)
 	registerDrafts(d, api)
+	registerReplyDrafts(d, api)
 	registerTyping(d, api)
 	registerThreads(d, api)
 	registerTemplates(d, api)

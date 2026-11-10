@@ -33,6 +33,7 @@ import { atLeast, useRole } from "@/lib/session";
 import { useProducts } from "@/lib/products";
 import { useStartChat } from "@/components/tickets/useNewTicket";
 import { CompanyPicker } from "./CompanyPicker";
+import { ContactEmails } from "./ContactEmails";
 import { CompanyGlyph, Detail, fieldLabel, fieldsOf, fieldText, MiniStat, none } from "./bits";
 import { RecordFields, RecordLabels, useRecordFields } from "./LabelsAndFields";
 import { dropContact, patchContact, restore, snapshot } from "./cache";
@@ -138,6 +139,12 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
                     <CopyButton value={c.email} label={t("drawer.copyEmail")} className="size-5" />
                   </span>
                 )}
+                {c.emails.map((extra) => (
+                  <span key={extra} className="mono flex min-w-0 items-center gap-0.5 text-xs text-fg-3" data-ph-mask>
+                    <span className="truncate">{extra}</span>
+                    <CopyButton value={extra} label={t("drawer.copyEmail")} className="size-5" />
+                  </span>
+                ))}
                 {c.company && (
                   <Link
                     to="/companies/{-$companyId}"
@@ -175,8 +182,14 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
           <AnimatePresence mode="wait" initial={false}>
             {editing ? (
               <motion.div key="edit" {...(reduce ? {} : swap)}>
+                {/* Each change here is saved at once, apart from the form's Save. Extras sit beside a primary address. */}
+                {c.email && (
+                  <div className="border-b border-line-soft px-5 py-4">
+                    <ContactEmails c={c} />
+                  </div>
+                )}
                 <EditContact
-                  key={c.id + c.updated_at}
+                  key={c.id}
                   c={c}
                   onDirty={setDirty}
                   onDeleted={onClose}
@@ -359,6 +372,9 @@ function EditContact({ c, onDirty, onDeleted, onDone }: { c: Contact; onDirty: (
   const [company, setCompany] = useState<CompanyRef | null>(c.company);
   const [blocked, setBlocked] = useState(c.blocked);
   const [error, setError] = useState<string | null>(null);
+
+  // Another address made the primary one (ContactEmails) changes the email field under the form.
+  useEffect(() => setEmail(c.email ?? ""), [c.email]);
 
   const dirty =
     name !== c.name || email !== (c.email ?? "") || phone !== c.phone || notes !== c.notes || company?.id !== c.company?.id || blocked !== c.blocked;

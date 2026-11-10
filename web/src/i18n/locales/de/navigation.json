@@ -14,6 +14,7 @@
     "connectAnApp": "App verbinden",
     "createAWorkspace": "Workspace erstellen",
     "connectAMailbox": "Postfach verbinden",
+    "whatIsItFor": "Wofür ist er?",
     "inbox": "Posteingang",
     "view": "Ansicht",
     "tickets": "Tickets",
@@ -35,6 +36,7 @@
     "mailbox": "Postfach",
     "mailAccounts": "Mailkonten",
     "mailAccount": "Mailkonto",
+    "mailCategories": "Posteingangskategorien",
     "automation": "Automatisierung",
     "webhook": "Webhook",
     "planAndBilling": "Tarif und Abrechnung",
@@ -47,6 +49,7 @@
     "notifications": "Benachrichtigungen",
     "agentToAgent": "Agent-zu-Agent",
     "workspaces": "Workspaces",
+    "shortcuts": "Tastenkürzel",
     "general": "Allgemein",
     "members": "Mitglieder",
     "teams": "Teams",
@@ -81,9 +84,15 @@
     "newUpdate": "Neues Update",
     "myTeams": "Meine Teams",
     "newTicket": "Neues Ticket",
-    "mailCategories": "Posteingangskategorien",
     "phone": "Telefon",
-    "print": "Drucken"
+    "print": "Drucken",
+    "wikiGraph": "Graph",
+    "wikiTags": "Tags",
+    "wikiTemplates": "Vorlagen",
+    "wikiTrash": "Papierkorb",
+    "pages": "Seiten",
+    "pagesPage": "Seite",
+    "pagesSettings": "Seiten"
   },
   "folders": {
     "unassigned": "Nicht zugewiesen",
@@ -108,6 +117,7 @@
     "notifications": "Benachrichtigungen",
     "agentToAgent": "Agent-zu-Agent",
     "workspaces": "Workspaces",
+    "shortcuts": "Tastenkürzel",
     "general": "Allgemein",
     "members": "Mitglieder",
     "teams": "Teams",
@@ -127,6 +137,7 @@
     "mailboxes": "Postfächer",
     "supportChannels": "Support-Kanäle",
     "mailAccounts": "Mailkonten",
+    "mailCategories": "Posteingangskategorien",
     "routing": "Routing",
     "brandsAndWidgets": "Marken und Widgets",
     "emailDesign": "E-Mail-Design",
@@ -142,8 +153,8 @@
     "aiClients": "KI-Clients",
     "webhooks": "Webhooks",
     "auditLog": "Audit-Log",
-    "mailCategories": "Posteingangskategorien",
-    "phone": "Telefon"
+    "phone": "Telefon",
+    "pages": "Seiten"
   },
   "settingsPage": "Einstellungsseite",
   "command": {
@@ -177,7 +188,9 @@
     "aiKnowledge": "KI-Agent: Wissen",
     "aiTools": "KI-Agent: Tools",
     "aiPlayground": "KI-Agent: Testbereich",
-    "importHistory": "Verlauf aus Zendesk, Help Scout, Freshdesk, Intercom, Front oder CSV importieren"
+    "importHistory": "Verlauf aus Zendesk, Help Scout, Freshdesk, Intercom, Front oder CSV importieren",
+    "pages": "Seiten",
+    "newPage": "Neue Seite"
   },
   "shortcuts": {
     "general": "Allgemein",

@@ -73,6 +73,21 @@
     "block": "Bloquer le contact",
     "blockHint": "Ses nouveaux e-mails et conversations sont dirigés vers les indésirables."
   },
+  "emails": {
+    "label": "Autres adresses e-mail",
+    "hint": "Les e-mails de ces adresses sont rattachés à ce contact.",
+    "placeholder": "nom@example.com",
+    "add": "Ajouter",
+    "added": "Adresse ajoutée",
+    "removed": "Adresse retirée",
+    "madePrimary": "Adresse principale modifiée",
+    "failed": "Impossible de modifier l’adresse",
+    "makePrimary": "Définir comme principale",
+    "remove": "Retirer",
+    "removeLabel": "Retirer {{email}}",
+    "primaryTitle": "Définir comme adresse principale ?",
+    "primaryBody": "{{email}} devient l’e-mail du contact et {{old}} reste comme autre adresse. La connexion au portail client utilisera alors {{email}}."
+  },
   "empty": {
     "title": "Aucun contact pour le moment",
     "description": "Les contacts sont créés lorsque les clients vous écrivent par e-mail ou par chat. Vous pouvez aussi les ajouter vous-même.",

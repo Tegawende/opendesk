@@ -71,6 +71,21 @@
     "block": "Block contact",
     "blockHint": "New emails and chats from them go to spam."
   },
+  "emails": {
+    "label": "Other email addresses",
+    "hint": "Mail from these addresses goes to this contact.",
+    "placeholder": "name@example.com",
+    "add": "Add",
+    "added": "Address added",
+    "removed": "Address removed",
+    "madePrimary": "Primary address changed",
+    "failed": "Couldn’t change the address",
+    "makePrimary": "Make primary",
+    "remove": "Remove",
+    "removeLabel": "Remove {{email}}",
+    "primaryTitle": "Make this the primary address?",
+    "primaryBody": "{{email}} becomes the contact’s email, and {{old}} stays as another address. Signing in to the customer portal then uses {{email}}."
+  },
   "empty": {
     "title": "No contacts yet",
     "description": "Contacts are created when customers email or chat with you. You can also add one yourself.",

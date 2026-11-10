@@ -50,6 +50,14 @@ func upsertContactByEmail(ctx context.Context, tx pgx.Tx, wid uuid.UUID, email, 
 	}
 	var id uuid.UUID
 	var created bool
+	// An extra address of a contact is that contact's.
+	var extra uuid.UUID
+	switch err := tx.QueryRow(ctx, `SELECT contact_id FROM contact_emails WHERE workspace_id = $1 AND email = $2`, wid, email).Scan(&extra); {
+	case err == nil:
+		return extra, false, nil
+	case !db.IsNotFound(err):
+		return uuid.Nil, false, fmt.Errorf("find contact: %w", err)
+	}
 	err := tx.QueryRow(ctx, `INSERT INTO contacts (id, workspace_id, email, name) VALUES ($1, $2, $3, $4)
 		ON CONFLICT (workspace_id, email) WHERE email IS NOT NULL
 		DO UPDATE SET name = CASE WHEN contacts.name = '' THEN EXCLUDED.name ELSE contacts.name END
@@ -490,6 +498,13 @@ func AddMessage(ctx context.Context, tx pgx.Tx, jc Jobs, nm NewMessage) (Message
 	if nm.Kind == "reply" && nm.Direction == "outbound" {
 		if err := ClearTicketDraft(ctx, tx, nm.WorkspaceID, nm.TicketID); err != nil {
 			return Message{}, err
+		}
+		// And the author's own unsent copy of it.
+		if nm.AuthorUserID != nil {
+			if _, err := tx.Exec(ctx, `DELETE FROM ticket_reply_drafts WHERE workspace_id = $1 AND ticket_id = $2 AND user_id = $3`,
+				nm.WorkspaceID, nm.TicketID, *nm.AuthorUserID); err != nil {
+				return Message{}, err
+			}
 		}
 	}
 	if nm.ThreadID != nil {
