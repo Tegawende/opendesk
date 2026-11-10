@@ -3,7 +3,8 @@
 // chrome behind white panels), soft semantic colour, and the product's one AI
 // hue (violet) for everything the agent does. A workspace sets the colour,
 // theme, corner style and position: the host carries them as CSS variables
-// (--brand, --brand-fg, --r-*, --ox, --oy, --oz; see config.ts hostVars).
+// (--brand, --brand-fg, --r-*, --ox, --oy, --oz; see config.ts hostVars, where a host page overrides
+// them with the documented --opendesk-* variables).
 // Motion: under 250ms, ease-out, off under prefers-reduced-motion. Bot faces
 // carry the shared look motion (BOT_LOOK_CSS): an idle blink in the header, a
 // bob while the bot writes, one hop when its reply lands.

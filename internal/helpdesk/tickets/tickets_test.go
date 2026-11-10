@@ -346,6 +346,9 @@ func TestPatchContact(t *testing.T) {
 			t.Errorf("%v: status %d %s", body, res.Status, res.Body)
 		}
 	}
+	noEmailID := ids.New()
+	e.Exec(`INSERT INTO contacts (id, workspace_id, name) VALUES ($1, $2, $3)`, noEmailID, ws.ID, "No email")
+	e.Do("PATCH", "/v1/tickets/"+tk.ID.String(), ws.Agent.As(ws), map[string]any{"contact_id": noEmailID.String()}).Want(t, 422)
 	got = getTicket(t, e, ws, tk.ID)
 	if got.Contact == nil || got.Contact.ID != adminContactID {
 		t.Fatalf("invalid or unauthorized patch changed contact: %+v", got.Contact)

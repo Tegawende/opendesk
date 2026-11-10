@@ -244,15 +244,18 @@ func applyPatch(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID
 			if cur.Channel == domain.ChannelChat {
 				return nil, httpx.Validation("a live chat stays with the visitor who started it")
 			}
-			toName, err := contactLabel(ctx, tx, wid, to)
+			toName, toEmail, err := contactDetails(ctx, tx, wid, to)
 			if db.IsNotFound(err) {
 				return nil, httpx.Validation("contact not found in this workspace")
 			} else if err != nil {
 				return nil, err
 			}
+			if cur.Channel == domain.ChannelEmail && (toEmail == nil || *toEmail == "") {
+				return nil, httpx.Validation("an email ticket needs a contact with an email address")
+			}
 			var fromName string
 			if cur.Contact != nil {
-				if fromName, err = contactLabel(ctx, tx, wid, *cur.Contact); err != nil && !db.IsNotFound(err) {
+				if fromName, _, err = contactDetails(ctx, tx, wid, *cur.Contact); err != nil && !db.IsNotFound(err) {
 					return nil, err
 				}
 			}
@@ -650,11 +653,12 @@ func idOrNil(id *uuid.UUID) any {
 	return id.String()
 }
 
-// contactLabel is how the timeline names a contact: their name, else their email.
-func contactLabel(ctx context.Context, tx pgx.Tx, wid, id uuid.UUID) (string, error) {
+// contactDetails gives the timeline label and reply address for a contact.
+func contactDetails(ctx context.Context, tx pgx.Tx, wid, id uuid.UUID) (string, *string, error) {
 	var label string
-	err := tx.QueryRow(ctx, `SELECT COALESCE(NULLIF(name, ''), email::text, '') FROM contacts WHERE workspace_id = $1 AND id = $2`, wid, id).Scan(&label)
-	return label, err
+	var email *string
+	err := tx.QueryRow(ctx, `SELECT COALESCE(NULLIF(name, ''), email::text, ''), email FROM contacts WHERE workspace_id = $1 AND id = $2`, wid, id).Scan(&label, &email)
+	return label, email, err
 }
 
 func contactActivityRef(id *uuid.UUID, name string) any {

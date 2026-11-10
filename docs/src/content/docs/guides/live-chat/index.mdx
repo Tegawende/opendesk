@@ -97,6 +97,29 @@ If your visitors are signed in to your product, pass their user id, email and na
 - **Intro**: the line under the greeting when a visitor starts a new chat. Empty shows a translated default. Turn off **Welcome text in a new chat** to open new chats empty.
 - **Sound for new replies**: a soft chime while the visitor's tab is in the background.
 
+### Change it from your own CSS
+
+The settings above apply to every screen size. To change the position or colour for one of them, set these CSS variables from your site's stylesheet. They win over the widget's settings, and need no `!important`:
+
+| Variable | Sets |
+| --- | --- |
+| `--opendesk-offset-x` | distance from the side, such as `16px` |
+| `--opendesk-offset-y` | distance from the bottom, such as `40px` |
+| `--opendesk-z-index` | stacking order |
+| `--opendesk-brand` | accent colour of the launcher, buttons and your messages |
+| `--opendesk-brand-text` | text and icons on that colour |
+
+```css
+:root { --opendesk-offset-y: 20px; }
+
+@media (max-width: 479px) {
+  /* Sit above a bottom bar on phones. */
+  :root { --opendesk-offset-y: 40px; }
+}
+```
+
+Set them on `:root`, or on the widget's host element, `[data-opendesk-widget]`.
+
 </Fold>
 
 <Fold>

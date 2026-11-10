@@ -36,6 +36,7 @@ import { useUpdateTicket } from "../useTicketActions";
 import { ComposerAiMenu, ComposerAiStatus, ComposerSources, useComposerAi } from "@/components/ai/ticket/ComposerAi";
 import { SuggestedReplyCard } from "./SuggestedReply";
 import { SharedDraftBar } from "./SharedDraft";
+import { useReplyDraftSync } from "./replyDraft";
 import { backToNote, deliver, hold, undoSeconds as undoSecondsFor, useUnsent, type Upload } from "./outbox";
 import { EmailChips, SavedReplyButton, UploadChip, uploadFiles } from "./composerParts";
 import { addressLabel, fromLine, replyAddresses, TeamDot, useTeamsCtx, type TeamsCtx } from "../teams";
@@ -397,6 +398,19 @@ export const Composer = forwardRef<
     editor.current?.clear();
   }, [setDraft]);
 
+  // My own unsent reply is kept on the server, so it follows me to another device and survives a refresh.
+  const ownDraft = useReplyDraftSync({
+    ticketId: ticket.id,
+    enabled: mode === "reply" && !disabled,
+    html: draft.html,
+    attachmentIds: uploads.filter((u) => u.status === "done" && u.attachment).map((u) => u.attachment!.id),
+    onRestore: (d) => {
+      setDraft({ mode: "reply", html: d.body_html });
+      editor.current?.setHtml(d.body_html);
+      setUploads(d.attachments.map((a) => ({ key: a.id, file: new File([], a.filename, { type: a.content_type }), status: "done" as const, attachment: a })));
+    },
+  });
+
   // Presence: "replying" while a draft exists, "viewing" otherwise.
   const hasDraft = !!draft.html;
   useEffect(() => {
@@ -607,7 +621,7 @@ export const Composer = forwardRef<
             }}
           />
         )}
-        {!disabled && <SharedDraftBar ticket={ticket} html={draft.html} onUse={takeShared} onClear={dropShared} />}
+        {!disabled && <SharedDraftBar ticket={ticket} html={draft.html} onUse={takeShared} onClear={dropShared} hold={!ownDraft.settled} />}
         <AnimatePresence initial={false}>
           {others.length > 0 && mode === "reply" && (
             <motion.div

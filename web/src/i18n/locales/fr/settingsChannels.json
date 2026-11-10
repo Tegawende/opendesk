@@ -402,6 +402,11 @@
     "publicDomain": "{{domain}} est un fournisseur de messagerie public. Saisissez plutôt l’adresse exacte du formulaire.",
     "ownAddress": "C’est l’adresse de cette boîte mail."
   },
+  "automatic": {
+    "title": "E-mails automatiques",
+    "hint": "Certains services d’assistance marquent comme automatiques tous les e-mails qu’ils envoient, même ceux écrits par une personne. Ces e-mails sont ignorés, sauf si cette boîte mail les garde. Ils deviennent alors des tickets comme les autres, et rien d’automatique n’y répond : ni réponse automatique, ni automatisation, ni Ollie. Les réponses d’absence restent ignorées.",
+    "toggle": "Garder les e-mails automatiques"
+  },
   "connect": {
     "detecting": "Recherche de {{domain}}",
     "unknownHost": "Fournisseur inconnu",

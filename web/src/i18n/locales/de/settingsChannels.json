@@ -399,6 +399,11 @@
     "publicDomain": "{{domain}} ist ein öffentlicher E-Mail-Anbieter. Gib stattdessen die genaue Adresse des Formulars ein.",
     "ownAddress": "Das ist die eigene Adresse dieses Postfachs."
   },
+  "automatic": {
+    "title": "Automatische E-Mails",
+    "hint": "Manche Helpdesks markieren jede E-Mail, die sie senden, als automatisch, auch eine, die eine Person geschrieben hat. Solche E-Mails werden ignoriert, außer dieses Postfach behält sie. Behaltene E-Mails werden wie gewohnt zu Tickets, und nichts Automatisches antwortet darauf: keine automatische Antwort, keine Antwort einer Automatisierung, keine Antwort von Ollie. Abwesenheitsnotizen bleiben ignoriert.",
+    "toggle": "Automatische E-Mails behalten"
+  },
   "connect": {
     "detecting": "{{domain}} wird nachgeschlagen",
     "unknownHost": "Unbekannter Anbieter",

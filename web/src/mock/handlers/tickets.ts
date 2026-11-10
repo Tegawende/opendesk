@@ -9,7 +9,7 @@ import { canCreateLabels, checkRequiredOnSolve, mergeFields } from "../labels";
 import { canSeeTicket, defaultBrand, isAdmin, teamRole } from "../teams";
 import { addActivity, addMessage, applyPatch, buildMessage, canSendFrom, counts, fieldFiltersFromQuery, findTicket, matches, newTicket, notify, publishTicketUpdated, refreshLastNote, resolveFilters, sortTickets, ticketSummary, type ListFilters } from "../tickets";
 import { DAY, escapeHtml, isRecord, nowIso, parseUUID, uuid } from "../util";
-import { clearDraft } from "./drafts";
+import { clearDraft, clearOwnDraft } from "./drafts";
 import { renderSentReply } from "./templates";
 import { cannotSend, sendingOf } from "./mailhost";
 
@@ -325,7 +325,7 @@ export function registerTickets() {
       if (!email) throw invalid("Contact email is required");
       contact = ws.contacts.find((c) => c.email === email);
       if (!contact) {
-        contact = { id: uuid(), email, name: name || email.split("@")[0], phone: "", avatar_url: null, avatar_source: null, company: null, external_id: null, notes: "", custom: {}, tags: [], fields: {}, blocked: false, ticket_count: 0, created_at: nowIso(), updated_at: nowIso() };
+        contact = { id: uuid(), email, emails: [], name: name || email.split("@")[0], phone: "", avatar_url: null, avatar_source: null, company: null, external_id: null, notes: "", custom: {}, tags: [], fields: {}, blocked: false, ticket_count: 0, created_at: nowIso(), updated_at: nowIso() };
         ws.contacts.unshift(contact);
         publish(ws, "contact.created", { contact });
       }
@@ -532,7 +532,10 @@ export function registerTickets() {
       publishTicketUpdated(ctx.ws, t, ["last_note"]);
     }
     // A reply going out ends the ticket's shared draft, whoever sends it.
-    if (kind === "reply") clearDraft(ctx.ws, t);
+    if (kind === "reply") {
+      clearDraft(ctx.ws, t);
+      clearOwnDraft(ctx.ws, t);
+    }
     return respond(201, msg);
   });
   patch("/v1/tickets/:id/messages/:messageId", (ctx) => {

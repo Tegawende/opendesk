@@ -102,6 +102,14 @@ With Collab, a signed-in member can send an email reply from one of their own ma
 }
 ```
 
+## Record the customer's own message
+
+`direction: "inbound"` (default `outbound`) stores a `reply` as the ticket contact's own words, as if they had emailed it, and sends nothing. Use it to record what a website form or another system received. The ticket needs a contact; a note, `mailbox_id`, `from_note_id`, `from_account`, `cc` and `bcc` are `422` with it. `POST /v1/tickets` takes the same field for its first message.
+
+```json
+{ "kind": "reply", "direction": "inbound", "body_html": "<p>My order is late.</p>" }
+```
+
 ## Add a note
 
 ```sh

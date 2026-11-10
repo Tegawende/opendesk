@@ -87,7 +87,8 @@ func (b *sqlBuilder) sql() string {
 
 // applyFilters adds the filter clauses for f. me is the caller's user id (nil for API keys).
 func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) error {
-	b.add("t.workspace_id = " + b.arg(wid))
+	ws := b.arg(wid)
+	b.add("t.workspace_id = " + ws)
 	b.add("t.deleted_at IS NULL")
 	if len(f.Hidden) > 0 {
 		if me != nil {
@@ -228,29 +229,42 @@ func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) erro
 		b.add(hd.FieldClause(def, ff, "t.fields", b.arg, me))
 	}
 	if q := strings.TrimSpace(f.Q); q != "" {
-		var parts []string
-		if m := domain.TicketNumberRef.FindStringSubmatch(q); m != nil {
-			n, _ := strconv.ParseInt(m[1], 10, 64)
-			parts = append(parts, "t.number = "+b.arg(n))
-		}
-		alias := strings.TrimLeft(q, "# ")
-		if domain.TicketAliasPattern.MatchString(alias) && strings.ContainsAny(alias, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") {
-			parts = append(parts, "lower(t.alias) = lower("+b.arg(alias)+")")
-		}
-		tsq := "websearch_to_tsquery('simple', " + b.arg(q) + ")"
-		// The customer's name, email and phone (contacts.search) match too.
-		contact := `EXISTS (SELECT 1 FROM contacts fc WHERE fc.workspace_id = t.workspace_id AND fc.id = t.contact_id AND (fc.search @@ ` + tsq
-		parts = append(parts, "t.search @@ "+tsq, "t.fields_search @@ "+tsq,
-			`EXISTS (SELECT 1 FROM messages fm WHERE fm.workspace_id = t.workspace_id AND fm.ticket_id = t.id AND fm.deleted_at IS NULL AND fm.search @@ `+tsq+`)`)
-		if pq := prefixQuery(q); pq != "" {
-			ptsq := "to_tsquery('simple', " + b.arg(pq) + ")"
-			parts = append(parts, "t.search @@ "+ptsq, "t.fields_search @@ "+ptsq)
-			contact += " OR fc.search @@ " + ptsq
-		}
-		parts = append(parts, contact+"))")
-		b.add("(" + strings.Join(parts, " OR ") + ")")
+		b.add(searchClause(b, ws, q))
 	}
 	return nil
+}
+
+// searchClause is the q filter, ws the workspace's parameter: the ticket's number or alias,
+// its subject and fields (full words, and word prefixes), its messages, and its customer's
+// name, email and phone (contacts.search).
+//
+// Each source is its own lookup of ticket ids, joined by UNION, so Postgres reads the search
+// indexes (GIN on tickets.search, tickets.fields_search, messages.search and contacts.search,
+// the number and alias keys) instead of every ticket of the workspace: one OR over the
+// ticket's columns and correlated EXISTS on its messages and contact could use none of them.
+func searchClause(b *sqlBuilder, ws, q string) string {
+	var ids []string
+	if m := domain.TicketNumberRef.FindStringSubmatch(q); m != nil {
+		n, _ := strconv.ParseInt(m[1], 10, 64)
+		ids = append(ids, "SELECT nt.id FROM tickets nt WHERE nt.workspace_id = "+ws+" AND nt.number = "+b.arg(n))
+	}
+	alias := strings.TrimLeft(q, "# ")
+	if domain.TicketAliasPattern.MatchString(alias) && strings.ContainsAny(alias, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") {
+		ids = append(ids, "SELECT at.id FROM tickets at WHERE at.workspace_id = "+ws+" AND lower(at.alias) = lower("+b.arg(alias)+")")
+	}
+	tsq := "websearch_to_tsquery('simple', " + b.arg(q) + ")"
+	own := "st.search @@ " + tsq + " OR st.fields_search @@ " + tsq
+	contact := "fc.search @@ " + tsq
+	if pq := prefixQuery(q); pq != "" {
+		ptsq := "to_tsquery('simple', " + b.arg(pq) + ")"
+		own += " OR st.search @@ " + ptsq + " OR st.fields_search @@ " + ptsq
+		contact += " OR fc.search @@ " + ptsq
+	}
+	ids = append(ids,
+		"SELECT st.id FROM tickets st WHERE st.workspace_id = "+ws+" AND ("+own+")",
+		"SELECT fm.ticket_id FROM messages fm WHERE fm.workspace_id = "+ws+" AND fm.deleted_at IS NULL AND fm.search @@ "+tsq,
+		"SELECT ct.id FROM contacts fc JOIN tickets ct ON ct.workspace_id = fc.workspace_id AND ct.contact_id = fc.id WHERE fc.workspace_id = "+ws+" AND ("+contact+")")
+	return "t.id IN (" + strings.Join(ids, " UNION ") + ")"
 }
 
 // refList parses a comma-separated list of ids, at most 50.

@@ -241,6 +241,9 @@ type Mailbox struct {
 	// TrustedFormSenders are the website contact forms whose authenticated mail is from the
 	// visitor its Reply-To names: exact addresses or "@domain" entries. Admins only.
 	TrustedFormSenders []string `json:"trusted_form_senders"`
+	// KeepAutomaticMail takes in mail marked automatic (Auto-Submitted, Precedence: bulk) as
+	// any mail, which nothing automatic answers, instead of dropping it. Off by default.
+	KeepAutomaticMail bool `json:"keep_automatic_mail"`
 	// BotID is the bot the AI agent answers and signs as here (contracts/bots.md); nil = the default bot.
 	BotID *uuid.UUID `json:"bot_id"`
 	// Private is true when its team is private: only that team's members send from it.
@@ -309,7 +312,7 @@ const mailboxColumns = `id, workspace_id, name, email, display_name, inbound_kin
 	status, last_error, last_synced_at, imap_uid_validity, imap_last_uid, sync_failures, created_at,
 	ai_answers, ai_answers_mode, ai_answers_outside_hours, brand_id, aliases, from_name_format,
 	EXISTS (SELECT 1 FROM teams pt WHERE pt.id = mailboxes.team_id AND pt.private), trusted_form_senders, bot_id, alias_teams,
-	last_received_at, alias_settings, provider_send_as, personal_replies`
+	last_received_at, alias_settings, provider_send_as, personal_replies, keep_automatic_mail`
 
 func scanMailbox(row pgx.Row) (*mailboxRow, error) {
 	var m mailboxRow
@@ -318,7 +321,7 @@ func scanMailbox(row pgx.Row) (*mailboxRow, error) {
 		&m.AutoReplySubject, &m.AutoReplyHTML, &m.Status, &m.LastError, &m.LastSyncedAt, &m.UIDValidity, &m.LastUID,
 		&m.SyncFailures, &m.CreatedAt, &m.AIAnswers, &m.AIAnswersMode, &m.AIAnswersOutsideHours, &m.BrandID, &m.Aliases,
 		&m.FromNameFormat, &m.Private, &m.TrustedFormSenders, &m.BotID, &m.AliasTeams, &m.LastReceivedAt,
-		&m.AliasSettings, &m.sendAs, &m.PersonalReplies)
+		&m.AliasSettings, &m.sendAs, &m.PersonalReplies, &m.KeepAutomaticMail)
 	if err != nil {
 		return nil, err
 	}
