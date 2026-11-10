@@ -145,6 +145,8 @@ it("clears every filter, the search included", async () => {
   expect(names()).toEqual([]);
   const clear = [...document.querySelectorAll("button")].find((b) => b.textContent === "Clear filters")!;
   await act(async () => clear.click());
+  await settle();
+  expect(params(router)).toEqual({});
   await settle(300);
   expect(params(router)).toEqual({});
   expect(document.querySelector<HTMLInputElement>('input[role="searchbox"]')!.value).toBe("");

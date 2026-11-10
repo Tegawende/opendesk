@@ -4,7 +4,7 @@
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Activity, ShieldCheck, Users, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AvailabilityDot } from "@/components/presence/availability";
 import { useDebounced } from "@/components/contacts/hooks";
@@ -50,10 +50,20 @@ export function useMemberFilters() {
     [navigate],
   );
 
+  // The URL's search as last seen: it follows typing once it settles, and a change made
+  // elsewhere (Back, a link, Clear filters) replaces what was typed.
+  const urlQ = useRef(search.q);
   useEffect(() => {
-    if ((debounced.trim() || undefined) === search.q) return;
-    go({ q: debounced }, true);
-  }, [debounced, search.q, go]);
+    if (search.q === urlQ.current) return;
+    urlQ.current = search.q;
+    setTerm(search.q ?? "");
+  }, [search.q]);
+  useEffect(() => {
+    const q = debounced.trim() || undefined;
+    if (q === urlQ.current) return;
+    urlQ.current = q;
+    go({ q }, true);
+  }, [debounced, go]);
 
   const filters = useMemo(() => ({ ...fromUrl, q: term }), [fromUrl, term]);
   return {
