@@ -91,6 +91,8 @@ function assignment(ws: WsData): Assignment {
     auto_away_minutes: ws.routing.autoAwayMinutes,
     new_ticket_notify: notify && NEW_TICKET_NOTIFY.includes(notify) ? notify : "auto",
     followup_keeps_assignee: ws.workspace.settings.followup_keeps_assignee ?? false,
+    chat_mode: ws.workspace.settings.chat_assign ?? "none",
+    chat_skill_id: ws.workspace.settings.chat_assign_skill_id ?? null,
   };
 }
 
@@ -343,6 +345,15 @@ export function registerPictures() {
     if ("followup_keeps_assignee" in b) {
       if (typeof b.followup_keeps_assignee !== "boolean") throw invalid("followup_keeps_assignee must be true or false");
       ctx.ws.workspace.settings = { ...ctx.ws.workspace.settings, followup_keeps_assignee: b.followup_keeps_assignee };
+    }
+    if ("chat_mode" in b) {
+      if (!MODES.includes(b.chat_mode as AssignMode)) throw invalid("chat_mode must be none, round_robin or load_balanced");
+      ctx.ws.workspace.settings = { ...ctx.ws.workspace.settings, chat_assign: b.chat_mode as AssignMode };
+    }
+    if ("chat_skill_id" in b) {
+      const id = b.chat_skill_id;
+      if (id && !ctx.ws.skills.some((s) => s.id === id && !s.archived)) throw invalid("chat_skill_id must be a skill of this workspace");
+      ctx.ws.workspace.settings = { ...ctx.ws.workspace.settings, chat_assign_skill_id: typeof id === "string" && id ? id : null };
     }
     if ("auto_away_minutes" in b) {
       const n = b.auto_away_minutes;

@@ -42,6 +42,9 @@ export type WorkspaceSettings = {
   new_ticket_notify?: NewTicketNotify;
   /** Where Assignment's followup_keeps_assignee is stored; read and set it through Assignment. Default false. */
   followup_keeps_assignee?: boolean;
+  /** Where Assignment's chat_mode and chat_skill_id are stored; read and set them through Assignment. */
+  chat_assign?: AssignMode;
+  chat_assign_skill_id?: string | null;
   /** Look up contact pictures on Gravatar. Default false. */
   gravatar?: boolean;
   /** Fetch company logos from the company's website. Default true. */
@@ -67,6 +70,8 @@ export type WorkspaceSettings = {
   send_and_finish_button?: boolean;
   /** Heartbeats count toward each member's online time, shown in the agents report. Default true; false records and shows none. */
   agent_online_time?: boolean;
+  /** Emails to customers carry the ticket number in their subject as "[#n]". Default true; false leaves it out and replies thread by their headers, except that an email starting a ticket's conversation keeps it where the mailbox's sending changes or hides its Message-ID. */
+  ticket_number_in_subject?: boolean;
   /** Tickets have a severity beside their priority. Default true; false leaves it out of the app, and AI never sets it. The API still reads and writes it. */
   severity_enabled?: boolean;
   /** Display-only names and colours for the fixed statuses and priorities. */
@@ -295,6 +300,8 @@ export type Company = {
   id: string;
   name: string;
   domain: string;
+  /** The workspace's own id for the account; the widget's verified identify links people by it. */
+  external_id: string | null;
   /** The company logo. */
   avatar_url: string | null;
   avatar_source: "upload" | "domain" | null;
@@ -666,7 +673,9 @@ export type TicketFilters = {
   /** Custom field filters, ANDed (max 20). */
   fields?: FieldFilter[];
 };
-export type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number; /** Shared with this team. */ team_id?: string | null; /** The sidebar heading it shows under (lib/viewSections). */ section?: string | null; /** What the sidebar shows beside the name; none shows the layers icon. */ icon?: ViewIcon | null };
+export type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number; /** Shared with this team. */ team_id?: string | null; /** The sidebar heading it shows under (lib/viewSections). */ section?: string | null; /** What the sidebar shows beside the name; none shows the layers icon. */ icon?: ViewIcon | null; /** Its section's icon (PATCH /v1/view-sections), the same on every view of the section; none shows none. */ section_icon?: ViewIcon | null };
+/** A view section as PATCH /v1/view-sections leaves it: `views` is how many of the views the caller sees name it. */
+export type ViewSection = { name: string; icon: ViewIcon | null; views: number };
 /** emoji: one emoji; icon: a name of the app's list (viewIcons.ts); text: one or two letters or digits. `color` tints an icon or text (a Tone), never an emoji. */
 export type ViewIcon = { kind: "emoji" | "icon" | "text"; value: string; color: string | null };
 export type SlaPolicy = {
@@ -697,6 +706,10 @@ export type Assignment = {
   new_ticket_notify: NewTicketNotify;
   /** settings.followup_keeps_assignee: an email that answers a closed ticket opens a follow-up assigned to that ticket's assignee. Default false. */
   followup_keeps_assignee: boolean;
+  /** settings.chat_assign: live chats' own rule, apart from the team, address and workspace rules; none leaves chats to them. Default none. */
+  chat_mode: AssignMode;
+  /** settings.chat_assign_skill_id: the skill a member must hold to be given a chat; null for anyone in the pool. Set "" to clear. */
+  chat_skill_id: string | null;
 };
 export type TriageField = "priority" | "severity" | "labels" | "team";
 /** The decision engine behind triage (contracts/api.md). Jev is TypeSafe's decision model. */

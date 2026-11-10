@@ -111,6 +111,14 @@
       "on_hold": "保留",
       "solved": "已解决",
       "closed": "已关闭"
+    },
+    "new_request": "新请求",
+    "new": {
+      "title": "新请求",
+      "subject": "主题",
+      "message": "我们能帮您什么？",
+      "send": "发送请求",
+      "limit": "您连续发送了多个请求。请稍候再试。"
     }
   }
 }

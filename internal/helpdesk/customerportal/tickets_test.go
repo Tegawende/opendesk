@@ -263,3 +263,118 @@ func TestTicketsOffRefusesPortal(t *testing.T) {
 	e.SetSettings(ws, map[string]any{"tickets_enabled": true})
 	e.Do("GET", portalTickets, access, nil).Want(t, 200)
 }
+
+func TestPortalCreateTicket(t *testing.T) {
+	e, ws, cid, customer := ticketSession(t)
+	var out map[string]any
+	e.Do("POST", portalTickets, customer, map[string]any{"workspace_slug": ws.Slug, "subject": "  Order   never   arrived ", "body": "Hello,\nmy <b>order</b> is late."}).Want(t, 201).JSON(t, &out)
+	id, _ := out["id"].(string)
+	if out["subject"] != "Order never arrived" || out["status"] != domain.StatusOpen || id == "" {
+		t.Fatalf("created %v", out)
+	}
+	// Only the customer's own projection comes back.
+	for _, hidden := range []string{"priority", "assignee", "team_id", "tags", "custom", "channel"} {
+		if _, ok := out[hidden]; ok {
+			t.Fatalf("portal ticket exposes %s", hidden)
+		}
+	}
+
+	// It is the customer's ticket, on the portal channel and brand, with their words as the first message.
+	var channel, contact, brand string
+	if err := e.D.DB.Pool.QueryRow(e.Ctx, `SELECT channel, contact_id::text, brand_id::text FROM tickets WHERE id=$1`, id).Scan(&channel, &contact, &brand); err != nil {
+		t.Fatal(err)
+	}
+	if channel != domain.ChannelPortal || contact != cid.String() || brand != ws.BrandID.String() {
+		t.Fatalf("channel=%s contact=%s brand=%s", channel, contact, brand)
+	}
+	var text, html, kind, direction, author string
+	if err := e.D.DB.Pool.QueryRow(e.Ctx, `SELECT body_text, body_html, kind, direction, author_type FROM messages WHERE ticket_id=$1`, id).Scan(&text, &html, &kind, &direction, &author); err != nil {
+		t.Fatal(err)
+	}
+	if text != "Hello,\nmy <b>order</b> is late." || kind != "reply" || direction != "inbound" || author != "contact" {
+		t.Fatalf("message %q %s %s %s", text, kind, direction, author)
+	}
+	if strings.Contains(html, "<b>") {
+		t.Fatalf("the customer's markup reached the stored HTML: %s", html)
+	}
+	// Automations see a new ticket.
+	if n := len(e.Jobs(jobs.TicketTriggerArgs{}.Kind(), ws.ID)); n != 1 {
+		t.Fatalf("ticket_created triggers: %d", n)
+	}
+	// It is in the customer's list, and they can read it back.
+	rows, _ := pageRows(t, e.Do("GET", portalTickets, customer, nil))
+	if len(rows) != 1 || rows[0]["id"] != id {
+		t.Fatalf("list %v", rows)
+	}
+	msgs, _ := pageRows(t, e.Do("GET", portalTickets+"/"+id+"/messages", customer, nil))
+	if len(msgs) != 1 || msgs[0]["direction"] != "inbound" {
+		t.Fatalf("messages %v", msgs)
+	}
+
+	// Routing applies as for any channel: a rule on the portal channel puts it in a team.
+	team := ids.New()
+	e.Exec(`INSERT INTO teams(id,workspace_id,name) VALUES($1,$2,'Portal team')`, team, ws.ID)
+	e.Exec(`INSERT INTO routing_rules (workspace_id, name, conditions, team_id, position) VALUES ($1, 'Portal', '[{"field":"channel","op":"equals","value":"portal"}]', $2, 0)`, ws.ID, team)
+	e.Do("POST", portalTickets, customer, map[string]any{"workspace_slug": ws.Slug, "subject": "Second", "body": "Again"}).Want(t, 201).JSON(t, &out)
+	var routed *string
+	if err := e.D.DB.Pool.QueryRow(e.Ctx, `SELECT team_id::text FROM tickets WHERE id=$1`, out["id"]).Scan(&routed); err != nil || routed == nil || *routed != team.String() {
+		t.Fatalf("routed to %v: %v", routed, err)
+	}
+}
+
+func TestPortalCreateTicketRefusals(t *testing.T) {
+	e, ws, cid, customer := ticketSession(t)
+	post := func(a hdtest.Auth, b map[string]any) *hdtest.Resp { return e.Do("POST", portalTickets, a, b) }
+	ok := map[string]any{"workspace_slug": ws.Slug, "subject": "Help", "body": "Please"}
+	tickets := func() int {
+		var n int
+		e.Scalar(`SELECT count(*) FROM tickets WHERE workspace_id=$1`, &n, ws.ID)
+		return n
+	}
+
+	// Signed out, as a member, or with a staff token: no ticket.
+	post(hdtest.Auth{}, ok).Want(t, 401)
+	post(ws.Agent.As(ws), ok).Want(t, 401)
+	// A blank or oversized subject or message, and a brand that is not this workspace's help center.
+	post(customer, map[string]any{"workspace_slug": ws.Slug, "subject": "   ", "body": "x"}).Want(t, 422)
+	post(customer, map[string]any{"workspace_slug": ws.Slug, "subject": "x", "body": "   "}).Want(t, 422)
+	post(customer, map[string]any{"workspace_slug": ws.Slug, "subject": strings.Repeat("s", 201), "body": "x"}).Want(t, 422)
+	post(customer, map[string]any{"workspace_slug": ws.Slug, "subject": "x", "body": strings.Repeat("b", 10001)}).Want(t, 422)
+	post(customer, map[string]any{"workspace_slug": "no-such-help-center", "subject": "x", "body": "x"}).Want(t, 404)
+	other := e.NewWorkspace()
+	e.Exec(`UPDATE brands SET help_center_enabled=true WHERE id=$1`, other.BrandID)
+	post(customer, map[string]any{"workspace_slug": other.Slug, "subject": "x", "body": "x"}).Want(t, 404)
+	if n := tickets(); n != 0 {
+		t.Fatalf("a refused request left %d tickets", n)
+	}
+
+	// The workspace and the customer come from the session: the body has no place for either.
+	post(customer, map[string]any{"workspace_slug": ws.Slug, "subject": "Mine", "body": "x", "contact_id": ids.New().String()}).Want(t, 422)
+	post(customer, map[string]any{"workspace_slug": ws.Slug, "subject": "Mine", "body": "x", "workspace_id": other.ID.String()}).Want(t, 422)
+	post(customer, ok).Want(t, 201)
+	var contact string
+	e.Scalar(`SELECT contact_id::text FROM tickets WHERE workspace_id=$1`, &contact, ws.ID)
+	var elsewhere int
+	e.Scalar(`SELECT count(*) FROM tickets WHERE workspace_id=$1`, &elsewhere, other.ID)
+	if contact != cid.String() || elsewhere != 0 {
+		t.Fatalf("ticket for contact %s, %d in another workspace", contact, elsewhere)
+	}
+
+	// A blocked customer starts nothing.
+	e.Exec(`UPDATE contacts SET blocked=true WHERE id=$1`, cid)
+	post(customer, ok).Want(t, 401)
+	e.Exec(`UPDATE contacts SET blocked=false WHERE id=$1`, cid)
+}
+
+func TestPortalCreateTicketIsRateLimited(t *testing.T) {
+	e, ws, _, customer := ticketSession(t)
+	for i := range newRequestsPerHour {
+		e.Do("POST", portalTickets, customer, map[string]any{"workspace_slug": ws.Slug, "subject": "Request", "body": "n" + strings.Repeat("x", i)}).Want(t, 201)
+	}
+	e.Do("POST", portalTickets, customer, map[string]any{"workspace_slug": ws.Slug, "subject": "One too many", "body": "x"}).Want(t, 429)
+	var n int
+	e.Scalar(`SELECT count(*) FROM tickets WHERE workspace_id=$1`, &n, ws.ID)
+	if n != newRequestsPerHour {
+		t.Fatalf("%d tickets", n)
+	}
+}

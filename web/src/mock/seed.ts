@@ -719,6 +719,7 @@ function seedMargin(): WsData {
     id: uuid(),
     name: c.name,
     domain: c.domain,
+    external_id: null,
     // Most companies have a website icon, one uploaded its logo, a few have nothing usable.
     avatar_url: i % 4 === 3 ? null : logoMark(c.name),
     avatar_source: i % 4 === 3 ? null : i === 0 ? "upload" : "domain",

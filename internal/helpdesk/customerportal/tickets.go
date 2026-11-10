@@ -14,9 +14,15 @@ import (
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
+	"github.com/useopendesk/opendesk/internal/helpdesk/routing"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
+	"github.com/useopendesk/opendesk/internal/jobs"
 )
+
+// newRequestsPerHour bounds the requests one signed-in customer can start, counted for the
+// whole instance: a session otherwise opens tickets without limit.
+const newRequestsPerHour = 10
 
 // These projections contain only the customer's request and public conversation.
 // Agent-only ticket and message fields never enter a portal response.
@@ -131,6 +137,84 @@ func (s *service) registerTickets(api huma.API) {
 			page := httpx.NewPage(messages, in.Limit, func(m customerMessage) any { return portalCursor{m.CreatedAt, m.ID} })
 			return &struct{ Body httpx.Page[customerMessage] }{page}, nil
 		})
+	create := s.operation("customer-portal-create-ticket", http.MethodPost, prefix, "Start a support request", false)
+	create.DefaultStatus = http.StatusCreated
+	huma.Register(api, create, func(ctx context.Context, in *struct {
+		Body struct {
+			Slug    string `json:"workspace_slug" minLength:"1" maxLength:"40" doc:"The portal's brand; never selects the workspace, which is the customer's own"`
+			Subject string `json:"subject" minLength:"1" maxLength:"200"`
+			Body    string `json:"body" minLength:"1" maxLength:"10000"`
+		}
+	}) (*struct{ Body customerTicket }, error) {
+		p, err := auth.RequireCustomer(ctx)
+		if err != nil {
+			return nil, httpx.Wrap(err)
+		}
+		subject, text := strings.Join(strings.Fields(in.Body.Subject), " "), strings.TrimSpace(in.Body.Body)
+		if subject == "" || text == "" {
+			return nil, httpx.E(http.StatusUnprocessableEntity, "validation_failed", "Add a subject and describe your request.")
+		}
+		hc, err := helpCenter(ctx, s.d, in.Body.Slug)
+		if err != nil {
+			return nil, err
+		}
+		// The brand is the portal being used; the workspace and the customer are the session's own.
+		if hc.WorkspaceID != p.WorkspaceID {
+			return nil, httpx.NotFound("Help center")
+		}
+		if err := s.limit(ctx, "new-ticket:"+p.WorkspaceID.String()+":"+p.ContactID.String(), newRequestsPerHour, time.Hour); err != nil {
+			return nil, err
+		}
+		var out customerTicket
+		err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+			// Hold the contact stable until the ticket and its message commit, so a block or an
+			// address change cannot slip between the session check and the write.
+			var blocked bool
+			if err := tx.QueryRow(ctx, `SELECT blocked FROM contacts WHERE workspace_id=$1 AND id=$2 FOR UPDATE`, p.WorkspaceID, p.ContactID).Scan(&blocked); err != nil {
+				return err
+			}
+			if blocked {
+				return auth.ErrUnauthenticated
+			}
+			var email *string
+			if err := tx.QueryRow(ctx, `SELECT email FROM contacts WHERE workspace_id=$1 AND id=$2`, p.WorkspaceID, p.ContactID).Scan(&email); err != nil {
+				return err
+			}
+			fromEmail := ""
+			if email != nil {
+				fromEmail = *email
+			}
+			brandID := hc.BrandID
+			res, err := routing.Resolve(ctx, tx, routing.Input{WorkspaceID: p.WorkspaceID, Channel: domain.ChannelPortal, BrandID: brandID,
+				FromEmail: fromEmail, Subject: subject, Body: text, ContactID: &p.ContactID})
+			if err != nil {
+				return err
+			}
+			t, err := domain.CreateTicket(ctx, tx, domain.NewTicket{WorkspaceID: p.WorkspaceID, Subject: subject, Channel: domain.ChannelPortal,
+				ContactID: &p.ContactID, TeamID: res.TeamID, Routed: res.Routed, BrandID: &brandID, RequiredSkillIDs: res.RequiredSkillIDs})
+			if err != nil {
+				return err
+			}
+			if rule := res.RuleID(); rule != nil {
+				if err := routing.Count(ctx, tx, *rule); err != nil {
+					return err
+				}
+			}
+			if _, err := domain.AddMessage(ctx, tx, s.d.Jobs, domain.NewMessage{
+				WorkspaceID: p.WorkspaceID, TicketID: t.ID, Kind: "reply", Direction: "inbound",
+				AuthorType: "contact", AuthorContactID: &p.ContactID, BodyHTML: hd.TextToHTML(text), BodyText: text,
+				Trigger: jobs.TriggerTicketCreated,
+			}); err != nil {
+				return err
+			}
+			out = customerTicket{ID: t.ID, Number: t.Number, Subject: t.Subject, Status: t.Status, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
+			return nil
+		})
+		if err != nil {
+			return nil, httpx.Wrap(err)
+		}
+		return &struct{ Body customerTicket }{out}, nil
+	})
 	op := s.operation("customer-portal-post-message", http.MethodPost, prefix+"/{id}/messages", "Reply to your support request", false)
 	op.DefaultStatus = http.StatusCreated
 	huma.Register(api, op, func(ctx context.Context, in *struct {

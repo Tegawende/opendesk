@@ -31,6 +31,21 @@ The page loads public brand configuration from `GET /v1/public/help/{workspace_s
 
 Authenticated ticket operations are `GET /v1/customer/portal/tickets`, `GET /v1/customer/portal/tickets/{id}`, `GET /v1/customer/portal/tickets/{id}/messages`, and `POST /v1/customer/portal/tickets/{id}/messages`. Lists use bounded cursor pagination. Message history includes public replies only, as text; it omits notes, side conversations, internal activities, deleted or purged messages, and messages whose sender check failed. Customer replies accept plain text and use the normal ticket message transaction, event, and customer-replied automation path.
 
-The first release does not create tickets, change ticket status, upload files, add CCs, show organization-wide tickets, or expose side conversations. The customer routes are noindex and API responses are not stored in shared caches.
+A signed-in customer can start a request (below). The portal does not change ticket status, take files, add CCs, show organization-wide tickets, or expose side conversations. The customer routes are noindex and API responses are not stored in shared caches.
 
 See [API routes](api.md#customer-portal-tickets) and [token rules](tokens.md#customer-portal) for wire details.
+
+## Starting a request
+
+`POST /v1/customer/portal/tickets` with `{workspace_slug, subject, body}` opens a ticket for the signed-in
+customer. The workspace and the customer are the session's own, and the body has no place for either;
+`workspace_slug` only names the portal's brand and must be a help center of that workspace. The ticket is
+`Channel: portal` on that brand. The subject is trimmed with its spaces collapsed (1..200 characters), the body
+is plain text (1..10000, converted to HTML as a portal reply is). The words are written through
+`domain.AddMessage` as an inbound contact reply, so ticket events and the `ticket_created` trigger run as for any
+ticket, and routing (`routing.Resolve`, channel `portal`) puts it in a team. The customer sets nothing else:
+status, priority, severity, team, assignee, labels and fields are the team's. A blocked customer or a suspended
+workspace is refused by the same session checks as every portal route, and the contact row is locked while the
+ticket is written. A customer starts at most 10 requests an hour, counted for the whole instance (`429`).
+The answer is the same `CustomerTicket` the list returns.
+

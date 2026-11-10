@@ -113,6 +113,14 @@
       "on_hold": "On hold",
       "solved": "Solved",
       "closed": "Closed"
+    },
+    "new_request": "New request",
+    "new": {
+      "title": "New request",
+      "subject": "Subject",
+      "message": "How can we help?",
+      "send": "Send request",
+      "limit": "You have sent several requests in a row. Wait a while and try again."
     }
   }
 }

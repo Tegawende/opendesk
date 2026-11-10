@@ -567,6 +567,8 @@ func applyPatch(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID
 	}
 	if slices.Contains(changes, "assignee_id") && next.Assignee != nil && !sameID(actor.UserID, next.Assignee) {
 		data := map[string]any{"by": idOrNil(actor.UserID), "actor_type": actor.Type}
+		// The channel, so the app pops a chat up.
+		data["channel"] = next.Channel
 		if err := hd.Notify(ctx, tx, wid, *next.Assignee, hd.NotifyAssigned, &tid, data); err != nil {
 			return nil, err
 		}

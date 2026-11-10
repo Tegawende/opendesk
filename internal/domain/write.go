@@ -284,6 +284,9 @@ type NewMessage struct {
 	BotID *uuid.UUID
 	// APIKeyID is the API key that writes the message, nil for anyone else.
 	APIKeyID *uuid.UUID
+	// RecordedBy is the member who records a contact's message in their name (direction
+	// inbound through the API): the files they uploaded for it go on it.
+	RecordedBy *uuid.UUID
 	// Inbound email (contracts/api.md "Inbound email"). ReplyTo is the Reply-To it named when
 	// that differs from FromEmail; AuthFailed marks a From that failed DMARC; NoAutoReply
 	// keeps automatic answers away from it; FormSender is the trusted contact form address
@@ -397,11 +400,16 @@ func AddMessage(ctx context.Context, tx pgx.Tx, jc Jobs, nm NewMessage) (Message
 		return Message{}, fmt.Errorf("insert message: %w", err)
 	}
 	if len(nm.AttachmentIDs) > 0 {
-		// An agent's or visitor's upload goes only on their own message.
+		// An agent's or visitor's upload goes only on their own message, or on the one a
+		// member records in a contact's name.
+		uploader := nm.AuthorUserID
+		if nm.RecordedBy != nil {
+			uploader = nm.RecordedBy
+		}
 		if _, err := tx.Exec(ctx, `UPDATE attachments SET message_id = $1 WHERE workspace_id = $2 AND id = ANY($3) AND message_id IS NULL
 			AND (uploaded_by IS NULL OR uploaded_by IS NOT DISTINCT FROM $4)
 			AND (uploaded_by_contact_id IS NULL OR uploaded_by_contact_id IS NOT DISTINCT FROM $5)`,
-			id, nm.WorkspaceID, nm.AttachmentIDs, nm.AuthorUserID, nm.AuthorContactID); err != nil {
+			id, nm.WorkspaceID, nm.AttachmentIDs, uploader, nm.AuthorContactID); err != nil {
 			return Message{}, fmt.Errorf("link attachments: %w", err)
 		}
 	}

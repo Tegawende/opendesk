@@ -67,6 +67,7 @@
     "notes": "Notizen",
     "notesHint": "Für dein Team bei jedem Ticket dieses Kontakts sichtbar.",
     "externalId": "Externe ID",
+    "companyExternalIdHint": "Die ID dieses Kontos in deinem Produkt. Angemeldete Nutzer, die das Chat-Widget mit ihr identifiziert, werden mit diesem Unternehmen verknüpft.",
     "status": "Status",
     "block": "Kontakt blockieren",
     "blockHint": "Neue E-Mails und Chats von dieser Person landen im Spam."

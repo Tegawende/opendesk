@@ -97,6 +97,8 @@ let transport: Transport = fetchTransport;
 export function setTransport(t: Transport) {
   transport = t;
 }
+/** A request through the active transport, for the pages that keep their own session (the customer portal). */
+export const send: Transport = (input, init) => transport(input, init);
 
 type ClientState = {
   baseUrl: string;

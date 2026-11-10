@@ -76,6 +76,11 @@
     "label": "Rechercher"
   },
   "newTicket": "Nouveau ticket",
+  "chatPopup": {
+    "title": "Nouveau chat",
+    "open": "Ouvrir",
+    "close": "Fermer"
+  },
   "notifications": {
     "allow": {
       "title": "Soyez prévenu des nouveaux tickets et des réponses.",

@@ -113,6 +113,14 @@
       "on_hold": "Gözlənilir",
       "solved": "Həll edildi",
       "closed": "Bağlandı"
+    },
+    "new_request": "Yeni sorğu",
+    "new": {
+      "title": "Yeni sorğu",
+      "subject": "Mövzu",
+      "message": "Sizə necə kömək edə bilərik?",
+      "send": "Sorğunu göndər",
+      "limit": "Ardıcıl bir neçə sorğu göndərdiniz. Bir az gözləyin və yenidən cəhd edin."
     }
   }
 }

@@ -42,6 +42,7 @@ type Company = {
   id: string;
   name: string;
   domain: string;
+  external_id: string | null;
   notes: string;
   custom: Record<string, unknown>;
   tags: { id: string; name: string; color: LabelColor; group_id: string | null }[];
@@ -52,7 +53,7 @@ type Company = {
 };
 ```
 
-A contact's email is unique within the workspace, and so is its `external_id`, your own id for the person (set by [verified widget sessions](/guides/live-chat/identity-verification/)). A company's domain is unique within the workspace.
+A contact's email is unique within the workspace, and so is its `external_id`, your own id for the person (set by [verified widget sessions](/guides/live-chat/identity-verification/)). A company's domain is unique within the workspace, and so is its `external_id`, your own id for the account. Set it so [verified widget sessions](/guides/live-chat/identity-verification/#send-the-users-company-and-attributes) can link people to the company; `null` clears it.
 
 ## Several email addresses
 

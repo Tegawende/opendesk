@@ -343,7 +343,12 @@ export function registerTickets() {
     const mailboxId = s(ctx, "mailbox_id") ?? fallback?.id ?? null;
     const box = mailboxId ? ws.mailboxes.find((m) => m.id === mailboxId) : undefined;
     if (mailboxId && (!box || !canSendFrom(ws, box, db.meId))) throw invalid("You can't send from that address");
-    if (box && (s(ctx, "kind") ?? "reply") === "reply" && sendingOf(box) === "system_off") throw cannotSend();
+    // Inbound: the first message is the contact's own words, sent to no one.
+    const inbound = s(ctx, "direction") === "inbound";
+    if (inbound && s(ctx, "kind") === "note") throw invalid("an inbound message is a reply, not a note");
+    if (inbound && !contact) throw invalid("an inbound message needs a contact to speak for");
+    if (inbound && (strArr(ctx.body.cc)?.length || strArr(ctx.body.bcc)?.length)) throw invalid("cc and bcc are for messages sent");
+    if (box && !inbound && (s(ctx, "kind") ?? "reply") === "reply" && sendingOf(box) === "system_off") throw cannotSend();
     const t = newTicket(ws, {
       subject,
       contact: contact ? contactRef(contact) : null,
@@ -363,7 +368,9 @@ export function registerTickets() {
     if (contact) contact.ticket_count++;
     publish(ws, "ticket.created", { ticket: t });
     const body = s(ctx, "body_html");
-    if (body) {
+    if (body && inbound) {
+      addMessage(ws, t, { kind: "reply", direction: "inbound", html: body, attachments: attachmentsFor(strArr(ctx.body.attachment_ids)) }, { status: p.status, actor: userRef(db.meId) });
+    } else if (body) {
       const kind = s(ctx, "kind") === "note" ? "note" : "reply";
       // Copies go with an emailed reply only, like the API's.
       const copies = kind === "reply" && channel === "email" ? { cc: strArr(ctx.body.cc), bcc: strArr(ctx.body.bcc) } : {};

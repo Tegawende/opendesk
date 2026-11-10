@@ -13,6 +13,7 @@ import { customerPortal, refreshCustomer, customerIdentityVersion, subscribeCust
 import { fullDate } from "@/lib/format";
 import { statusTone, tone } from "@/lib/tones";
 import { isApiError } from "@/lib/api/client";
+import { NewRequest } from "./PortalNewRequest";
 import "@/components/help/help.css";
 
 const publicTextLink = "text-fg-2 underline underline-offset-4 hover:text-fg focus-visible:rounded-sm focus-visible:shadow-[0_0_0_3px_var(--focus)]";
@@ -23,7 +24,7 @@ export default function CustomerPortal() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const matches = useMatches();
   const resetToken = matches.map((m) => (m.context as { portalResetToken?: string }).portalResetToken).find((v) => v !== undefined) ?? "";
-  const mode = path.endsWith("/forgot") ? "forgot" : path.endsWith("/reset") ? "reset" : ticketId ? "detail" : "home";
+  const mode = path.endsWith("/forgot") ? "forgot" : path.endsWith("/reset") ? "reset" : path.endsWith("/new") ? "new" : ticketId ? "detail" : "home";
   const { data: brand, isPending, isError } = useQuery({ queryKey: ["customerPortal", "config", slug], queryFn: () => customerPortal.config(slug), retry: false });
   const { locale, loaded } = usePublicLocale(brand?.locale, !isPending, !!brand?.locale_fixed);
   const { t } = useTranslation("public");
@@ -38,7 +39,7 @@ export default function CustomerPortal() {
       <a href={base} className="flex items-center gap-2 font-semibold text-fg">{brand?.logo_url && <img src={brand.logo_url} alt="" width={128} height={32} className="max-h-8 max-w-32 object-contain" />}<bdi style={{ color: /^#[0-9a-f]{6}$/i.test(brand?.color ?? "") ? brand?.color : undefined }}>{brand?.title}</bdi></a>
       {signedIn && <Button variant="ghost" onClick={() => void customerPortal.logout(slug).then(() => { setSignedIn(false); window.location.assign(base); }).catch(() => setLogoutError(true))}>{t("portal.sign_out")}</Button>}
     </header>
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col py-10">{logoutError && <Notice>{t("portal.error")}</Notice>}{!loaded || isPending ? <p>{t("portal.loading")}</p> : isError || !brand ? <Notice>{t("portal.unavailable")}</Notice> : mode === "forgot" || mode === "reset" || (!signedIn && !checking) ? <AuthForm key={mode} slug={slug} mode={mode === "detail" || mode === "home" ? "login" : mode} resetToken={resetToken} onLogin={() => { setChecking(false); setSignedIn(true); }} /> : checking ? <p>{t("portal.loading")}</p> : mode === "detail" && ticketId ? <Ticket key={`${slug}:${ticketId}:${identity}`} slug={slug} id={ticketId} /> : <TicketList key={`${slug}:${identity}`} slug={slug} helpURL={brand.help_url} />}</main>
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col py-10">{logoutError && <Notice>{t("portal.error")}</Notice>}{!loaded || isPending ? <p>{t("portal.loading")}</p> : isError || !brand ? <Notice>{t("portal.unavailable")}</Notice> : mode === "forgot" || mode === "reset" || (!signedIn && !checking) ? <AuthForm key={mode} slug={slug} mode={mode === "detail" || mode === "home" || mode === "new" ? "login" : mode} resetToken={resetToken} onLogin={() => { setChecking(false); setSignedIn(true); }} /> : checking ? <p>{t("portal.loading")}</p> : mode === "detail" && ticketId ? <Ticket key={`${slug}:${ticketId}:${identity}`} slug={slug} id={ticketId} /> : mode === "new" ? <NewRequest key={`${slug}:${identity}`} slug={slug} /> : <TicketList key={`${slug}:${identity}`} slug={slug} helpURL={brand.help_url} />}</main>
     <footer className="mx-auto flex h-14 w-full max-w-3xl items-center justify-end text-xs text-fg-4">{!brand?.locale_fixed && <LanguageSwitcher current={locale} />}</footer>
   </div>;
 }
@@ -66,7 +67,7 @@ export function AuthForm({ slug, mode, resetToken, onLogin }: { slug: string; mo
 export function TicketList({ slug, helpURL }: { slug: string; helpURL: string }) {
   const { t } = useTranslation("public"); const [cursor, setCursor] = useState<string>();
   const tickets = useQuery({ queryKey: ["customerPortal", slug, "tickets", cursor], queryFn: () => customerPortal.tickets(slug, cursor), retry: false });
-  return <><h1 className="text-pretty text-2xl font-semibold">{t("portal.requests")}</h1>{tickets.isPending ? <p className="mt-6">{t("portal.loading")}</p> : tickets.isError ? <Notice className="mt-6">{t("portal.error")}</Notice> : !tickets.data.data.length ? <EmptyState compact art="inbox" title={t("portal.empty")} action={<a className={publicTextLink} href={helpURL}>{t("portal.help_center")}</a>} /> : <div className="mt-6 border-y border-line">{tickets.data.data.map((ticket) => <Link key={ticket.id} to="/portal/$slug/tickets/$ticketId" params={{ slug, ticketId: ticket.id }} className="flex items-center justify-between gap-4 border-b border-line py-4 last:border-0 hover:bg-hover focus-visible:relative focus-visible:z-10 focus-visible:shadow-[0_0_0_3px_var(--focus)]"><span className="min-w-0 flex-1 break-words"><span className="mono tabular-nums text-fg-4">#{ticket.number}</span> <bdi>{ticket.subject}</bdi></span><Status status={ticket.status} /></Link>)}</div>}{tickets.data?.next_cursor && <Button className="mt-4 self-start" variant="secondary" onClick={() => setCursor(tickets.data.next_cursor ?? undefined)}>{t("portal.next")}</Button>}</>;
+  return <><div className="flex items-center justify-between gap-4"><h1 className="text-pretty text-2xl font-semibold">{t("portal.requests")}</h1><Link to="/portal/$slug/new" params={{ slug }} className="inline-flex h-9 items-center rounded-md bg-inverse px-3.5 text-sm font-medium text-inverse-fg hover:opacity-90 focus-visible:shadow-[0_0_0_3px_var(--focus)]">{t("portal.new_request")}</Link></div>{tickets.isPending ? <p className="mt-6">{t("portal.loading")}</p> : tickets.isError ? <Notice className="mt-6">{t("portal.error")}</Notice> : !tickets.data.data.length ? <EmptyState compact art="inbox" title={t("portal.empty")} action={<a className={publicTextLink} href={helpURL}>{t("portal.help_center")}</a>} /> : <div className="mt-6 border-y border-line">{tickets.data.data.map((ticket) => <Link key={ticket.id} to="/portal/$slug/tickets/$ticketId" params={{ slug, ticketId: ticket.id }} className="flex items-center justify-between gap-4 border-b border-line py-4 last:border-0 hover:bg-hover focus-visible:relative focus-visible:z-10 focus-visible:shadow-[0_0_0_3px_var(--focus)]"><span className="min-w-0 flex-1 break-words"><span className="mono tabular-nums text-fg-4">#{ticket.number}</span> <bdi>{ticket.subject}</bdi></span><Status status={ticket.status} /></Link>)}</div>}{tickets.data?.next_cursor && <Button className="mt-4 self-start" variant="secondary" onClick={() => setCursor(tickets.data.next_cursor ?? undefined)}>{t("portal.next")}</Button>}</>;
 }
 function Status({ status }: { status: string }) {
   const { t } = useTranslation("public");

@@ -113,7 +113,7 @@ export function useSidebarItems() {
         return groupViews(views ?? []).flatMap((e) =>
           e.kind === "view"
             ? [view(e.view, 0)]
-            : [{ key: `section:${e.key}`, label: e.name, icon: <ListTree />, pin: { kind: "view_section", id: e.key }, note: t("customize.viewSection") }, ...e.views.map((v) => view(v, 1))],
+            : [{ key: `section:${e.key}`, label: viewName(e), icon: e.icon ? <ViewIcon icon={e.icon} size={14} /> : <ListTree />, pin: { kind: "view_section", id: e.key }, note: t("customize.viewSection") }, ...e.views.map((v) => view(v, 1))],
         );
       }
       case "pages": {

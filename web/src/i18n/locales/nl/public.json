@@ -113,6 +113,14 @@
       "on_hold": "In de wacht",
       "solved": "Opgelost",
       "closed": "Gesloten"
+    },
+    "new_request": "Nieuw verzoek",
+    "new": {
+      "title": "Nieuw verzoek",
+      "subject": "Onderwerp",
+      "message": "Waarmee kunnen we helpen?",
+      "send": "Verzoek versturen",
+      "limit": "Je hebt meerdere verzoeken kort na elkaar verstuurd. Wacht even en probeer het opnieuw."
     }
   }
 }

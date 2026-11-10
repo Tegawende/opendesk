@@ -406,7 +406,7 @@ export function applyPatch(ws: WsData, t: Ticket, patch: TicketPatch, actor: Use
     changes.push("assignee_id");
     act("assigned", { from, to: t.assignee });
     if (t.assignee && actor?.id !== t.assignee.id && t.assignee.id === db.meId) {
-      notify(ws, "assigned", t, { actor });
+      notify(ws, "assigned", t, { actor, channel: t.channel });
     }
   }
   if (patch.brand_id !== undefined && patch.brand_id !== t.brand_id && ws.brands.some((b) => b.id === patch.brand_id)) {

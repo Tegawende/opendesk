@@ -627,7 +627,7 @@ func inboundMessage(ctx context.Context, tx pgx.Tx, p *auth.Principal, tid, cont
 	}
 	nm := domain.NewMessage{WorkspaceID: wid, TicketID: tid, Kind: "reply", Direction: "inbound", AuthorType: "contact",
 		AuthorContactID: &contactID, BodyHTML: bodyHTML, BodyText: bodyText, Subject: subject, AttachmentIDs: attIDs,
-		APIKeyID: p.ActorAPIKeyID()}
+		APIKeyID: p.ActorAPIKeyID(), RecordedBy: p.ActorUserID()}
 	var email, name *string
 	if err := tx.QueryRow(ctx, `SELECT email, name FROM contacts WHERE workspace_id = $1 AND id = $2`, wid, contactID).Scan(&email, &name); err == nil {
 		nm.FromEmail, nm.FromName = str(email), str(name)

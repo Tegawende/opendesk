@@ -161,3 +161,23 @@ func TestSeveritySetting(t *testing.T) {
 		t.Fatal("stored without being set")
 	}
 }
+
+// TestTicketNumberInSubjectSetting checks the subject tag can be turned off and on, and stays unset otherwise.
+func TestTicketNumberInSubjectSetting(t *testing.T) {
+	for _, v := range []bool{true, false} {
+		out, err := validateSettings(&CoreWorkspaceSettings{TicketNumberInSubject: &v})
+		if err != nil {
+			t.Fatalf("%v: %v", v, err)
+		}
+		if out["ticket_number_in_subject"] != v {
+			t.Fatalf("%v: stored %v", v, out["ticket_number_in_subject"])
+		}
+	}
+	out, err := validateSettings(&CoreWorkspaceSettings{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out["ticket_number_in_subject"]; ok {
+		t.Fatal("stored without being set")
+	}
+}

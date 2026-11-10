@@ -360,6 +360,7 @@ function ViewList({ views, rail, row, count, waiting, prefs }: {
       <ViewSectionGroup
         key={`section:${e.key}`}
         name={e.name}
+        icon={e.icon}
         views={e.views}
         rail={rail}
         folded={folded.has(e.key)}

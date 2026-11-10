@@ -115,6 +115,14 @@
       "on_hold": "En espera",
       "solved": "Resuelto",
       "closed": "Cerrado"
+    },
+    "new_request": "Nueva solicitud",
+    "new": {
+      "title": "Nueva solicitud",
+      "subject": "Asunto",
+      "message": "¿Cómo podemos ayudarte?",
+      "send": "Enviar solicitud",
+      "limit": "Has enviado varias solicitudes seguidas. Espera un rato e inténtalo de nuevo."
     }
   }
 }

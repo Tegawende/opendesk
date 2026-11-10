@@ -117,6 +117,14 @@
       "on_hold": "Wstrzymane",
       "solved": "Rozwiązane",
       "closed": "Zamknięte"
+    },
+    "new_request": "Nowe zgłoszenie",
+    "new": {
+      "title": "Nowe zgłoszenie",
+      "subject": "Temat",
+      "message": "W czym możemy pomóc?",
+      "send": "Wyślij zgłoszenie",
+      "limit": "Wysłano kilka zgłoszeń z rzędu. Poczekaj chwilę i spróbuj ponownie."
     }
   }
 }

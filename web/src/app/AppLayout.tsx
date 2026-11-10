@@ -38,6 +38,7 @@ import { notifyDesktop, useDesktopBadge, useDesktopPreferences } from "./useDesk
 import { AiBalanceBanner } from "@/components/billing/AiBalanceBanner";
 import { DesktopUpdateBanner } from "@/components/desktop/UpdateBanner";
 import { AllowNotificationsBanner } from "@/components/notifications/AllowBanner";
+import { showChatPopup } from "@/components/notifications/ChatPopup";
 import { NEW_TICKET_PATH, shell, useNav, useShell } from "./shellStore";
 import { quickAddOpen, useQuickAdd } from "./quickAdd";
 import { useCollab } from "@/lib/collab/hooks";
@@ -179,6 +180,8 @@ function useRealtimeConnection() {
           fn();
         };
         notifyDesktop(n, (path) => router.history.push(path), from);
+        // A chat assigned to this member pops up, with the chat alarm, instead of the toast.
+        if (showChatPopup(n, from, (path) => router.history.push(path))) return;
         soundForNotification(n);
         if (n.type === "customer_replied") return;
         if (n.type === "ai_key_failed") inWorkspace(from, () => void qc.invalidateQueries({ queryKey: qk.aiProvider }));

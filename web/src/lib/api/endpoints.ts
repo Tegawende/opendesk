@@ -113,6 +113,8 @@ export type CreateTicketBody = {
   brand_id?: string;
   body_html: string;
   kind?: "reply" | "note";
+  /** inbound: the first message is the contact's own words, sent to no one (not on a chat). */
+  direction?: "outbound" | "inbound";
   priority?: T.Priority;
   severity?: T.Severity;
   assignee_id?: string;
@@ -639,7 +641,7 @@ export const api = {
     ...pictureRoutes<T.Contact>("/v1/contacts"),
   },
   companies: {
-    ...crud<T.Company, Partial<Pick<T.Company, "name" | "domain" | "notes" | "custom">> & LabelWrites>("/v1/companies"),
+    ...crud<T.Company, Partial<Pick<T.Company, "name" | "domain" | "external_id" | "notes" | "custom">> & LabelWrites>("/v1/companies"),
     search: (q: CompanyListQuery) => http.get<T.Page<T.Company>>("/v1/companies", { query: listQuery(q) }),
     ...pictureRoutes<T.Company>("/v1/companies"),
   },
@@ -665,6 +667,10 @@ export const api = {
   },
   savedReplies: crud<T.SavedReply, { title: string; shortcut: string; body_html: string; team_id?: string | null; actions?: T.SavedReplyActions }>("/v1/saved-replies"),
   views: crud<T.View, { name: string; filters: T.TicketFilters; shared: boolean; position?: number; team_id?: string | null; section?: string | null; icon?: T.ViewIcon | null }>("/v1/views"),
+  /** `section` as its views name it; `name` renames it on the views the caller sees; `icon` null clears it. */
+  viewSections: {
+    update: (b: { section: string; name?: string; icon?: T.ViewIcon | null }) => http.patch<T.ViewSection>("/v1/view-sections", b),
+  },
   slaPolicies: crud<T.SlaPolicy, Omit<T.SlaPolicy, "id" | "business_hours"> & { business_hours?: boolean }>("/v1/sla-policies"),
   automations: crud<T.Automation, Omit<T.Automation, "id" | "run_count">>("/v1/automations"),
   kb: {

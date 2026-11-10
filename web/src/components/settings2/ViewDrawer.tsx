@@ -17,6 +17,7 @@ import { toast } from "@/components/ui/toast";
 import { IconTile } from "@/components/settings2/bits";
 import { TeamPick, useTeams } from "@/components/settings2/teams";
 import { ViewIconField } from "@/components/settings2/ViewIconField";
+import { ViewIcon } from "@/components/tickets/ViewIcon";
 import { Segmented } from "@/components/ui/tabs";
 import { viewAudience, viewAudienceHint } from "@/components/settings2/viewAudience";
 import { canWriteView, copyPersonalNote, copyView, makeRoom, viewRights } from "@/components/settings2/viewCopy";
@@ -29,7 +30,7 @@ import type { Channel, Priority, Severity, TicketFilters, TicketStatus, View, Vi
 import { q, qk, upsertInList } from "@/lib/queries";
 import { atLeast, useRole, useUser } from "@/lib/session";
 import { cn } from "@/lib/cn";
-import { cleanSection, clipSection, matchSection, sectionKey, sectionProblem, viewSections } from "@/lib/viewSections";
+import { cleanSection, clipSection, groupViews, matchSection, sectionKey, sectionProblem, viewSections } from "@/lib/viewSections";
 
 /**
  * The view editor: `view` to change one, else a new view, started from a copy of `copyOf`
@@ -53,7 +54,14 @@ export function ViewDrawer({ view, copyOf, views, nextPosition, onClose }: { vie
   const [teamId, setTeamId] = useState<string | null>(start?.team_id ?? null);
   const [icon, setIcon] = useState<ViewIconValue | null>(start?.icon ?? null);
   const [section, setSection] = useState(cleanSection(start?.section));
-  const inUse = viewSections(useQuery(q.views()).data ?? []);
+  const allViews = useQuery(q.views()).data;
+  const inUse = viewSections(allViews ?? []);
+  // Each section in use with its icon, as the sidebar shows it.
+  const sectionIcon = (s: string) => {
+    const e = groupViews(allViews ?? []).find((x) => x.kind === "section" && x.key === sectionKey(s));
+    const i = e?.kind === "section" ? e.icon : null;
+    return i ? <ViewIcon icon={i} size={14} /> : <FolderClosed />;
+  };
   const sections = section && !inUse.some((s) => sectionKey(s) === sectionKey(section)) ? [...inUse, section] : inUse;
   const { t: tt } = useTranslation("settingsTeams");
   const [f, setF] = useState<TicketFilters>(start?.filters ?? { status: ["open"] });
@@ -191,7 +199,7 @@ export function ViewDrawer({ view, copyOf, views, nextPosition, onClose }: { vie
               <Picker
                 items={[
                   { value: "", label: t("views.noSection"), icon: <X /> },
-                  ...sections.map((s) => ({ value: s, label: s, icon: <FolderClosed /> })),
+                  ...sections.map((s) => ({ value: s, label: s, icon: sectionIcon(s) })),
                 ]}
                 value={section}
                 onSelect={setSection}
@@ -207,7 +215,7 @@ export function ViewDrawer({ view, copyOf, views, nextPosition, onClose }: { vie
                 emptyText={t("views.sectionEmpty")}
                 width={300}
                 trigger={
-                  <ValueButton id={p.id} aria-describedby={p["aria-describedby"]} size="md" placeholder={t("views.noSection")} icon={section ? <FolderClosed /> : undefined} className="w-full">
+                  <ValueButton id={p.id} aria-describedby={p["aria-describedby"]} size="md" placeholder={t("views.noSection")} icon={section ? sectionIcon(section) : undefined} className="w-full">
                     {section || undefined}
                   </ValueButton>
                 }

@@ -780,7 +780,10 @@
     "needTo": "Füge einen Empfänger hinzu.",
     "needSubject": "Füge einen Betreff hinzu.",
     "needBody": "Schreib eine Nachricht.",
-    "cannotSend": "Diese Adresse kann noch keine E-Mails senden. Wähle eine andere oder bitte einen Admin, eine Versandmöglichkeit zu verbinden."
+    "cannotSend": "Diese Adresse kann noch keine E-Mails senden. Wähle eine andere oder bitte einen Admin, eine Versandmöglichkeit zu verbinden.",
+    "log": "Anfrage erfassen",
+    "logHint": "Jetzt wird nichts per E-Mail gesendet. Die Nachricht wird als die des Kunden gespeichert, und deine Antworten gehen von dieser Adresse aus.",
+    "bodyLog": "Schreib die Anfrage so, wie sie eingegangen ist"
   },
   "contact": {
     "unnamed": "Kontakt ohne Namen",
