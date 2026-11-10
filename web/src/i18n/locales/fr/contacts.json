@@ -185,5 +185,49 @@
     "tickets": "Le moins de tickets",
     "-contacts": "Le plus de personnes",
     "contacts": "Le moins de personnes"
+  },
+  "bulk": {
+    "toolbar": "Actions pour les lignes sélectionnées",
+    "selectedWord_one": "sélectionné",
+    "selectedWord_other": "sélectionnés",
+    "selectAll": "Sélectionner tous les résultats",
+    "allMatching": "Tous les résultats",
+    "addLabel": "Ajouter un label",
+    "removeLabel": "Retirer un label",
+    "setCompany": "Définir l’entreprise",
+    "noCompany": "Aucune entreprise",
+    "delete": "Supprimer",
+    "clear": "Effacer la sélection",
+    "selectRow": "Sélectionner {{name}}",
+    "selectPage": "Sélectionner toutes les lignes affichées",
+    "updated_one": "{{count}} fiche mise à jour",
+    "updated_other": "{{count}} fiches mises à jour",
+    "deleted_one": "{{count}} fiche supprimée",
+    "deleted_other": "{{count}} fiches supprimées",
+    "failed": "Impossible d’appliquer le changement. Rien n’a été modifié.",
+    "deleteTitle": {
+      "contacts_one": "Supprimer {{count}} personne",
+      "contacts_other": "Supprimer {{count}} personnes",
+      "companies_one": "Supprimer {{count}} entreprise",
+      "companies_other": "Supprimer {{count}} entreprises",
+      "contacts_many": "Supprimer {{count}} personnes",
+      "companies_many": "Supprimer {{count}} entreprises"
+    },
+    "deleteBody": {
+      "contacts_one": "Cette personne est supprimée définitivement. Ses tickets restent, sans client. Cette action est irréversible.",
+      "contacts_other": "Ces {{count}} personnes sont supprimées définitivement. Leurs tickets restent, sans client. Cette action est irréversible.",
+      "companies_one": "Cette entreprise est supprimée définitivement. Ses personnes restent, sans entreprise. Cette action est irréversible.",
+      "companies_other": "Ces {{count}} entreprises sont supprimées définitivement. Leurs personnes restent, sans entreprise. Cette action est irréversible.",
+      "contacts_many": "Ces {{count}} personnes sont supprimées définitivement. Leurs tickets restent, sans client. Cette action est irréversible.",
+      "companies_many": "Ces {{count}} entreprises sont supprimées définitivement. Leurs personnes restent, sans entreprise. Cette action est irréversible."
+    },
+    "deleteAllTitle": "Supprimer tous les résultats",
+    "deleteAllBody": {
+      "contacts": "Toutes les personnes qui correspondent à la recherche et aux filtres sont supprimées définitivement, 1 000 au plus. Leurs tickets restent, sans client. Cette action est irréversible.",
+      "companies": "Toutes les entreprises qui correspondent à la recherche et aux filtres sont supprimées définitivement, 1 000 au plus. Leurs personnes restent, sans entreprise. Cette action est irréversible."
+    },
+    "selectedWord_many": "sélectionnés",
+    "updated_many": "{{count}} fiches mises à jour",
+    "deleted_many": "{{count}} fiches supprimées"
   }
 }

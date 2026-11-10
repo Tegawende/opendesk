@@ -13,7 +13,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
+import { DirectoryBulkBar } from "@/components/contacts/DirectoryBulkBar";
 import { DirectoryFilters } from "@/components/contacts/DirectoryFilters";
+import { HeaderCheck, RowCheck } from "@/components/contacts/RowCheck";
+import { useSelection } from "@/components/contacts/useSelection";
 import { DirectoryNav } from "@/components/contacts/DirectoryNav";
 import { ContactDrawer } from "@/components/contacts/ContactDrawer";
 import { CompanyPicker } from "@/components/contacts/CompanyPicker";
@@ -31,9 +34,9 @@ const route = getRouteApi("/app/contacts/{-$contactId}");
 
 // Name and tickets always; email, company and updated from md; labels and created from xl.
 const colsLabels =
-  "grid items-center gap-4 grid-cols-[minmax(0,1fr)_64px] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_72px] xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_64px_88px_72px]";
+  "grid items-center gap-4 grid-cols-[24px_minmax(0,1fr)_64px] md:grid-cols-[24px_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_72px] xl:grid-cols-[24px_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_64px_88px_72px]";
 const colsPlain =
-  "grid items-center gap-4 grid-cols-[minmax(0,1fr)_64px] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_72px] xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_88px_72px]";
+  "grid items-center gap-4 grid-cols-[24px_minmax(0,1fr)_64px] md:grid-cols-[24px_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_72px] xl:grid-cols-[24px_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_88px_72px]";
 const md = "hidden md:block";
 const xl = "hidden xl:flex";
 const xlLabels = (on: boolean) => (on ? "hidden xl:flex" : "hidden");
@@ -56,6 +59,9 @@ export default function ContactsPage() {
   const list = useInfiniteQuery(q.contacts({ q: search.q, company_id: search.company, tag: search.tag, blocked: search.blocked, sort: search.sort }));
   const company = useQuery({ ...q.company(search.company ?? ""), enabled: !!search.company });
   const rows = list.data?.pages.flatMap((p) => p.data) ?? [];
+  // A selection belongs to this list: other filters or another search drop it.
+  const selection = useSelection(JSON.stringify([search.q, search.company, search.tag, search.blocked]));
+  const allTicked = rows.length > 0 && rows.every((r) => selection.has(r.id));
   const sentinel = useSentinel(() => {
     if (list.hasNextPage && !list.isFetchingNextPage) void list.fetchNextPage();
   }, !!list.hasNextPage);
@@ -78,7 +84,7 @@ export default function ContactsPage() {
   ) : undefined;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       <PageHeader title={t("title")} icon={<Users />} actions={newButton}>
         <DirectoryNav current="contacts" />
         <div className="ml-auto hidden w-[280px] sm:block">
@@ -125,6 +131,9 @@ export default function ContactsPage() {
         )}
 
         <div className={`${cols} sticky top-0 z-10 h-9 border-b border-line bg-surface px-4 md:px-5`}>
+          <span className="flex items-center">
+            {canEdit && <HeaderCheck checked={allTicked ? true : selection.ids.length > 0 ? "indeterminate" : false} onChange={() => selection.togglePage(rows.map((r) => r.id))} />}
+          </span>
           <span className="label-caps">{t("col.name")}</span>
           <span className={`label-caps ${md}`}>{t("col.email")}</span>
           <span className={`label-caps ${md}`}>{t("col.company")}</span>
@@ -180,6 +189,7 @@ export default function ContactsPage() {
                     data-active={contactId === c.id || undefined}
                     className={`${cols} h-11 border-b border-line-soft px-4 text-[13px] transition-colors duration-100 hover:bg-sunken data-[active]:bg-hover md:px-5`}
                   >
+                    <span className="flex items-center">{canEdit && <RowCheck checked={selection.allMatching || selection.has(c.id)} onChange={() => selection.toggle(c.id)} name={c.name || c.email || ""} />}</span>
                     <span className="flex min-w-0 items-center gap-2.5">
                       <Avatar name={c.name || c.email || "?"} src={c.avatar_url} size="md" />
                       <span className="truncate font-medium" data-ph-mask>
@@ -221,6 +231,15 @@ export default function ContactsPage() {
           {list.isFetchingNextPage && <Spinner className="size-3.5 text-fg-4" />}
         </div>
       </div>
+
+      {canEdit && (
+        <DirectoryBulkBar
+          scope="contacts"
+          selection={selection}
+          query={{ q: search.q, company_id: search.company, tag: search.tag, blocked: search.blocked }}
+          canSelectMore={allTicked && (!!list.hasNextPage || filtered)}
+        />
+      )}
 
       <ContactDrawer contactId={contactId ?? null} onClose={() => void open(undefined)} />
       <NewContactDialog open={creating} onOpenChange={setCreating} onCreated={(id) => void open(id)} defaultCompany={company.data ?? null} />

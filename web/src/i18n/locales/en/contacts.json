@@ -183,5 +183,42 @@
     "tickets": "Fewest tickets",
     "-contacts": "Most people",
     "contacts": "Fewest people"
+  },
+  "bulk": {
+    "toolbar": "Actions for the selected rows",
+    "selectedWord_one": "selected",
+    "selectedWord_other": "selected",
+    "selectAll": "Select everyone who matches",
+    "allMatching": "Everyone who matches",
+    "addLabel": "Add label",
+    "removeLabel": "Remove label",
+    "setCompany": "Set company",
+    "noCompany": "No company",
+    "delete": "Delete",
+    "clear": "Clear selection",
+    "selectRow": "Select {{name}}",
+    "selectPage": "Select every row shown",
+    "updated_one": "{{count}} record updated",
+    "updated_other": "{{count}} records updated",
+    "deleted_one": "{{count}} record deleted",
+    "deleted_other": "{{count}} records deleted",
+    "failed": "Couldn't change them. Nothing was changed.",
+    "deleteTitle": {
+      "contacts_one": "Delete {{count}} person",
+      "contacts_other": "Delete {{count}} people",
+      "companies_one": "Delete {{count}} company",
+      "companies_other": "Delete {{count}} companies"
+    },
+    "deleteBody": {
+      "contacts_one": "This person is deleted for good. Their tickets stay, without a customer. This can't be undone.",
+      "contacts_other": "These {{count}} people are deleted for good. Their tickets stay, without a customer. This can't be undone.",
+      "companies_one": "This company is deleted for good. Its people stay, without a company. This can't be undone.",
+      "companies_other": "These {{count}} companies are deleted for good. Their people stay, without a company. This can't be undone."
+    },
+    "deleteAllTitle": "Delete everyone who matches",
+    "deleteAllBody": {
+      "contacts": "Everyone who matches the search and filters is deleted for good, up to 1000 people. Their tickets stay, without a customer. This can't be undone.",
+      "companies": "Every company that matches the search and filters is deleted for good, up to 1000. Their people stay, without a company. This can't be undone."
+    }
   }
 }

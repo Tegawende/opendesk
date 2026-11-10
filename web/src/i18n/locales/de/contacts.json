@@ -183,5 +183,42 @@
     "tickets": "Wenigste Tickets",
     "-contacts": "Meiste Personen",
     "contacts": "Wenigste Personen"
+  },
+  "bulk": {
+    "toolbar": "Aktionen für die ausgewählten Zeilen",
+    "selectedWord_one": "ausgewählt",
+    "selectedWord_other": "ausgewählt",
+    "selectAll": "Alle Treffer auswählen",
+    "allMatching": "Alle Treffer",
+    "addLabel": "Label hinzufügen",
+    "removeLabel": "Label entfernen",
+    "setCompany": "Unternehmen festlegen",
+    "noCompany": "Kein Unternehmen",
+    "delete": "Löschen",
+    "clear": "Auswahl aufheben",
+    "selectRow": "{{name}} auswählen",
+    "selectPage": "Alle angezeigten Zeilen auswählen",
+    "updated_one": "{{count}} Eintrag aktualisiert",
+    "updated_other": "{{count}} Einträge aktualisiert",
+    "deleted_one": "{{count}} Eintrag gelöscht",
+    "deleted_other": "{{count}} Einträge gelöscht",
+    "failed": "Die Änderung war nicht möglich. Es wurde nichts geändert.",
+    "deleteTitle": {
+      "contacts_one": "{{count}} Person löschen",
+      "contacts_other": "{{count}} Personen löschen",
+      "companies_one": "{{count}} Unternehmen löschen",
+      "companies_other": "{{count}} Unternehmen löschen"
+    },
+    "deleteBody": {
+      "contacts_one": "Diese Person wird endgültig gelöscht. Ihre Tickets bleiben ohne Kunden erhalten. Das lässt sich nicht rückgängig machen.",
+      "contacts_other": "Diese {{count}} Personen werden endgültig gelöscht. Ihre Tickets bleiben ohne Kunden erhalten. Das lässt sich nicht rückgängig machen.",
+      "companies_one": "Dieses Unternehmen wird endgültig gelöscht. Seine Personen bleiben ohne Unternehmen erhalten. Das lässt sich nicht rückgängig machen.",
+      "companies_other": "Diese {{count}} Unternehmen werden endgültig gelöscht. Ihre Personen bleiben ohne Unternehmen erhalten. Das lässt sich nicht rückgängig machen."
+    },
+    "deleteAllTitle": "Alle Treffer löschen",
+    "deleteAllBody": {
+      "contacts": "Alle Personen, die zur Suche und den Filtern passen, werden endgültig gelöscht, höchstens 1000. Ihre Tickets bleiben ohne Kunden erhalten. Das lässt sich nicht rückgängig machen.",
+      "companies": "Alle Unternehmen, die zur Suche und den Filtern passen, werden endgültig gelöscht, höchstens 1000. Ihre Personen bleiben ohne Unternehmen erhalten. Das lässt sich nicht rückgängig machen."
+    }
   }
 }

@@ -35,19 +35,23 @@ func TestPortalAuthSettingsAccessAndLocalDefault(t *testing.T) {
 	var settings struct {
 		Mode, Issuer     string
 		SecretConfigured bool `json:"secret_configured"`
+		CreateContacts   bool `json:"create_contacts"`
 	}
+	e.Exec(`UPDATE brands SET portal_oidc_create_contacts=true WHERE id=$1`, ws.BrandID)
 	res := e.Do("GET", path+"/portal/auth", ws.Admin.As(ws), nil).Want(t, 200)
 	res.JSON(t, &settings)
-	if settings.Mode != "oidc" || !settings.SecretConfigured {
+	if settings.Mode != "oidc" || !settings.SecretConfigured || !settings.CreateContacts {
 		t.Fatalf("settings %+v", settings)
 	}
 	raw := string(res.Body)
 	if strings.Contains(raw, "private-client-secret") || strings.Contains(raw, "client_secret") {
 		t.Fatalf("secret response %s", raw)
 	}
+	// Creating contacts belongs to a provider sign-in; a local portal refuses it.
+	e.Do("PATCH", path, ws.Admin.As(ws), map[string]any{"portal_auth": map[string]any{"mode": "local", "create_contacts": true}}).Want(t, 422)
 	e.Do("PATCH", path, ws.Admin.As(ws), map[string]any{"portal_auth": map[string]any{"mode": "local"}}).Want(t, 200)
 	e.Do("GET", path+"/portal/auth", ws.Admin.As(ws), nil).Want(t, 200).JSON(t, &settings)
-	if settings.Mode != "local" || settings.Issuer != "" || settings.SecretConfigured {
+	if settings.Mode != "local" || settings.Issuer != "" || settings.SecretConfigured || settings.CreateContacts {
 		t.Fatalf("local clearing %+v", settings)
 	}
 	e.Do("PATCH", path, ws.Admin.As(ws), map[string]any{"portal_auth": map[string]any{"mode": "oidc", "issuer": "https://127.0.0.1", "client_id": "client", "client_secret": "secret"}}).Want(t, 422)

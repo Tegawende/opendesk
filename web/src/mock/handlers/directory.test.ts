@@ -4,6 +4,12 @@ import { installMock } from "../index";
 import { dispatch } from "../router";
 import { db } from "../db";
 
+async function post(path: string, body: unknown) {
+  const ws = db.workspaces[0].workspace.id;
+  const r = await dispatch(`http://mock${path}`, { method: "POST", body: JSON.stringify(body), headers: { "OD-Workspace": ws } });
+  return { status: r.status, body: await r.json() };
+}
+
 async function list<T>(path: string): Promise<T[]> {
   const ws = db.workspaces[0].workspace.id;
   const r = await dispatch(`http://mock${path}`, { method: "GET", headers: { "OD-Workspace": ws } });
@@ -35,5 +41,41 @@ describe("mock people and companies lists", () => {
     expect((await list<Company>("/v1/companies?sort=-name&limit=100")).map((c) => c.name.toLowerCase())).toEqual([...asc].reverse());
     const sizes = (await list<Company>("/v1/companies?sort=-contacts&limit=100")).map((c) => c.contact_count);
     expect(sizes).toEqual([...sizes].sort((a, b) => b - a));
+  });
+
+  it("labels, moves and deletes people by id or by filter, all or nothing", async () => {
+    const people = db.workspaces[0].contacts;
+    const first = people.slice(0, 3).map((c) => c.id);
+    const company = db.workspaces[0].companies[0];
+
+    expect((await post("/v1/contacts/bulk", { ids: first, patch: { add_tags: ["bulk-test"] } })).body).toEqual({ updated: 3, deleted: 0 });
+    expect(people.filter((c) => c.tags.some((x) => x.name === "bulk-test")).map((c) => c.id).sort()).toEqual([...first].sort());
+    await post("/v1/contacts/bulk", { ids: first.slice(0, 1), patch: { remove_tags: ["bulk-test"] } });
+    expect(people.filter((c) => c.tags.some((x) => x.name === "bulk-test")).length).toBe(2);
+
+    await post("/v1/contacts/bulk", { ids: first, patch: { company_id: company.id } });
+    expect(people.filter((c) => first.includes(c.id)).every((c) => c.company?.id === company.id)).toBe(true);
+    await post("/v1/contacts/bulk", { ids: first, patch: { company_id: null } });
+    expect(people.filter((c) => first.includes(c.id)).every((c) => c.company === null)).toBe(true);
+
+    // Refusals change nothing.
+    const before = db.workspaces[0].contacts.length;
+    expect((await post("/v1/contacts/bulk", { ids: [first[0], "nope"], delete: true })).status).toBe(404);
+    expect((await post("/v1/contacts/bulk", { ids: first, delete: true, patch: {} })).status).toBe(422);
+    expect((await post("/v1/contacts/bulk", { delete: true })).status).toBe(422);
+    expect(db.workspaces[0].contacts.length).toBe(before);
+
+    // A filter selects: delete the labelled ones.
+    expect((await post("/v1/contacts/bulk", { query: { tag: "bulk-test" }, delete: true })).body).toEqual({ updated: 0, deleted: 2 });
+    expect(db.workspaces[0].contacts.length).toBe(before - 2);
+  });
+
+  it("labels and deletes companies, leaving their people without one", async () => {
+    const ws = db.workspaces[0];
+    const target = ws.companies.find((c) => ws.contacts.some((p) => p.company?.id === c.id))!;
+    expect((await post("/v1/companies/bulk", { ids: [target.id], patch: { add_tags: ["bulk-co"] } })).body).toEqual({ updated: 1, deleted: 0 });
+    expect((await post("/v1/companies/bulk", { query: { tag: "bulk-co" }, delete: true })).body).toEqual({ updated: 0, deleted: 1 });
+    expect(ws.companies.some((c) => c.id === target.id)).toBe(false);
+    expect(ws.contacts.some((p) => p.company?.id === target.id)).toBe(false);
   });
 });

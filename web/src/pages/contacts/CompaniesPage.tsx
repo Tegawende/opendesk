@@ -12,7 +12,10 @@ import { Field, SearchInput, TextInput } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { DirectoryBulkBar } from "@/components/contacts/DirectoryBulkBar";
 import { DirectoryFilters } from "@/components/contacts/DirectoryFilters";
+import { HeaderCheck, RowCheck } from "@/components/contacts/RowCheck";
+import { useSelection } from "@/components/contacts/useSelection";
 import { DirectoryNav } from "@/components/contacts/DirectoryNav";
 import { CompanyDrawer } from "@/components/contacts/CompanyDrawer";
 import { CompanyGlyph, Labels, labelsOf } from "@/components/contacts/bits";
@@ -27,9 +30,9 @@ import { atLeast, useRole } from "@/lib/session";
 
 const route = getRouteApi("/app/companies/{-$companyId}");
 const colsLabels =
-  "grid items-center gap-4 grid-cols-[minmax(0,1fr)_72px] md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_72px_72px] xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_72px_88px_72px]";
+  "grid items-center gap-4 grid-cols-[24px_minmax(0,1fr)_72px] md:grid-cols-[24px_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_72px_72px] xl:grid-cols-[24px_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_72px_88px_72px]";
 const colsPlain =
-  "grid items-center gap-4 grid-cols-[minmax(0,1fr)_72px] md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_72px_72px] xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_72px_88px_72px]";
+  "grid items-center gap-4 grid-cols-[24px_minmax(0,1fr)_72px] md:grid-cols-[24px_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_72px_72px] xl:grid-cols-[24px_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_72px_88px_72px]";
 const md = "hidden md:block";
 const xl = "hidden xl:flex";
 const xlLabels = (on: boolean) => (on ? "hidden xl:flex" : "hidden");
@@ -51,6 +54,9 @@ export default function CompaniesPage() {
 
   const list = useInfiniteQuery(q.companies({ q: search.q, tag: search.tag, sort: search.sort }));
   const rows = list.data?.pages.flatMap((p) => p.data) ?? [];
+  // A selection belongs to this list: another search or label drops it.
+  const selection = useSelection(JSON.stringify([search.q, search.tag]));
+  const allTicked = rows.length > 0 && rows.every((r) => selection.has(r.id));
   const sentinel = useSentinel(() => {
     if (list.hasNextPage && !list.isFetchingNextPage) void list.fetchNextPage();
   }, !!list.hasNextPage);
@@ -81,7 +87,7 @@ export default function CompaniesPage() {
   ) : undefined;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       <PageHeader title={t("title")} icon={<Building2 />} actions={newButton}>
         <DirectoryNav current="companies" />
         <div className="ml-auto hidden w-[280px] sm:block">
@@ -112,6 +118,9 @@ export default function CompaniesPage() {
         )}
 
         <div className={`${cols} sticky top-0 z-10 h-9 border-b border-line bg-surface px-4 md:px-5`}>
+          <span className="flex items-center">
+            {canEdit && <HeaderCheck checked={allTicked ? true : selection.ids.length > 0 ? "indeterminate" : false} onChange={() => selection.togglePage(rows.map((r) => r.id))} />}
+          </span>
           <span className="label-caps">{t("col.company")}</span>
           <span className={`label-caps ${md}`}>{t("col.domain")}</span>
           <span className={`label-caps ${md}`}>{t("col.people")}</span>
@@ -168,6 +177,7 @@ export default function CompaniesPage() {
                       data-active={companyId === c.id || undefined}
                       className={`${cols} h-11 border-b border-line-soft px-4 text-[13px] transition-colors duration-100 hover:bg-sunken data-[active]:bg-hover md:px-5`}
                     >
+                      <span className="flex items-center">{canEdit && <RowCheck checked={selection.allMatching || selection.has(c.id)} onChange={() => selection.toggle(c.id)} name={c.name} />}</span>
                       <span className="flex min-w-0 items-center gap-2.5">
                         <CompanyGlyph name={c.name} src={c.avatar_url} />
                         <span className="truncate font-medium">{c.name}</span>
@@ -203,6 +213,10 @@ export default function CompaniesPage() {
           {list.isFetchingNextPage && <Spinner className="size-3.5 text-fg-4" />}
         </div>
       </div>
+
+      {canEdit && (
+        <DirectoryBulkBar scope="companies" selection={selection} query={{ q: search.q, tag: search.tag }} canSelectMore={allTicked && (!!list.hasNextPage || !!search.q || !!search.tag)} />
+      )}
 
       <CompanyDrawer companyId={companyId ?? null} onClose={() => void open(undefined)} />
       <NewCompanyDialog open={creating} onOpenChange={setCreating} onCreated={(id) => void open(id)} />

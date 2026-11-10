@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/useopendesk/opendesk/internal/audit"
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/deps"
@@ -346,6 +347,9 @@ func registerCompanies(d *deps.Deps, api huma.API) {
 				}
 				if tag.RowsAffected() == 0 {
 					return httpx.NotFound("Company")
+				}
+				if err := audit.Log(ctx, tx, p, p.WorkspaceID, "company.deleted", "company", &id, nil); err != nil {
+					return err
 				}
 				_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "company.deleted", Data: map[string]any{"company_id": id}})
 				return err

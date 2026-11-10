@@ -99,6 +99,11 @@ function bulkQuery(q: TicketBulkQuery) {
 export type ContactSort = "-created" | "created" | "name" | "-name" | "-tickets" | "tickets";
 export type CompanySort = "name" | "-name" | "created" | "-created" | "contacts" | "-contacts";
 export type ContactListQuery = ListQuery & { q?: string; company_id?: string; tag?: string; blocked?: "true" | "false"; sort?: ContactSort; fields?: T.FieldFilter[] };
+/** What POST /v1/contacts/bulk and /v1/companies/bulk act on: ids (up to 100) or the list's filters. */
+export type DirectoryBulkTarget<Q> = { ids: string[] } | { query: Q };
+export type ContactBulkQuery = { q?: string; company_id?: string; tag?: string; blocked?: "true" | "false" };
+export type CompanyBulkQuery = { q?: string; tag?: string };
+export type BulkResult = { updated: number; deleted: number };
 export type CompanyListQuery = ListQuery & { q?: string; tag?: string; sort?: CompanySort; fields?: T.FieldFilter[] };
 
 /** Labels and custom fields on contact and company writes. */
@@ -636,6 +641,8 @@ export const api = {
     ...crud<T.Contact, Partial<Pick<T.Contact, "name" | "email" | "phone" | "notes" | "external_id" | "blocked" | "custom">> & { company_id?: string | null } & LabelWrites>("/v1/contacts"),
     search: (q: ContactListQuery) => http.get<T.Page<T.Contact>>("/v1/contacts", { query: listQuery(q) }),
     tickets: (id: string, q?: ListQuery) => http.get<T.Page<T.Ticket>>(`/v1/contacts/${id}/tickets`, { query: q }),
+    bulk: (b: DirectoryBulkTarget<ContactBulkQuery> & ({ delete: true } | { patch: { add_tags?: string[]; remove_tags?: string[]; company_id?: string | null } })) =>
+      http.post<BulkResult>("/v1/contacts/bulk", b),
     /** Extra addresses (contracts/api.md "Contact emails"); each answers with the contact. */
     addEmail: (id: string, email: string) => http.post<T.Contact>(`/v1/contacts/${id}/emails`, { email }),
     removeEmail: (id: string, email: string) => http.del<T.Contact>(`/v1/contacts/${id}/emails/${encodeURIComponent(email)}`),
@@ -645,6 +652,8 @@ export const api = {
   companies: {
     ...crud<T.Company, Partial<Pick<T.Company, "name" | "domain" | "external_id" | "notes" | "custom">> & LabelWrites>("/v1/companies"),
     search: (q: CompanyListQuery) => http.get<T.Page<T.Company>>("/v1/companies", { query: listQuery(q) }),
+    bulk: (b: DirectoryBulkTarget<CompanyBulkQuery> & ({ delete: true } | { patch: { add_tags?: string[]; remove_tags?: string[] } })) =>
+      http.post<BulkResult>("/v1/companies/bulk", b),
     ...pictureRoutes<T.Company>("/v1/companies"),
   },
   /** Labels (contracts/api.md "Labels and custom fields"). Writes need admin. */

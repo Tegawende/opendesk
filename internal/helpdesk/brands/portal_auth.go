@@ -28,6 +28,8 @@ type portalAuthIn struct {
 	Issuer       string  `json:"issuer,omitempty" maxLength:"2000"`
 	ClientID     string  `json:"client_id,omitempty" maxLength:"500"`
 	ClientSecret *string `json:"client_secret,omitempty" maxLength:"8192" writeOnly:"true"`
+	// CreateContacts lets a first sign-in of someone with no contact create one.
+	CreateContacts bool `json:"create_contacts,omitempty" doc:"Create a contact for a verified sign-in that matches none; off, only existing contacts sign in"`
 }
 
 type portalAuthSettings struct {
@@ -35,6 +37,7 @@ type portalAuthSettings struct {
 	Issuer           string `json:"issuer"`
 	ClientID         string `json:"client_id"`
 	SecretConfigured bool   `json:"secret_configured"`
+	CreateContacts   bool   `json:"create_contacts"`
 }
 
 func invalidPortalOIDC() error {
@@ -100,7 +103,7 @@ func (h *handler) validatePortalAuth(ctx context.Context, in *portalAuthIn) (*po
 		return nil, invalidPortalOIDC()
 	}
 	if v.Mode == "local" {
-		if v.Issuer != "" || v.ClientID != "" || v.ClientSecret != nil {
+		if v.Issuer != "" || v.ClientID != "" || v.ClientSecret != nil || v.CreateContacts {
 			return nil, invalidPortalOIDC()
 		}
 		return &v, nil
@@ -135,8 +138,8 @@ func (h *handler) savePortalAuth(ctx context.Context, tx pgx.Tx, p *auth.Princip
 		return httpx.E(422, "oidc_secret_required", "Enter the client secret for this provider configuration.")
 	}
 	if _, err := tx.Exec(ctx, `UPDATE brands SET portal_auth_mode=$3, portal_oidc_issuer=$4,
-        portal_oidc_client_id=$5, portal_oidc_client_secret_enc=$6, updated_at=now() WHERE workspace_id=$1 AND id=$2`,
-		p.WorkspaceID, id, in.Mode, in.Issuer, in.ClientID, secret); err != nil {
+        portal_oidc_client_id=$5, portal_oidc_client_secret_enc=$6, portal_oidc_create_contacts=$7, updated_at=now() WHERE workspace_id=$1 AND id=$2`,
+		p.WorkspaceID, id, in.Mode, in.Issuer, in.ClientID, secret, in.CreateContacts); err != nil {
 		return err
 	}
 	if err := audit.Log(ctx, tx, p, p.WorkspaceID, "brand.portal_auth_updated", "brand", &id, map[string]any{"mode": in.Mode}); err != nil {
@@ -161,8 +164,8 @@ func (h *handler) registerPortalAuth(api huma.API) {
 			}
 			var settings portalAuthSettings
 			err = h.d.DB.Pool.QueryRow(ctx, `SELECT portal_auth_mode, portal_oidc_issuer, portal_oidc_client_id,
-                portal_oidc_client_secret_enc IS NOT NULL FROM brands WHERE workspace_id=$1 AND id=$2`, p.WorkspaceID, id).
-				Scan(&settings.Mode, &settings.Issuer, &settings.ClientID, &settings.SecretConfigured)
+                portal_oidc_client_secret_enc IS NOT NULL, portal_oidc_create_contacts FROM brands WHERE workspace_id=$1 AND id=$2`, p.WorkspaceID, id).
+				Scan(&settings.Mode, &settings.Issuer, &settings.ClientID, &settings.SecretConfigured, &settings.CreateContacts)
 			if db.IsNotFound(err) {
 				return nil, httpx.NotFound("Brand")
 			}

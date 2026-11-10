@@ -627,10 +627,12 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 | GET | `/v1/messages/{id}/original` | → `{full_html}`: an inbound email in full (with its quoted history); for an email we sent (a reply, a side conversation's message), the copy kept when it went out: the layout, the reply, the signature and the quoted conversation, sanitized like every stored email, its inline images pointing at their attachments. A copy too large to keep (over 1 MB) is not kept. The kept copies of emails sent after a reply are dropped when that reply is deleted or purged (`message.updated`), since their quoted conversation may hold it; the body when there is none |
 | CRUD | `/v1/contacts`, `/v1/contacts/{id}` | list supports `q`, `company_id`, `tag`, `blocked` (`true`/`false`), `field.<key>` and `sort` (`-created` newest first, the default; `created`, `name`, `-name`, `-tickets`, `tickets`; a requested sort pages by position, the default by key). Write bodies also take `tags?: string[]` (replaces), `add_tags?`, `remove_tags?` (names, as for tickets) and `fields?` (merged; null clears) |
 | GET | `/v1/contacts/{id}/tickets` | list |
+| POST | `/v1/contacts/bulk` | agent, `contacts:write`. `{ids /* 1..100 */ | query, patch: {add_tags?, remove_tags?, company_id? /* null clears */} | delete: true}` → `{updated, deleted}`. `query` is the People list's filters (`q`, `company_id`, `tag`, `blocked`) and acts on at most 1000 contacts (`422 too_many_records` beyond). Exactly one of `ids` and `query`, and one of `patch` and `delete`. All or nothing: an id outside the workspace is `404`, a company outside it `422`, and nothing changes. Each record is audited (`contact.updated`, `contact.deleted`, with `bulk: true`) and announced (`contact.updated`, `contact.deleted`). A deleted contact's tickets stay, without a contact |
 | POST | `/v1/contacts/{id}/emails` | agent (`contacts:write`). `{email}` → `201 Contact`: gives the contact an extra address ("Contact emails"). An address that belongs to any contact in the workspace, primary or extra, this contact's included, is `409`; at most 20 extras (`422`) |
 | DELETE | `/v1/contacts/{id}/emails/{email}` | agent (`contacts:write`) → `Contact`; takes an extra address off (`404` when it is not one; the primary is changed with `PATCH`) |
 | POST | `/v1/contacts/{id}/emails/{email}/make-primary` | agent (`contacts:write`) → `Contact`; swaps an extra address with the primary (`404` when it is not an extra). Customer-portal credentials end, as for any change of `email` |
 | CRUD | `/v1/companies`, `/v1/companies/{id}` | list supports `q`, `tag`, `field.<key>` and `sort` (`name` A to Z, the default; `-name`, `created`, `-created`, `contacts`, `-contacts`); write bodies take `external_id?` (`null` clears it; taken by another company: `409`), `tags?`, `add_tags?`, `remove_tags?`, `fields?` as contacts |
+| POST | `/v1/companies/bulk` | as contacts: `{ids | query: {q, tag}, patch: {add_tags?, remove_tags?} | delete: true}` → `{updated, deleted}`. A deleted company's people stay, without a company |
 | PUT/DELETE | `/v1/contacts/{id}/avatar`, `/v1/companies/{id}/avatar` | agent (`contacts:write`). PUT multipart `file` (image, 5 MB) → `Contact` / `Company` with `avatar_source: "upload"`, which automatic sources never replace. DELETE removes it and looks up the automatic sources again. Audit `contact.avatar_updated` / `company.avatar_updated` (and `_removed`); publishes `contact.updated` / `company.updated` |
 | POST | `/v1/contacts/{id}/avatar/refresh`, `/v1/companies/{id}/avatar/refresh` | agent → 202. Looks the automatic sources up again now (no effect on an upload) |
 | GET | `/v1/tags` | `?q=&group_id=<uuid\|none>&archived=true\|false\|any` (default `any`) `&applies_to=tickets\|contacts\|companies` → `{data: Tag[], next_cursor: null}` (all of them, ordered by group position, then position, then name) |
@@ -1026,10 +1028,12 @@ The public routes below are rate limited and use Turnstile. They set `Cache-Cont
 
 | method | path | notes |
 | --- | --- | --- |
-| GET | `/v1/public/help/{workspace_slug}/portal/config` | Public brand config: `{title, logo_url, color, locale, locale_fixed, help_url}`. `help_url` is the active verified help-center host, or the configured default URL |
-| POST | `/v1/public/help/{workspace_slug}/portal/auth/login` | `{email, password, turnstile_token}` → `{access_token, expires_at}` and sets the customer refresh cookie. Unknown contacts and invalid passwords receive the same invalid-credentials response. A legacy password that no longer meets policy returns `{change_password: true}` with no token or session |
+| GET | `/v1/public/help/{workspace_slug}/portal/config` | Public brand config: `{title, logo_url, color, locale, locale_fixed, help_url, auth_mode}` (`auth_mode`: `local`, `oidc` or `local_and_oidc`). `help_url` is the active verified help-center host, or the configured default URL |
+| POST | `/v1/public/help/{workspace_slug}/portal/auth/login` | `{email, password, turnstile_token}` → `{access_token, expires_at}` and sets the customer refresh cookie. Unknown contacts and invalid passwords receive the same invalid-credentials response. A legacy password that no longer meets policy returns `{change_password: true}` with no token or session. A brand whose `auth_mode` is `oidc` answers `403 password_sign_in_disabled` |
 | POST | `/v1/public/help/{workspace_slug}/portal/auth/forgot` | `{email, turnstile_token}` → `204`. The response does not reveal whether an eligible contact exists; email lookup and delivery are queued |
 | POST | `/v1/public/help/{workspace_slug}/portal/auth/reset` | `{token, password, turnstile_token}` → `204`. The one-time link is scoped to its workspace, contact and email snapshot; success consumes it and revokes the contact's other customer sessions |
+| GET | `/v1/public/help/{workspace_slug}/portal/sso/start` | `?redirect_to=` (a path under `/portal/{slug}`). `302` to the brand's identity provider (authorization code with PKCE S256, a nonce, a signed `oauth_state` and a browser-binding cookie), or back to the portal with `?sso_error=` |
+| GET | `/v1/public/help/{workspace_slug}/portal/sso/callback` | The provider's redirect. Verifies state, binding, code, ID token and nonce, matches a contact, sets the customer refresh cookie and `302`s to the page asked for, or to `/portal/{slug}?sso_error={code}` |
 | POST | `/v1/customer/portal/auth/refresh` | `{workspace_slug}` plus the customer refresh cookie → `{access_token, expires_at}` and rotates the cookie. The slug must resolve to the session's enabled help center |
 | POST | `/v1/customer/portal/auth/logout` | Customer access token → `204`, revokes that session and clears its refresh cookie |
 
@@ -1367,14 +1371,14 @@ defined in `contracts/support-channels.md`.
 
 `POST /v1/brands` and `PATCH /v1/brands/{id}` accept optional `portal_auth`:
 `{mode: "local" | "oidc" | "local_and_oidc", issuer?: string, client_id?: string,
-client_secret?: string}`. Settings writes require admin and `settings:write` for API
+client_secret?: string, create_contacts?: boolean}`. Settings writes require admin and `settings:write` for API
 keys. OIDC writes require issuer and client ID, and a secret on first configuration or
 when either changes. An omitted secret preserves the existing secret for the same
 issuer/client ID. Empty secrets are refused. `local` accepts no provider fields and
 clears saved provider settings. Brand responses include `portal_auth: {mode}` only.
 
 `GET /v1/brands/{id}/portal/auth` requires admin (`settings:read` for API keys), and
-returns `{mode, issuer, client_id, secret_configured}`. No operation returns the secret.
+returns `{mode, issuer, client_id, secret_configured, create_contacts}`. No operation returns the secret.
 Discovery is limited to 10 seconds and 1 MiB, uses HTTPS public endpoints and refuses
 redirects. Invalid or unsafe metadata/configuration returns `422 invalid_oidc_config`;
 a missing replacement secret returns `422 oidc_secret_required`.

@@ -13,8 +13,10 @@ Scopes: `contacts:read` to read, `contacts:write` to change.
 | `PATCH` | `/v1/contacts/{id}` | Update a contact |
 | `DELETE` | `/v1/contacts/{id}` | Delete a contact |
 | `GET` | `/v1/contacts/{id}/tickets` | The contact's tickets |
+| `POST` | `/v1/contacts/bulk` | Label, set the company of, or delete many contacts: `ids` (up to 100) or `query` (the list's filters, at most 1000 contacts), with `patch` or `delete: true` |
 | `GET`, `POST` | `/v1/companies` | List or create companies. Filters: `q`, `tag`, `field.<key>`. `sort`: `name` (default), `-name`, `created`, `-created`, `contacts`, `-contacts` |
 | `GET`, `PATCH`, `DELETE` | `/v1/companies/{id}` | Get, update or delete a company |
+| `POST` | `/v1/companies/bulk` | Label or delete many companies, by `ids` or `query` (`q`, `tag`) |
 
 ## Objects
 

@@ -68,6 +68,40 @@ and contact. It is server-side permission, not a bearer credential. The callback
 consume it atomically with a link only after verifying the provider email matches the
 contact's current email. The actor and target are audited without credentials.
 
+## Provider sign-in
+
+A brand in `oidc` or `local_and_oidc` mode signs customers in through its provider.
+`GET .../portal/sso/start` redirects to the provider with an authorization code request
+(PKCE S256, a nonce and a signed `oauth_state` token that names the brand), and sets a
+short-lived cookie scoped to that brand's sso routes. `GET .../portal/sso/callback` accepts a
+result only with that state, that cookie, the brand's own redirect URI and an ID token whose
+signature, issuer, audience, expiry and nonce check out; the provider is reached through the
+public-address guarded client. Where the customer returns to is a path under `/portal/{slug}`
+chosen at start; any other value is the portal's home. A failure sends the customer back to the
+portal with `?sso_error={code}`; codes carry no provider claims.
+
+Matching, in order:
+
+1. A live `(issuer, subject)` link wins, whatever address the provider now reports.
+2. A revoked link refuses (`identity_revoked`).
+3. A first sign-in needs a verified address (`email_unverified`) and finds the contact by it.
+   A contact with no link of that issuer is linked. A contact marked
+   `customer_oidc_relink_required`, or already linked to another subject of the issuer, needs
+   a live relink authorization for the brand and contact, consumed in the same transaction
+   (`relink_required` without one); the replaced link is revoked.
+4. No contact: refused (`unknown_customer`), or created from the verified address and name when
+   the brand's `create_contacts` is on (off by default).
+5. A blocked contact never signs in (`blocked`).
+
+A provider sign-in opens a `customer_sessions` row with `method = 'oidc'` and no password row;
+the session, refresh cookie and access token are otherwise the password sign-in's. A changed
+address or a block removes the contact's sessions and live links, and a contact that lost a
+link is marked `customer_oidc_relink_required`: its next provider sign-in, the same subject
+included, needs a relink authorization, which clears the mark. An `oidc` session needs its
+brand to still take a provider: switching it to `local` ends it at the next refresh. A brand in
+`oidc` mode refuses password sign-in, password links and resets. Audit events:
+`customer.sso.login`, `customer.sso.login.failed` (reason code only), `customer.sso.linked`.
+
 ## Starting a request
 
 `POST /v1/customer/portal/tickets` with `{workspace_slug, subject, body}` opens a ticket for the signed-in
