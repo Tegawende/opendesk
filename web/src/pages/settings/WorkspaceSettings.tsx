@@ -39,7 +39,7 @@ import { sameJSON } from "@/lib/sameJSON";
 type DisplaySettings = { status_labels?: Overrides<TicketStatus>; priority_labels?: Overrides<Priority>; send_and_finish_button?: boolean; severity_enabled?: boolean };
 type Draft = {
   name: string;
-  settings: Required<Pick<WS, "tickets_enabled" | "mail_enabled" | "pages_enabled" | "timezone" | "help_center_enabled" | "help_center_title" | "csat_enabled" | "gravatar" | "domain_logos" | "undo_send_seconds" | "undo_send_chat_seconds" | "message_delete" | "collab_ticket_replies" | "collab_ticket_reply_to" | "agent_online_time" | "snooze_presets">> & {
+  settings: Required<Pick<WS, "tickets_enabled" | "mail_enabled" | "pages_enabled" | "timezone" | "help_center_enabled" | "help_center_title" | "csat_enabled" | "gravatar" | "domain_logos" | "undo_send_seconds" | "undo_send_chat_seconds" | "message_delete" | "collab_ticket_replies" | "collab_ticket_reply_to" | "agent_online_time" | "snooze_presets" | "ticket_number_in_subject">> & {
     brand_color: string;
     locale: string;
     locale_fixed: boolean;
@@ -76,6 +76,7 @@ function toDraft(w: Workspace): Draft {
       collab_ticket_replies: w.settings.collab_ticket_replies ?? true,
       collab_ticket_reply_to: w.settings.collab_ticket_reply_to ?? "address",
       agent_online_time: w.settings.agent_online_time ?? true,
+      ticket_number_in_subject: w.settings.ticket_number_in_subject ?? true,
       snooze_presets: [...snoozePresets(w.settings)],
     },
   };
@@ -154,6 +155,8 @@ export default function WorkspaceSettings() {
       qc.setQueryData(qk.workspace, w);
       updateWorkspace(w);
       void qc.invalidateQueries({ queryKey: qk.collabStatus });
+      // Tickets turned back on: the counts read while it was off are all zero.
+      void qc.invalidateQueries({ queryKey: qk.counts });
       toast.success(t("workspace.saved"));
     },
   });
@@ -322,6 +325,9 @@ export default function WorkspaceSettings() {
         <Section title={t("workspace.conversations")}>
           <Row label={t("workspace.csat")} description={t("workspace.csatHint")}>
             <Switch aria-label={t("workspace.csat")} checked={draft.settings.csat_enabled} onCheckedChange={(v) => set("csat_enabled", v)} disabled={!canEdit} />
+          </Row>
+          <Row label={t("workspace.subjectNumber")} description={draft.settings.ticket_number_in_subject ? t("workspace.subjectNumberOn") : t("workspace.subjectNumberOff")}>
+            <Switch aria-label={t("workspace.subjectNumber")} checked={draft.settings.ticket_number_in_subject} onCheckedChange={(v) => set("ticket_number_in_subject", v)} disabled={!canEdit} />
           </Row>
           <Row label={t("workspace.undoSend")} description={t("workspace.undoSendHint")}>
             <Segmented

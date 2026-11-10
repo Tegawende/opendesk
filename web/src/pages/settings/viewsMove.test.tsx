@@ -43,12 +43,14 @@ describe("moving views between sections in Settings → Views", () => {
   installMock();
   const ws = db.workspaces[0];
   let saved: View[] = [];
+  let savedIcons: typeof ws.viewSectionIcons;
   let root: Root;
   let el: HTMLDivElement;
   const patches: { id: string; body: unknown }[] = [];
 
   beforeEach(() => {
     saved = structuredClone(ws.views);
+    savedIcons = structuredClone(ws.viewSectionIcons);
     patches.length = 0;
     // Count the PATCHes the page sends, on their way to the mock API.
     const update = api.views.update;
@@ -62,6 +64,7 @@ describe("moving views between sections in Settings → Views", () => {
   });
   afterEach(() => {
     ws.views = saved;
+    ws.viewSectionIcons = savedIcons;
     vi.restoreAllMocks();
     act(() => root.unmount());
     el.remove();
@@ -142,6 +145,41 @@ describe("moving views between sections in Settings → Views", () => {
     expect(named("Waiting on engineering").section).toBeNull();
     expect(patches).toContainEqual({ id: named("Waiting on engineering").id, body: { position: 3, section: null } });
     expect(el.querySelector("[aria-live='polite']")?.textContent).toBe("Waiting on engineering moved out of its section");
+  });
+
+  it("heads a section with its grip, its icon and, for admins, its edit button, and a view moved in takes the icon", async () => {
+    // As PATCH /v1/view-sections leaves them: the icon kept for the name and on its views.
+    const icon = { kind: "text", value: "ES", color: "red" } as const;
+    ws.viewSectionIcons = { escalations: icon };
+    for (const v of ws.views) if (v.section === "Escalations") v.section_icon = icon;
+    await mount();
+    const header = () => el.querySelector("[role='group'][aria-label='In section Escalations']")!.firstElementChild!;
+    expect(header().querySelector("button[aria-label^='Reorder the Escalations section']")).not.toBeNull();
+    expect(header().querySelector("[data-view-icon='text']")?.textContent).toBe("ES");
+    const edit = header().querySelector<HTMLButtonElement>("button[aria-label='Edit the Escalations section']")!;
+    expect(edit).not.toBeNull();
+    await act(async () => edit.click());
+    await settle();
+    expect(document.querySelector<HTMLInputElement>("[role='dialog'] input")?.value).toBe("Escalations");
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    await settle();
+
+    // The move menu shows the section as its heading does, and the moved view carries the icon.
+    const menu = await openMove("Urgent");
+    const item = [...menu!.querySelectorAll<HTMLElement>("[role='menuitem']")].find((x) => x.textContent?.endsWith("Escalations"))!;
+    expect(item.querySelector("[data-view-icon='text']")?.textContent).toBe("ES");
+    await act(async () => item.click());
+    for (let i = 0; i < 10; i++) await settle();
+    expect(named("Urgent")).toMatchObject({ section: "Escalations", section_icon: { kind: "text", value: "ES" } });
+    expect(header().querySelector("[data-view-icon='text']")?.textContent).toBe("ES");
+  });
+
+  it("offers an agent no edit button on a section heading", async () => {
+    await mount("agent");
+    expect(el.querySelector("[role='group'][aria-label='In section Escalations']")).not.toBeNull();
+    expect(el.querySelector("button[aria-label='Edit the Escalations section']")).toBeNull();
   });
 
   it("still reorders within a list with Alt and the arrow keys", async () => {

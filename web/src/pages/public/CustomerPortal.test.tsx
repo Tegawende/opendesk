@@ -123,6 +123,8 @@ it("shows list loading, empty, error and ticket rows", async () => {
   expect(container.textContent).toContain("Loading");
   await act(async () => { resolve({ data: [], next_cursor: null }); await Promise.resolve(); });
   await vi.waitFor(() => expect(container.textContent).toContain("You have no requests"));
+  // Starting a request is offered even before there is one.
+  expect(container.textContent).toContain("New request");
   expect(container.querySelector('a[href="https://help.example"]')).not.toBeNull();
   await act(async () => root.unmount()); clearCustomer();
   list.mockRejectedValueOnce(new Error("unavailable"));

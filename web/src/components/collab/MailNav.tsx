@@ -17,7 +17,7 @@ import { useFoldedSections, useOpenView, ViewSectionGroup } from "@/app/ViewSect
 import { buildRow, NavItemRow, RowEmoji, rowNumber, useMailLocation, useRowLabels, type MailHere, type RowModel } from "@/components/spaces/rows";
 import { useWaitingFor } from "@/components/tickets/useUrgentChats";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { MailAccount, MailBox, MailCounts, MailFolder, SidebarPin, SidebarPrefs, SidebarSectionId, View } from "@/lib/api/types";
+import type { MailAccount, MailBox, MailCounts, MailFolder, SidebarPin, SidebarPrefs, SidebarSectionId, View, ViewIcon } from "@/lib/api/types";
 import { accountAssignedNumbers, accountNumbers, allInboxNumbers, folderNumbers, listBoxNumbers, type RowNumbers } from "@/lib/collab/badges";
 import { ACCOUNT_BOXES, accountName, buildFolderTree, flattenTree, folderWithRole } from "@/lib/collab/boxes";
 import { useAllFolders, useMailAccounts, useSaveSidebarPrefs } from "@/lib/collab/hooks";
@@ -399,6 +399,19 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
           menu={{ badge: { key: "box:assigned", kind: "mail", sections: ["mail"] }, pin: { kind: "box", id: "assigned" }, hideId: hid.box("assigned") }}
         />
       )}
+      {/* AI drafts waiting for a person to send, edit or discard (contracts/collab.md "AI queue"). */}
+      {!hidden.has(hid.box("ai_review")) && (here.box === "ai_review" || !!counts?.boxes.ai_review) && (
+        <MailRow
+          link={{ box: "ai_review" }}
+          active={here.box === "ai_review"}
+          icon={boxIcon.ai_review}
+          label={t("box.ai_review")}
+          shown={mailShown(prefs, "box:ai_review", ["mail"], listBoxNumbers("ai_review", counts))}
+          rail={rail}
+          prefs={prefs}
+          menu={{ badge: { key: "box:ai_review", kind: "mail", sections: ["mail"] }, pin: { kind: "box", id: "ai_review" }, hideId: hid.box("ai_review") }}
+        />
+      )}
       {!hidden.has(hid.box("needs_action")) && (here.box === "needs_action" || !!counts?.boxes.needs_action) && (
         <MailRow
           link={{ box: "needs_action" }}
@@ -464,7 +477,7 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
     }
     // Every view of the section the member sees, those hidden from Views too, like a pinned view.
     const section = findSection(data.views ?? [], pin.id);
-    return section && { kind: "section", name: section.name, views: section.views };
+    return section && { kind: "section", name: section.name, icon: section.icon, views: section.views };
   });
   if (!pins.length && !pages) return null;
   const menuFor = (model: RowModel, pin: SidebarPin) => (row: ReactElement) => (
@@ -505,6 +518,7 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
           <ViewSectionGroup
             key={`${pin.kind}:${pin.id}`}
             name={target.name}
+            icon={target.icon}
             views={target.views}
             rail={rail}
             folded={folded.has(pin.id)}
@@ -535,4 +549,4 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
 }
 
 /** What a favorite shows: one row, or a pinned view section and its views. */
-type Favorite = { kind: "row"; model: RowModel } | { kind: "section"; name: string; views: View[] };
+type Favorite = { kind: "row"; model: RowModel } | { kind: "section"; name: string; icon: ViewIcon | null; views: View[] };

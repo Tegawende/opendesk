@@ -113,6 +113,14 @@
       "on_hold": "Beklemede",
       "solved": "Çözüldü",
       "closed": "Kapalı"
+    },
+    "new_request": "Yeni talep",
+    "new": {
+      "title": "Yeni talep",
+      "subject": "Konu",
+      "message": "Size nasıl yardımcı olabiliriz?",
+      "send": "Talebi gönder",
+      "limit": "Art arda birkaç talep gönderdiniz. Bir süre bekleyip tekrar deneyin."
     }
   }
 }

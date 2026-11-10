@@ -782,7 +782,10 @@
     "needTo": "Add a recipient.",
     "needSubject": "Add a subject.",
     "needBody": "Write a message.",
-    "cannotSend": "This address can't send email yet. Pick another, or ask an admin to connect a way to send."
+    "cannotSend": "This address can't send email yet. Pick another, or ask an admin to connect a way to send.",
+    "log": "Log request",
+    "logHint": "Nothing is emailed now. The message is saved as the customer's, and your replies go out from this address.",
+    "bodyLog": "Write the request as it came in"
   },
   "contact": {
     "unnamed": "Unnamed contact",

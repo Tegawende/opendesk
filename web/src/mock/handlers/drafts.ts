@@ -2,7 +2,7 @@
 // per ticket, staged by a teammate or by an AI client over MCP (`draft_reply`), shown in
 // every teammate's composer. A reply going out clears it (handlers/tickets.ts).
 
-import type { Ticket, TicketDraft } from "@/lib/api/types";
+import type { Attachment, ReplyDraft, Ticket, TicketDraft } from "@/lib/api/types";
 import { db, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
 import { del, forbidden, get, invalid, notFound, put, respond, type Ctx } from "../router";
@@ -15,6 +15,19 @@ const drafts = (ws: WsData) => {
   if (!m) store.set(ws, (m = new Map()));
   return m;
 };
+
+// My own unsent reply per ticket (contracts/api.md "Reply drafts"): private, kept for the session.
+const own = new WeakMap<WsData, Map<string, ReplyDraft>>();
+const ownDrafts = (ws: WsData) => {
+  let m = own.get(ws);
+  if (!m) own.set(ws, (m = new Map()));
+  return m;
+};
+
+/** My reply going out ends my own saved copy of it. */
+export function clearOwnDraft(ws: WsData, t: Ticket) {
+  ownDrafts(ws).delete(t.id);
+}
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
@@ -69,6 +82,28 @@ export function registerDrafts() {
     const html = typeof ctx.body.body_html === "string" ? ctx.body.body_html : "";
     if (!text(html) && !html.includes("<img")) throw invalid("the draft is empty");
     return stageDraft(ctx.ws, ticketOf(ctx), html);
+  });
+
+  get("/v1/tickets/:id/reply-draft", (ctx) => ({ draft: ownDrafts(ctx.ws).get(ticketOf(ctx).id) ?? null }));
+
+  put("/v1/tickets/:id/reply-draft", (ctx) => {
+    if ((ctx.ws.members.find((m) => m.user_id === db.meId)?.role ?? "viewer") === "viewer") throw forbidden("Viewers can't change tickets");
+    const t = ticketOf(ctx);
+    const html = typeof ctx.body.body_html === "string" ? ctx.body.body_html : "";
+    const ids = Array.isArray(ctx.body.attachment_ids) ? (ctx.body.attachment_ids as string[]) : [];
+    if (!text(html) && !html.includes("<img") && ids.length === 0) {
+      ownDrafts(ctx.ws).delete(t.id);
+      return { draft: null };
+    }
+    const attachments: Attachment[] = ids.map((id) => ({ id, filename: "file", content_type: "application/octet-stream", size_bytes: 0, inline: false, url: "" }));
+    const d: ReplyDraft = { ticket_id: t.id, body_html: html, attachments, updated_at: nowIso() };
+    ownDrafts(ctx.ws).set(t.id, d);
+    return { draft: d };
+  });
+
+  del("/v1/tickets/:id/reply-draft", (ctx) => {
+    ownDrafts(ctx.ws).delete(ticketOf(ctx).id);
+    return respond(204);
   });
 
   del("/v1/tickets/:id/draft", (ctx) => {

@@ -73,6 +73,11 @@
     "label": "Suche"
   },
   "newTicket": "Neues Ticket",
+  "chatPopup": {
+    "title": "Neuer Chat",
+    "open": "Öffnen",
+    "close": "Schließen"
+  },
   "notifications": {
     "allow": {
       "title": "Erfahre von neuen Tickets und Antworten.",

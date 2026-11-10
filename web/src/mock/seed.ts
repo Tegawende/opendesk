@@ -403,7 +403,7 @@ function seedMargin(): WsData {
   ws.sla = sla;
 
   // Every address belongs to a brand; the brand ids are filled in once the brands exist (below).
-  const mbBase = { signature_html: "", auto_reply_enabled: false, auto_reply_subject: "", auto_reply_html: "", ai_answers: false, ai_answers_mode: "draft" as const, ai_answers_outside_hours: false, last_error: "", team_id: null as string | null, brand_id: "", aliases: [] as string[], alias_teams: {} as Record<string, string>, trusted_form_senders: [] as string[], from_name_format: "{agent} at {mailbox}", private: false };
+  const mbBase = { signature_html: "", auto_reply_enabled: false, auto_reply_subject: "", auto_reply_html: "", ai_answers: false, ai_answers_mode: "draft" as const, ai_answers_outside_hours: false, last_error: "", team_id: null as string | null, brand_id: "", aliases: [] as string[], alias_teams: {} as Record<string, string>, trusted_form_senders: [] as string[], keep_automatic_mail: false, from_name_format: "{agent} at {mailbox}", private: false };
   const support: Mailbox = {
     ...mbBase,
     id: uuid(),
@@ -719,6 +719,7 @@ function seedMargin(): WsData {
     id: uuid(),
     name: c.name,
     domain: c.domain,
+    external_id: null,
     // Most companies have a website icon, one uploaded its logo, a few have nothing usable.
     avatar_url: i % 4 === 3 ? null : logoMark(c.name),
     avatar_source: i % 4 === 3 ? null : i === 0 ? "upload" : "domain",
@@ -756,6 +757,7 @@ function seedMargin(): WsData {
     return {
       id: uuid(),
       email,
+      emails: i === 0 && company ? [`${local}@gmail.com`] : [],
       name,
       phone: chance(0.4) ? `+49 30 ${int(1000000, 9999999)}` : "",
       // Roughly a third have a picture: the verified chat widget's for most, an agent's upload for
@@ -1507,6 +1509,7 @@ function seedLumen(): WsData {
   ws.contacts = names.map((name) => ({
     id: uuid(),
     email: `${name.split(" ")[0].toLowerCase()}@example.com`,
+    emails: [],
     name,
     phone: "",
     avatar_url: null,
@@ -1611,6 +1614,7 @@ function seedHarbor(): WsData {
   ws.contacts = names.map((name) => ({
     id: uuid(),
     email: `${name.split(" ")[0].normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()}@example.com`,
+    emails: [],
     name,
     phone: "",
     avatar_url: null,
@@ -1676,6 +1680,7 @@ function seedPressroom(): WsData {
   ws.contacts = names.map((name) => ({
     id: uuid(),
     email: `${name.split(" ")[0].toLowerCase()}@newsroom.example`,
+    emails: [],
     name,
     phone: "",
     avatar_url: null,

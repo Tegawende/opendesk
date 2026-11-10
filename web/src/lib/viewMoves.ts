@@ -1,7 +1,8 @@
 // Moving views in Settings → Views: a view dragged within its list, into another section or out
 // of its section to the top level, and a whole section among the top-level entries. Every view
 // is then numbered in sidebar order, sections unfolded, as reordering always did, and a view
-// that joins a section takes the section's spelling (lib/viewSections.ts).
+// that joins a section takes the section's spelling and icon (lib/viewSections.ts), as the API
+// gives it.
 
 import type { View } from "@/lib/api/types";
 import { cleanSection, groupViews, orderViews, sectionKey, type ViewEntry } from "@/lib/viewSections";
@@ -48,12 +49,12 @@ export function placeViews(views: readonly View[], dragged: Dragged, spot: ViewS
   // Out of where it is; a section it leaves empty drops out with it.
   const rest = entries.map((e) => (e.kind === "section" ? { ...e, views: e.views.filter((v) => v.id !== moving.id) } : e));
   if (spot.section === null) {
-    const loose: ViewEntry = { kind: "view", view: cleanSection(moving.section) ? { ...moving, section: null } : moving };
+    const loose: ViewEntry = { kind: "view", view: cleanSection(moving.section) ? { ...moving, section: null, section_icon: null } : moving };
     return flatten(insert(rest, entryId, moving.id, loose, spot.before));
   }
   const target = entries.find((e) => e.kind === "section" && e.key === spot.section);
   if (!target || target.kind !== "section") return flatten(entries);
-  const joined = sectionKey(moving.section ?? "") === target.key ? moving : { ...moving, section: target.name };
+  const joined = sectionKey(moving.section ?? "") === target.key ? moving : { ...moving, section: target.name, section_icon: target.icon };
   const into = insert(target.views, (v) => v.id, moving.id, joined, spot.before);
   return flatten(rest.filter((e) => !(e.kind === "view" && e.view.id === moving.id)).map((e) => (e.kind === "section" && e.key === target.key ? { ...e, views: into } : e)));
 }

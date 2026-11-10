@@ -115,6 +115,14 @@
       "on_hold": "In sospeso",
       "solved": "Risolto",
       "closed": "Chiuso"
+    },
+    "new_request": "Nuova richiesta",
+    "new": {
+      "title": "Nuova richiesta",
+      "subject": "Oggetto",
+      "message": "Come possiamo aiutarti?",
+      "send": "Invia richiesta",
+      "limit": "Hai inviato diverse richieste di seguito. Attendi un po’ e riprova."
     }
   }
 }

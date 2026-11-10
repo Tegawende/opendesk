@@ -360,6 +360,7 @@ function ViewList({ views, rail, row, count, waiting, prefs }: {
       <ViewSectionGroup
         key={`section:${e.key}`}
         name={e.name}
+        icon={e.icon}
         views={e.views}
         rail={rail}
         folded={folded.has(e.key)}
@@ -388,7 +389,8 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
   const rowEdit = useRowEdit();
   // The row clicked lights up alone among rows of the same target, like a tab (sidebarParts "The row that opened the page").
   const who = useOpener();
-  const { data: counts } = useQuery(q.counts());
+  const products = useProducts();
+  const { data: counts } = useQuery({ ...q.counts(), enabled: products.tickets });
   const { data: views } = useQuery(q.views());
   const role = useRole();
   const { t } = useTranslation("shell");
@@ -404,7 +406,6 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
   const rp: RowPrefs = { prefs };
   const shown = (key: string, section: SidebarSectionId, nums: BadgeNumbers) => pickCount(badgeFor(prefs, key, section, "ticket"), nums);
   const waitingFor = useWaitingFor();
-  const products = useProducts();
   // Tickets off: its folders, teams and views are not there; Mail and the rest stay.
   if (!products.tickets && (id === "inbox" || id === "teams" || id === "views")) return null;
   switch (id) {

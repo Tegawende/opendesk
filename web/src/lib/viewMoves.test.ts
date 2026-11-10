@@ -51,6 +51,17 @@ describe("placeViews", () => {
     expect(placeViews(mixed, { view: "b" }, { section: "after sales", before: "a" }).find((v) => v.id === "b")?.section).toBe("AFTER  sales");
   });
 
+  it("gives a view the icon of the section it joins, and none once it leaves its section", () => {
+    const bug = { kind: "icon", value: "bug", color: "red" } as const;
+    const box = { kind: "icon", value: "package", color: null } as const;
+    const iconed = views.map((v) => ({ ...v, section_icon: v.section === "Escalations" ? bug : v.section === "After sales" ? box : null }));
+    const into = placeViews(iconed, { view: "Damaged" }, { section: "escalations", before: "Bugs" });
+    expect(into.find((v) => v.id === "Damaged")?.section_icon).toEqual(bug);
+    // First in the section now, it reads with the section's own icon.
+    expect(groupViews(into).find((e) => e.kind === "section" && e.key === "escalations")).toMatchObject({ icon: bug });
+    expect(placeViews(iconed, { view: "Returns" }, { section: null, before: "Mine" }).find((v) => v.id === "Returns")?.section_icon).toBeNull();
+  });
+
   it("leaves the list as it reads when the view lands where it is", () => {
     expect(sameLayout(views, placeViews(views, { view: "Damaged" }, { section: "after sales", before: "Returns" }))).toBe(true);
     expect(sameLayout(views, placeViews(views, { view: "Mine" }, { section: null, before: "section:escalations" }))).toBe(true);

@@ -36,28 +36,29 @@ import (
 // Other keys in workspaces.settings (for example "widget") belong to other areas and
 // are preserved on update.
 type CoreWorkspaceSettings struct {
-	TicketsEnabled    *bool   `json:"tickets_enabled,omitempty" doc:"Whether ticketing is enabled for this workspace (default true)"`
-	MailEnabled       *bool   `json:"mail_enabled,omitempty" doc:"Whether Mail is enabled for this workspace (default true)"`
-	PagesEnabled      *bool   `json:"pages_enabled,omitempty" doc:"Whether Pages is enabled for this workspace (default true; contracts/pages.md)"`
-	BrandColor        *string `json:"brand_color,omitempty" doc:"Hex colour, #RRGGBB"`
-	Timezone          *string `json:"timezone,omitempty" doc:"IANA time zone"`
-	HelpCenterEnabled *bool   `json:"help_center_enabled,omitempty"`
-	HelpCenterTitle   *string `json:"help_center_title,omitempty" maxLength:"100"`
-	CSATEnabled       *bool   `json:"csat_enabled,omitempty"`
-	AutoAssign        *string `json:"auto_assign,omitempty" enum:"none,round_robin,load_balanced" doc:"Default auto-assignment mode (see /v1/assignment)"`
-	Gravatar          *bool   `json:"gravatar,omitempty" doc:"Look up contact pictures on Gravatar (sends a hash of each contact's email to Gravatar). Default false"`
-	DomainLogos       *bool   `json:"domain_logos,omitempty" doc:"Fetch company logos from the company's website. Default true"`
-	Locale            *string `json:"locale,omitempty" maxLength:"35" doc:"Default language (BCP 47) of customer-facing pages: help center, CSAT, widget"`
-	LocaleFixed       *bool   `json:"locale_fixed,omitempty" doc:"Customer-facing pages always use locale (a brand's own, else the workspace's), whatever the visitor's browser. Default false"`
-	LabelCreation     *string `json:"label_creation,omitempty" enum:"anyone,admins" doc:"Who may create labels by applying a new name"`
-	MessageDelete     *string `json:"message_delete,omitempty" enum:"off,own,all" doc:"Which messages agents may delete: none, their own internal notes, or any agent's notes and replies. Admins may delete any message. Default own"`
-	CollabReplies     *bool   `json:"collab_ticket_replies,omitempty" doc:"With Collab, members may answer email tickets from their own mail accounts. Default true"`
-	CollabReplyTo     *string `json:"collab_ticket_reply_to,omitempty" enum:"address,mailbox" doc:"Where answers to a reply sent from a member's own address go when it names no Reply-To: the address's own reply-to (else the address), or the ticket's reply address. Default address"`
-	UndoSendSeconds   *int    `json:"undo_send_seconds,omitempty" enum:"0,5,10,20,30" doc:"Seconds the app holds an agent's reply on an email (or any other non-chat) ticket, with a way to take it back or make it a note, before sending it. Default 5; 0 sends at once"`
-	UndoSendChatSecs  *int    `json:"undo_send_chat_seconds,omitempty" enum:"0,5,10,20,30" doc:"The same for replies on chat tickets. Default 0: a chat reply goes at once"`
-	SendAndFinish     *bool   `json:"send_and_finish_button,omitempty" doc:"Show a button that sends and solves, using the workspace's finish label next to Send in the reply composer, instead of only in its menu. Default false"`
-	AgentOnlineTime   *bool   `json:"agent_online_time,omitempty" doc:"Record each member's online time from the app's heartbeats and show it in the agents report. Default true; false records none, deletes what was recorded, and the report shows none"`
-	SeverityEnabled   *bool   `json:"severity_enabled,omitempty" doc:"Tickets have a severity beside their priority. Default true; false leaves severity out of the app (ticket, lists, filters, views, bulk actions, automations, reports) and AI never sets or proposes one. The API still reads and writes it, and tickets keep theirs"`
+	TicketsEnabled        *bool   `json:"tickets_enabled,omitempty" doc:"Whether ticketing is enabled for this workspace (default true)"`
+	MailEnabled           *bool   `json:"mail_enabled,omitempty" doc:"Whether Mail is enabled for this workspace (default true)"`
+	PagesEnabled          *bool   `json:"pages_enabled,omitempty" doc:"Whether Pages is enabled for this workspace (default true; contracts/pages.md)"`
+	BrandColor            *string `json:"brand_color,omitempty" doc:"Hex colour, #RRGGBB"`
+	Timezone              *string `json:"timezone,omitempty" doc:"IANA time zone"`
+	HelpCenterEnabled     *bool   `json:"help_center_enabled,omitempty"`
+	HelpCenterTitle       *string `json:"help_center_title,omitempty" maxLength:"100"`
+	CSATEnabled           *bool   `json:"csat_enabled,omitempty"`
+	AutoAssign            *string `json:"auto_assign,omitempty" enum:"none,round_robin,load_balanced" doc:"Default auto-assignment mode (see /v1/assignment)"`
+	Gravatar              *bool   `json:"gravatar,omitempty" doc:"Look up contact pictures on Gravatar (sends a hash of each contact's email to Gravatar). Default false"`
+	DomainLogos           *bool   `json:"domain_logos,omitempty" doc:"Fetch company logos from the company's website. Default true"`
+	Locale                *string `json:"locale,omitempty" maxLength:"35" doc:"Default language (BCP 47) of customer-facing pages: help center, CSAT, widget"`
+	LocaleFixed           *bool   `json:"locale_fixed,omitempty" doc:"Customer-facing pages always use locale (a brand's own, else the workspace's), whatever the visitor's browser. Default false"`
+	LabelCreation         *string `json:"label_creation,omitempty" enum:"anyone,admins" doc:"Who may create labels by applying a new name"`
+	MessageDelete         *string `json:"message_delete,omitempty" enum:"off,own,all" doc:"Which messages agents may delete: none, their own internal notes, or any agent's notes and replies. Admins may delete any message. Default own"`
+	CollabReplies         *bool   `json:"collab_ticket_replies,omitempty" doc:"With Collab, members may answer email tickets from their own mail accounts. Default true"`
+	CollabReplyTo         *string `json:"collab_ticket_reply_to,omitempty" enum:"address,mailbox" doc:"Where answers to a reply sent from a member's own address go when it names no Reply-To: the address's own reply-to (else the address), or the ticket's reply address. Default address"`
+	UndoSendSeconds       *int    `json:"undo_send_seconds,omitempty" enum:"0,5,10,20,30" doc:"Seconds the app holds an agent's reply on an email (or any other non-chat) ticket, with a way to take it back or make it a note, before sending it. Default 5; 0 sends at once"`
+	UndoSendChatSecs      *int    `json:"undo_send_chat_seconds,omitempty" enum:"0,5,10,20,30" doc:"The same for replies on chat tickets. Default 0: a chat reply goes at once"`
+	SendAndFinish         *bool   `json:"send_and_finish_button,omitempty" doc:"Show a button that sends and solves, using the workspace's finish label next to Send in the reply composer, instead of only in its menu. Default false"`
+	AgentOnlineTime       *bool   `json:"agent_online_time,omitempty" doc:"Record each member's online time from the app's heartbeats and show it in the agents report. Default true; false records none, deletes what was recorded, and the report shows none"`
+	TicketNumberInSubject *bool   `json:"ticket_number_in_subject,omitempty" doc:"Put the ticket number as [#n] in the subjects of emails sent to customers. Default true; false sends subjects without it, and replies are matched to their ticket by their headers. An email that starts a ticket's conversation keeps it when the mailbox sends through Microsoft, Amazon SES or a Gmail connection that cannot read back the Message-ID it went out with, so the answer always finds its ticket. The number stays in the app, the API and the {{ticket.number}} variable"`
+	SeverityEnabled       *bool   `json:"severity_enabled,omitempty" doc:"Tickets have a severity beside their priority. Default true; false leaves severity out of the app (ticket, lists, filters, views, bulk actions, automations, reports) and AI never sets or proposes one. The API still reads and writes it, and tickets keep theirs"`
 	// SnoozePresets are the times a ticket's snooze menu offers, in order, besides a date picked by hand.
 	SnoozePresets *[]SnoozePreset `json:"snooze_presets,omitempty" maxItems:"8" doc:"The times a ticket's snooze menu offers, in order, on each agent's own clock. Empty (the default): in 1 hour, in 4 hours, tomorrow at 09:00 and next week (Monday) at 09:00"`
 	// StatusLabels and PriorityLabels rename and recolour the fixed values for display only;
@@ -347,6 +348,9 @@ func validateSettings(s *CoreWorkspaceSettings) (map[string]any, error) {
 	}
 	if s.AgentOnlineTime != nil {
 		out["agent_online_time"] = *s.AgentOnlineTime
+	}
+	if s.TicketNumberInSubject != nil {
+		out["ticket_number_in_subject"] = *s.TicketNumberInSubject
 	}
 	if s.SeverityEnabled != nil {
 		out["severity_enabled"] = *s.SeverityEnabled

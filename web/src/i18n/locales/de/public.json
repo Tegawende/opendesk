@@ -113,6 +113,14 @@
       "on_hold": "In der Warteschleife",
       "solved": "Gelöst",
       "closed": "Geschlossen"
+    },
+    "new_request": "Neue Anfrage",
+    "new": {
+      "title": "Neue Anfrage",
+      "subject": "Betreff",
+      "message": "Wie können wir helfen?",
+      "send": "Anfrage senden",
+      "limit": "Sie haben mehrere Anfragen hintereinander gesendet. Warten Sie eine Weile und versuchen Sie es erneut."
     }
   }
 }
