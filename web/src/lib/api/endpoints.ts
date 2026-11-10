@@ -589,6 +589,10 @@ export const api = {
     get: (id: string) => http.get<T.Ticket>(`/v1/tickets/${encodeURIComponent(id)}`),
     update: (id: string, patch: T.TicketPatch) => http.patch<T.Ticket>(`/v1/tickets/${id}`, patch),
     delete: (id: string) => http.del(`/v1/tickets/${id}`),
+    /** The trash, admins only: deleted tickets, newest first. */
+    deleted: (q: { limit?: number; before?: string | null; q?: string }) =>
+      http.get<{ data: T.DeletedTicket[]; next_before?: string }>("/v1/tickets/deleted", { query: { limit: q.limit, before: q.before || undefined, q: q.q || undefined } }),
+    restore: (id: string) => http.post<T.Ticket>(`/v1/tickets/${encodeURIComponent(id)}/restore`),
     bulk: (b: ({ ids: string[] } | { query: TicketBulkQuery }) & { patch?: T.TicketPatch; delete?: true }) =>
       http.post<{ data: T.Ticket[]; updated: number; deleted: number } | undefined>("/v1/tickets/bulk", "query" in b ? { ...b, query: bulkQuery(b.query) } : b),
     merge: (id: string, into_id: string) => http.post<T.Ticket>(`/v1/tickets/${id}/merge`, { into_id }),

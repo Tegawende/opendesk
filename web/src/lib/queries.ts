@@ -203,6 +203,7 @@ export const qk = {
   get auditLogs() {
     return w(["audit-logs"] as const);
   },
+  deletedTickets: (q: string) => w(["tickets", "deleted", q] as const),
   get notifications() {
     return w(["notifications"] as const);
   },
@@ -520,6 +521,13 @@ export const q = {
   // The server keeps an answer for a minute too; reopening a ticket shows it at once.
   ticketPanel: (ticketId: string, panelId: string) =>
     queryOptions({ queryKey: qk.ticketPanel(ticketId, panelId), queryFn: () => api.tickets.panel(ticketId, panelId), staleTime: 60_000 }),
+  deletedTickets: (q = "") =>
+    infiniteQueryOptions({
+      queryKey: qk.deletedTickets(q),
+      queryFn: ({ pageParam }) => api.tickets.deleted({ limit: 50, before: pageParam, q }),
+      initialPageParam: null as string | null,
+      getNextPageParam: (last) => last.next_before ?? null,
+    }),
   auditLogs: () =>
     infiniteQueryOptions({
       queryKey: qk.auditLogs,

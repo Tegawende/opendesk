@@ -1444,6 +1444,23 @@ export type WebhookDelivery = {
   duration_ms: number | null;
   created_at: string;
 };
+/** A row of the trash (GET /v1/tickets/deleted): a deleted ticket, who deleted it and when. */
+export type DeletedTicket = {
+  id: string;
+  number: number;
+  subject: string;
+  status: TicketStatus;
+  channel: string;
+  contact: { id: string; name: string; email?: string } | null;
+  message_count: number;
+  deleted_at: string;
+  /** The member who deleted it; null for an API key, an automation, or a ticket deleted before this was recorded. */
+  deleted_by: { id: string; name: string; email?: string } | null;
+  deleted_by_api_key: { id: string; name: string } | null;
+  /** Set when the ticket was merged into another: its conversation lives there, and it is not restored. */
+  merged_into_number: number | null;
+};
+
 export type AuditLog = {
   id: string;
   actor: { type: "user" | "api_key" | "system"; user: UserRef | null; api_key_id: string | null };
