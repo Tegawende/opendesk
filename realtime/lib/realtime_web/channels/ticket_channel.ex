@@ -95,7 +95,8 @@ defmodule RealtimeWeb.TicketChannel do
     {:noreply, socket}
   end
 
-  def handle_out(event, payload, socket) when event in ["live", "typing", "customer_typing", "customer_presence"] do
+  def handle_out(event, payload, socket)
+      when event in ["live", "typing", "customer_typing", "customer_presence"] do
     {team_id, payload} = pop_team(payload)
     if TeamScope.visible?(team_id, socket), do: push(socket, event, payload)
     {:noreply, socket}
