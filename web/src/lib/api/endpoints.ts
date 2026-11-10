@@ -1,6 +1,6 @@
 // Typed wrappers for every endpoint in contracts/api.md.
 
-import { http, stream, streamEvents, type StreamHandlers } from "./client";
+import { download, http, stream, streamEvents, type StreamHandlers } from "./client";
 import type * as T from "./types";
 import { creatingTicket } from "../ownTickets";
 import { uiLanguage } from "@/i18n";
@@ -264,6 +264,9 @@ export const api = {
     /** How this person arranges their workspaces (contracts/api.md "Several workspaces"). */
     workspacePrefs: () => http.get<T.WorkspacePrefs>("/v1/me/workspace-prefs", { workspace: false }),
     putWorkspacePrefs: (b: T.WorkspacePrefsInput) => http.put<T.WorkspacePrefs>("/v1/me/workspace-prefs", b, { workspace: false }),
+    /** The keys the person chose for the app's shortcuts (contracts/api.md "Keyboard shortcuts"). */
+    shortcuts: () => http.get<T.ShortcutKeys>("/v1/me/shortcuts", { workspace: false }),
+    putShortcuts: (b: T.ShortcutKeys) => http.put<T.ShortcutKeys>("/v1/me/shortcuts", b, { workspace: false }),
     /** Every workspace's sidebar numbers, each as that workspace answers this person. */
     overview: () => http.get<{ workspaces: T.WorkspaceOverview[] }>("/v1/me/overview", { workspace: false }),
     /** The caller's Spaces (contracts/spaces.md): one list for every workspace and device. */
@@ -603,6 +606,8 @@ export const api = {
     render: (id: string, body_html: string, thread?: boolean) =>
       http.post<{ body_html: string }>(`/v1/tickets/${id}/render`, { body_html, thread: thread || undefined }),
     links: (id: string) => http.get<{ data: T.TicketLink[] }>(`/v1/tickets/${id}/links`),
+    /** Wiki pages the caller can see that mention the ticket, newest edit first. */
+    wiki: (id: string) => http.get<{ data: T.WikiNode[] }>(`/v1/tickets/${encodeURIComponent(id)}/wiki`),
     /**
      * What a ticket panel's product knows about the ticket's contact; `refresh` asks it again. An
      * http panel's URL is told the app's language, so it can answer in it.
@@ -657,6 +662,9 @@ export const api = {
       /** `for_brand_id`: what that brand's help center shows, its own articles and those of every brand. */
       search: (q: ListQuery & { collection_id?: string; status?: T.KbArticle["status"]; q?: string; for_brand_id?: string }) =>
         http.get<T.Page<T.KbArticle>>("/v1/kb/articles", { query: q }),
+      /** A draft copy of a wiki page (contracts/api.md); `left_out` counts what stayed in the wiki. */
+      fromWiki: (b: { page_id: string; title?: string; collection_id?: string; brand_id?: string | null }) =>
+        http.create<{ article: T.KbArticle; left_out: number }>("/v1/kb/articles/from-wiki", b),
     },
   },
   changelog: {
@@ -667,17 +675,66 @@ export const api = {
     categories: () => http.get<T.ChangelogCategory[]>("/v1/changelog/categories"),
   },
   wiki: {
-    tree: () => http.get<T.Page<T.WikiNode>>("/v1/wiki/pages"),
+    /** One area's tree (contracts/pages.md); the wiki's when left out. */
+    tree: (area?: T.WikiArea) => http.get<T.Page<T.WikiNode>>("/v1/wiki/pages", area ? { query: { area } } : undefined),
     get: (id: string) => http.get<T.WikiPage>(`/v1/wiki/pages/${id}`),
-    create: (b: { parent_id?: string | null; title?: string; icon?: string; body_html?: string; position?: number }) => http.create<T.WikiPage>("/v1/wiki/pages", b),
+    create: (b: { parent_id?: string | null; space?: T.WikiSpace; team_id?: string; template?: boolean; kind?: T.WikiKind; database?: T.Database; canvas?: T.Canvas; props?: Record<string, T.DbValue>; title?: string; icon?: string; body_html?: string; position?: number; area?: T.WikiArea }) => http.create<T.WikiPage>("/v1/wiki/pages", b),
     /** `keepalive` lets a save started as the page closes finish (contracts/wiki.md "Editing together"). */
     update: (id: string, b: T.WikiPagePatch, opts?: { keepalive?: boolean }) => http.patch<T.WikiPage>(`/v1/wiki/pages/${id}`, b, opts),
-    move: (id: string, b: { parent_id: string | null; position: number }) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/move`, b),
+    move: (id: string, b: { parent_id: string | null; position: number; space?: T.WikiSpace; team_id?: string; area?: T.WikiArea }) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/move`, b),
+    trash: (id: string) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/trash`, {}),
+    untrash: (id: string) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/restore`, {}),
+    trashList: (area?: T.WikiArea) => http.get<T.Page<T.WikiTrashed>>("/v1/wiki/trash", area ? { query: { area } } : undefined),
+    duplicate: (id: string, b: { parent_id?: string | null; space?: T.WikiSpace; team_id?: string; template?: boolean; title?: string; position?: number; area?: T.WikiArea }) =>
+      http.create<T.WikiPage>(`/v1/wiki/pages/${id}/duplicate`, b),
+    templates: () => http.get<T.Page<T.WikiNode>>("/v1/wiki/templates"),
+    favorites: () => http.get<T.Page<T.WikiNode>>("/v1/wiki/favorites"),
+    setFavorites: (page_ids: string[]) => http.put<T.Page<T.WikiNode>>("/v1/wiki/favorites", { page_ids }),
+    recent: (area: T.WikiArea = "wiki") => http.get<T.Page<T.WikiNode>>("/v1/wiki/recent", { query: { area } }),
+    views: (id: string) => http.get<T.WikiPageViews>(`/v1/wiki/pages/${id}/views`),
+    analytics: (id: string, days = 28) => http.get<T.WikiPageAnalytics>(`/v1/wiki/pages/${id}/analytics`, { query: { days } }),
+    rows: (id: string) => http.get<T.DbRows>(`/v1/wiki/databases/${id}/rows`),
+    dailyNotes: (from: string, to: string, area: T.WikiArea = "wiki") => http.get<T.Page<T.WikiDailyNote>>("/v1/wiki/daily", { query: { from, to, area } }),
+    openDaily: (b: { date: string; title: string; journal_title: string; body_html?: string; area?: T.WikiArea }) => http.post<T.WikiPage>("/v1/wiki/daily", b),
     remove: (id: string) => http.del(`/v1/wiki/pages/${id}`),
     revisions: (id: string) => http.get<T.Page<T.WikiRevision>>(`/v1/wiki/pages/${id}/revisions`),
     revision: (id: string, rid: string) => http.get<T.WikiRevision>(`/v1/wiki/pages/${id}/revisions/${rid}`),
     restore: (id: string, rid: string) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/revisions/${rid}/restore`, {}),
     search: (q: string, limit = 20) => http.get<T.Page<T.WikiSearchHit>>("/v1/wiki/search", { query: { q, limit } }),
+    /** A link's card for a bookmark block, read by the API (contracts/wiki.md "Bookmarks"). */
+    unfurl: (url: string) => http.post<T.LinkCard>("/v1/wiki/unfurl", { url }),
+    backlinks: (id: string) => http.get<T.Page<T.WikiMention>>(`/v1/wiki/pages/${id}/backlinks`),
+    mentions: (id: string) => http.get<T.Page<T.WikiMention>>(`/v1/wiki/pages/${id}/mentions`),
+    graph: (area: T.WikiArea = "wiki") => http.get<T.Page<T.WikiLink>>("/v1/wiki/graph", { query: { area } }),
+    /** A page's discussions (contracts/wiki.md "Comments"): every write answers with the whole thread. */
+    comments: {
+      list: (pageId: string) => http.get<T.WikiComments>(`/v1/wiki/pages/${pageId}/comments`),
+      /** A new thread without thread_id (inline with the quote it is on), else a reply, which reopens it. */
+      create: (pageId: string, b: { body_html: string; mentions?: string[]; thread_id?: string; quote?: string; inline?: boolean }) =>
+        http.post<T.WikiThread>(`/v1/wiki/pages/${pageId}/comments`, b),
+      update: (id: string, b: { body_html: string; mentions?: string[] }) => http.patch<T.WikiThread>(`/v1/wiki/comments/${id}`, b),
+      /** Deleting a thread's first comment deletes the thread. */
+      remove: (id: string) => http.del(`/v1/wiki/comments/${id}`),
+      resolve: (threadId: string, resolved: boolean) => http.post<T.WikiThread>(`/v1/wiki/threads/${threadId}/resolve`, { resolved }),
+      react: (id: string, emoji: string, on: boolean) => http.post<T.WikiThread>(`/v1/wiki/comments/${id}/reactions`, { emoji, on }),
+    },
+    follow: (pageId: string, following: boolean) => http.put<{ following: boolean }>(`/v1/wiki/pages/${pageId}/follow`, { following }),
+    /** Ollie writing (contracts/ai.md): streams `delta` text for a preview, resolves with the sanitized HTML. Nothing is saved. */
+    write: (b: T.WikiWriteInput, h?: StreamHandlers) => stream<{ html: string }>("/v1/wiki/ai/write", b, h),
+    /**
+     * Pages from other tools: one zip, or page sources with the files they use; up to 100 MB in all.
+     * No Idempotency-Key: the API hashes a keyed request's body, up to 32 MB.
+     */
+    importPages: (files: File[], to: T.WikiImportTarget, onProgress?: (fraction: number) => void, signal?: AbortSignal) => {
+      const fd = new FormData();
+      for (const f of files) fd.append("files", f, f.name);
+      for (const [k, v] of Object.entries(to)) if (v) fd.append(k, v);
+      return http.post<T.WikiImportResult>("/v1/wiki/import", fd, { onUploadProgress: onProgress, signal });
+    },
+    /** One page as a file, or with subpages a zip of the page and the subpages the caller sees. */
+    exportPage: (id: string, format: T.WikiExportFormat, subpages: boolean) => download(`/v1/wiki/pages/${id}/export`, { query: { format, subpages } }),
+    /** Every page of the caller's tree of an area as a zip. */
+    exportAll: (format: T.WikiExportFormat, area: T.WikiArea = "wiki") => download("/v1/wiki/export", { query: { format, area } }),
   },
   search: (q: string) => http.get<T.SearchResults>("/v1/search", { query: { q } }),
   reports: {
@@ -837,6 +894,11 @@ export const api = {
       update: (id: string, b: CollabAccountPatch) => http.patch<T.MailAccount>(`/v1/collab/accounts/${id}`, b),
       /** Removes the account and its mail from opendesk; nothing is deleted at the provider. */
       remove: (id: string) => http.del(`/v1/collab/accounts/${id}`),
+      /**
+       * Makes a ticket inbox of an account the caller connected, read with its own connection
+       * from new mail on; the account goes unless keep_account (contracts/collab.md "Using an account for tickets").
+       */
+      useForTickets: (id: string, b: T.UseForTicketsBody) => http.post<{ mailbox_id: string; account_removed: boolean }>(`/v1/collab/accounts/${id}/use-for-tickets`, b),
       sync: (id: string) => http.post<void>(`/v1/collab/accounts/${id}/sync`),
       /** Starts a history import, or starts it again with this scope (contracts/collab.md "History"). */
       startHistory: (id: string, b: { since: string | null; include_spam_trash?: boolean }) =>

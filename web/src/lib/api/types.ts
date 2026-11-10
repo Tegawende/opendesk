@@ -29,6 +29,8 @@ export type WorkspaceSettings = {
   tickets_enabled?: boolean;
   /** Whether Mail is enabled for this workspace. Defaults to true; effective availability is Workspace.mail_available. */
   mail_enabled?: boolean;
+  /** Whether Pages is enabled for this workspace (contracts/pages.md). Defaults to true; no instance option or plan turns it off. */
+  pages_enabled?: boolean;
   brand_color?: string;
   timezone?: string;
   help_center_enabled?: boolean;
@@ -1423,7 +1425,7 @@ export type AuditLog = {
   ip: string;
   created_at: string;
 };
-export type NotificationType = "assigned" | "new_ticket" | "mentioned" | "customer_replied" | "thread_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached" | "ai_balance_low" | "ai_balance_out" | "auto_recharge_failed" | "ai_key_failed" | "team_joined" | "import_finished" | "support_channel_unhealthy" | "collab_assigned" | "collab_mention";
+export type NotificationType = "assigned" | "new_ticket" | "mentioned" | "customer_replied" | "thread_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached" | "ai_balance_low" | "ai_balance_out" | "auto_recharge_failed" | "ai_key_failed" | "team_joined" | "import_finished" | "support_channel_unhealthy" | "collab_assigned" | "collab_mention" | "wiki_mention" | "wiki_comment" | "wiki_reminder";
 /** `ai_cap_reached`: data `{cap_usd}`, ticket null; the widget agent reached `widget_monthly_cap_usd` (once a month, owners and admins).
  * `ai_balance_low` / `ai_balance_out`: data `{remaining_usd}` (US dollars); `auto_recharge_failed`: data `{reason: AutoRechargeFailure}` (billing, owners and admins, ticket null).
  * `ai_key_failed`: data `{provider: AIKeyKind, reason: "rejected" | "no_funds"}`; the workspace's own AI key failed (at most hourly, owners and admins, ticket null).
@@ -1444,7 +1446,7 @@ export type Notification = {
 /** Where a notification can reach someone besides the bell: email, their phones (`push`) and the desktop app or browser (`desktop`). */
 export type NotificationChannels = { email: boolean; push: boolean; desktop: boolean };
 export type NotificationChannel = keyof NotificationChannels;
-export type NotificationGroup = "tickets" | "team" | "mail" | "ai_billing" | "workspace";
+export type NotificationGroup = "tickets" | "team" | "mail" | "wiki" | "ai_billing" | "workspace";
 /** `urgent`: may be emailed sooner than the cooldown (contracts/api.md "Notification preferences and emails"). */
 export type NotificationTypePrefs = NotificationChannels & { type: NotificationType; group: NotificationGroup; defaults: NotificationChannels; urgent: boolean };
 /** How the server paces notification emails for this person. */
@@ -1569,9 +1571,26 @@ export type TicketCounts = {
   /** Every team the caller can see. */
   teams?: Record<string, { open: number; unassigned: number }>;
   my_teams?: { open: number; unassigned: number };
-  /** Per sidebar row id (ticket_folder:<id>, team:<id>, team:mine, view:<id>), over the row's own tickets. */
+  /** Each reply address's folders, for a ticket inbox shown as a section of its own. */
+  mailboxes?: Record<string, MailboxCount>;
+  /** Per sidebar row id (ticket_folder:<id>, team:<id>, team:mine, view:<id>, mailbox:<id>:<folder>), over the row's own tickets. */
   stats?: Record<string, TicketStats>;
 };
+
+/** POST /v1/collab/accounts/{id}/use-for-tickets: how the ticket inbox starts. */
+export type UseForTicketsBody = {
+  name?: string;
+  team_id?: string | null;
+  brand_id?: string | null;
+  signature_html?: string;
+  auto_reply_enabled?: boolean;
+  auto_reply_subject?: string;
+  auto_reply_html?: string;
+  keep_account?: boolean;
+};
+
+/** A ticket inbox's folder counts (pending with on hold), as TicketCounts counts the whole inbox's. */
+export type MailboxCount = { unassigned: number; mine: number; open: number; pending: number };
 
 /** A sidebar row's tickets awaiting a reply (the customer wrote last), urgent, and overdue. */
 export type TicketStats = { awaiting: number; urgent: number; overdue: number };
@@ -1602,12 +1621,297 @@ export type WikiNode = {
   updated_at: string;
   /** Who created it; null for an API key or a deleted account. */
   created_by_id: string | null;
+  /** The #tags in its text, lower case (contracts/wiki.md "Links and tags"). */
+  tags: string[];
+  /** Yours alone (contracts/wiki.md "Private pages and teamspaces"). */
+  private?: boolean;
+  /** The teamspace it is in. */
+  team_id?: string | null;
+  /** Your journal: your daily notes are under it. */
+  journal?: boolean;
+  /** A daily note's day, YYYY-MM-DD. */
+  daily_date?: string;
+  /** A template (or a page of one); only in GET /v1/wiki/templates. */
+  template?: boolean;
+  /** Verified, and not past the day it was verified until. */
+  verified?: boolean;
+  /** "database": its subpages are its rows (contracts/wiki.md "Databases"); "canvas": cards on a board ("Canvas"). */
+  kind?: WikiKind;
+  /** Other names the page goes by (contracts/wiki.md "Aliases"); left out when it has none. */
+  aliases?: string[];
+  /** Whose tree it is in (contracts/pages.md); "wiki" when left out. */
+  area?: WikiArea;
 };
+
+export type WikiKind = "page" | "database" | "canvas";
+/** The wiki's tree, or Pages' (contracts/pages.md). */
+export type WikiArea = "wiki" | "pages";
+
+// ─── Wiki canvases (contracts/wiki.md "Canvas") ──────────────────────────────
+
+/** A preset tone "1".."6" (red, orange, yellow, green, cyan, purple) or "#rrggbb". */
+export type CanvasColor = string;
+export type CanvasSide = "top" | "right" | "bottom" | "left";
+export type CanvasEnd = "none" | "arrow";
+
+type CanvasNodeBase = { id: string; x: number; y: number; width: number; height: number; color?: CanvasColor };
+export type CanvasTextNode = CanvasNodeBase & { type: "text"; html: string };
+export type CanvasPageNode = CanvasNodeBase & { type: "page"; page_id: string };
+export type CanvasLinkNode = CanvasNodeBase & { type: "link"; url: string; title?: string; description?: string; image?: string };
+export type CanvasFileNode = CanvasNodeBase & { type: "file"; src: string; name: string };
+export type CanvasGroupNode = CanvasNodeBase & { type: "group"; label?: string };
+export type CanvasNode = CanvasTextNode | CanvasPageNode | CanvasLinkNode | CanvasFileNode | CanvasGroupNode;
+
+export type CanvasEdge = {
+  id: string;
+  fromNode: string;
+  fromSide?: CanvasSide;
+  /** Default "none". */
+  fromEnd?: CanvasEnd;
+  toNode: string;
+  toSide?: CanvasSide;
+  /** Default "arrow". */
+  toEnd?: CanvasEnd;
+  color?: CanvasColor;
+  label?: string;
+};
+
+/** A canvas page's cards (in z order, later above) and connections. */
+export type Canvas = { nodes: CanvasNode[]; edges: CanvasEdge[] };
+
+// ─── Wiki databases (contracts/wiki.md "Databases") ─────────────────────────
+
+export type DbPropType =
+  | "title"
+  | "text"
+  | "number"
+  | "select"
+  | "multi_select"
+  | "status"
+  | "date"
+  | "person"
+  | "checkbox"
+  | "url"
+  | "email"
+  | "phone"
+  | "files"
+  | "relation"
+  | "rollup"
+  | "formula"
+  | "created_time"
+  | "created_by"
+  | "edited_time"
+  | "edited_by"
+  | "unique_id"
+  | "ticket";
+
+export type DbTone = "gray" | "brown" | "orange" | "yellow" | "green" | "blue" | "purple" | "pink" | "red";
+export type DbOption = { id: string; name: string; color: DbTone };
+export type DbStatusGroup = { id: "todo" | "doing" | "done"; option_ids: string[] };
+export type DbRollupFn =
+  | "show_original"
+  | "count"
+  | "count_values"
+  | "count_unique"
+  | "count_empty"
+  | "count_not_empty"
+  | "percent_empty"
+  | "percent_not_empty"
+  | "sum"
+  | "avg"
+  | "median"
+  | "min"
+  | "max"
+  | "range"
+  | "earliest"
+  | "latest"
+  | "checked"
+  | "unchecked"
+  | "percent_checked";
+export type DbNumberFormat = "number" | "comma" | "percent" | "usd" | "eur" | "gbp" | "jpy" | "chf" | "cad" | "aud" | "inr" | "brl" | "huf" | "pln";
+
+export type DbProperty = {
+  /** [a-z0-9_]{1,24}, stable; the first property is the title ("title"). */
+  id: string;
+  name: string;
+  type: DbPropType;
+  options?: DbOption[];
+  groups?: DbStatusGroup[];
+  number_format?: DbNumberFormat;
+  /** A date's values have a time of day. */
+  date_time?: boolean;
+  /** A relation's database. */
+  database_id?: string;
+  rollup?: { relation: string; property: string; fn: DbRollupFn };
+  formula?: string;
+  /** A unique id's letters (TASK-12). */
+  prefix?: string;
+  description?: string;
+};
+
+export type DbViewType = "table" | "board" | "list" | "gallery" | "calendar" | "timeline" | "chart" | "form";
+export type DbView = { id: string; name: string; type: DbViewType; settings?: DbViewSettings };
+
+export type DbFilterRule = { property: string; op: string; value?: unknown };
+export type DbFilterGroup = { op: "and" | "or"; rules: (DbFilterRule | DbFilterGroup)[] };
+export type DbSort = { property: string; dir: "asc" | "desc" };
+export type DbCalc =
+  | "none"
+  | "count"
+  | "count_values"
+  | "count_unique"
+  | "count_empty"
+  | "count_not_empty"
+  | "percent_empty"
+  | "percent_not_empty"
+  | "sum"
+  | "avg"
+  | "median"
+  | "min"
+  | "max"
+  | "range"
+  | "earliest"
+  | "latest"
+  | "checked"
+  | "unchecked"
+  | "percent_checked";
+
+/** A view's own way of showing the rows; the API keeps it as written. */
+export type DbViewSettings = {
+  filter?: DbFilterGroup;
+  sorts?: DbSort[];
+  /** Board columns; groups in a table or list. */
+  group_by?: string;
+  hide_empty_groups?: boolean;
+  collapsed_groups?: string[];
+  /** Property ids hidden in this view. */
+  hidden?: string[];
+  /** Property ids in this view's order. */
+  order?: string[];
+  widths?: Record<string, number>;
+  wrap?: boolean;
+  /** Calendar and timeline: the date property, and the timeline's end. */
+  date_property?: string;
+  end_property?: string;
+  timeline_scale?: "day" | "week" | "month" | "quarter";
+  card_preview?: "none" | "cover" | "content";
+  card_size?: "small" | "medium" | "large";
+  card_fit?: boolean;
+  calculations?: Record<string, DbCalc>;
+  chart?: { kind: "bar" | "column" | "donut" | "line"; x: string; y?: { property: string; fn: "count" | "sum" | "avg" } };
+  /** A linked view shows rows of this database but filters on its own (the block's). */
+  open_in?: "peek" | "page";
+  /** A form: what it asks, in order, and what it says. */
+  form?: DbFormSettings;
+};
+
+/** A question of a form: a property, whether it must be answered, and a hint under it. */
+export type DbFormField = { property: string; required?: boolean; help?: string };
+export type DbFormSettings = { title?: string; description?: string; fields: DbFormField[]; submitted?: string };
+
+export type Database = {
+  properties: DbProperty[];
+  views: DbView[];
+  next_id: number;
+  /** Rows nest under a parent item: two relations of the database to itself, kept in step by the app. */
+  sub_items?: { parent: string; children: string };
+  /** Rows wait on other rows: two relations of the database to itself, kept in step by the app. */
+  dependencies?: { blocked_by: string; blocking: string };
+};
+
+export type DbDate = { start: string; end?: string };
+export type DbFile = { url: string; name: string };
+/** A row's stored value of a property, by its type. */
+export type DbValue = string | number | boolean | string[] | DbDate | DbFile[] | null;
+
+export type DbRow = WikiNode & {
+  props: Record<string, DbValue>;
+  cover: string;
+  cover_y: number;
+  excerpt: string;
+  created_at: string;
+  created_by: UserRef | null;
+  updated_by: UserRef | null;
+};
+
+export type DbRows = { data: DbRow[]; templates: WikiNode[] };
+
+/** Where a top-level page lives. */
+export type WikiSpace = "workspace" | "private" | "team";
+
+export type WikiVerification = { by: UserRef | null; at: string; until: string | null; expired: boolean };
+
+export type WikiTrashed = WikiNode & { deleted_at: string; deleted_by: UserRef | null; purge_at: string; subpages: number; path: WikiRef[] };
+
+export type WikiPageViews = { views: number; people: number; readers: { user: UserRef; visits: number; last_at: string }[] };
+
+/** How a page was read and edited per day, UTC, oldest first (contracts/wiki.md "Page analytics"). Counts only. */
+export type WikiPageAnalytics = {
+  days: { date: string; views: number; viewers: number }[];
+  total_views: number;
+  total_viewers: number;
+  edits: { date: string; count: number }[];
+};
+
+/** One emoji on a comment and who added it, oldest first (contracts/wiki.md "Comments"). */
+export type WikiReaction = { emoji: string; users: string[] };
+
+export type WikiComment = {
+  id: string;
+  thread_id: string;
+  author: UserRef | null;
+  body_html: string;
+  mentions: string[];
+  created_at: string;
+  edited_at: string | null;
+  reactions: WikiReaction[];
+};
+
+/** A discussion on a page: inline on the text it quotes (`<span data-comment="<id>">`), or on the page. */
+export type WikiThread = {
+  id: string;
+  page_id: string;
+  quote: string;
+  inline: boolean;
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: UserRef | null;
+  /** Oldest first; the first is the thread's own. */
+  comments: WikiComment[];
+};
+
+/** A page's threads, oldest first, open and resolved, and whether the person follows the page. */
+export type WikiComments = { data: WikiThread[]; following: boolean };
+
+export type WikiDailyNote = { date: string; id: string };
 
 export type WikiRef = { id: string; title: string; icon: string };
 
-export type WikiPage = WikiNode & {
+/** A page's look (contracts/wiki.md "Page settings"): not part of its text, no version. */
+export type WikiPageSettings = {
+  /** "" (none), "gradient:<name>" (components/wiki/covers.ts), or an image: https or an attachment. */
+  cover: string;
+  /** Which part of the cover shows, 0 (top) to 100 (bottom). */
+  cover_y: number;
+  full_width: boolean;
+  small_text: boolean;
+  font: "default" | "serif" | "mono";
+  /** The app keeps the page read-only until someone unlocks it. */
+  locked: boolean;
+};
+
+export type WikiPage = WikiNode &
+  WikiPageSettings & {
   body_html: string;
+  kind: WikiKind;
+  database: Database | null;
+  /** A canvas's cards and connections; null for a page (contracts/wiki.md "Canvas"). */
+  canvas?: Canvas | null;
+  props: Record<string, DbValue>;
+  verification: WikiVerification | null;
+  /** In the trash since; null for a page in the tree. */
+  deleted_at: string | null;
+  deleted_by: UserRef | null;
   created_by: UserRef | null;
   updated_by: UserRef | null;
   created_at: string;
@@ -1627,6 +1931,13 @@ export type WikiRevision = {
   updated_at: string;
 };
 
+/** A link's card, read by the API for a bookmark block (contracts/wiki.md "Bookmarks"). */
+export type LinkCard = { title: string; description: string; image: string; site: string };
+
+/** A page that links to another (a backlink), or names it without a link. */
+export type WikiMention = { id: string; parent_id: string | null; title: string; icon: string; snippet: string; updated_at: string };
+export type WikiLink = { from: string; to: string };
+
 export type WikiSearchHit = {
   id: string;
   parent_id: string | null;
@@ -1636,9 +1947,10 @@ export type WikiSearchHit = {
   snippet: string;
   path: WikiRef[];
   updated_at: string;
+  area?: WikiArea;
 };
 
-export type WikiPagePatch = { title?: string; icon?: string; body_html?: string; version?: number };
+export type WikiPagePatch = Partial<WikiPageSettings> & { title?: string; icon?: string; body_html?: string; version?: number; verified?: boolean; verified_days?: number; database?: Database; props?: Record<string, DbValue>; canvas?: Canvas; aliases?: string[] };
 
 export type ReportsOverview = {
   created: number;
@@ -1940,7 +2252,7 @@ export type AutoRecharge = {
 };
 export type AutoRechargePatch = Partial<Pick<AutoRecharge, "enabled" | "threshold_usd" | "amount_usd" | "monthly_limit_usd">>;
 export type AIFeature =
-  | "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "answer_email" | "playground" | "kb_draft" | "assistant" | "assistant_peer" | "procedure";
+  | "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "answer_email" | "playground" | "kb_draft" | "assistant" | "assistant_peer" | "procedure" | "wiki_write";
 /**
  * GET /v1/billing/usage (contracts/billing.md). `from`/`to` are RFC 3339; `to` is exclusive.
  * Every usd value is US dollars, a number with up to 6 decimals.
@@ -2154,6 +2466,31 @@ export type Triage = {
   suggestions?: AISuggestions;
 };
 export type RewriteMode = "friendlier" | "more_formal" | "shorter" | "longer" | "fix_grammar" | "simplify";
+/** POST /v1/wiki/ai/write (contracts/ai.md): Ollie writing in the wiki. */
+export type WikiWriteMode =
+  | "improve" | "fix_grammar" | "shorter" | "longer" | "simplify" | "more_formal" | "friendlier"
+  | "summarize" | "action_items" | "explain" | "continue" | "custom";
+export type WikiWriteInput = {
+  mode: WikiWriteMode;
+  /** The selection to edit. */
+  html?: string;
+  /** The page around the selection or cursor. */
+  context_html?: string;
+  title?: string;
+  instructions?: string;
+};
+// ─── Wiki import and export (contracts/wiki.md "Import and export") ──────────
+
+/** Why an import left a file out or changed a page. */
+export type WikiImportSkipReason =
+  | "unsupported" | "unused" | "executable" | "too_large" | "unreadable"
+  | "body_too_large" | "moved_up" | "columns_dropped" | "nested_archive" | "files_limit"
+  | "canvas_simplified" | "canvas_trimmed";
+/** POST /v1/wiki/import: how many pages it made, its top pages in order, and what it left out by path in the upload. */
+export type WikiImportResult = { pages: number; root_ids: string[]; skipped: { path: string; reason: WikiImportSkipReason | (string & {}) }[] };
+/** Where an import lands: under a page, or at the top of a space. */
+export type WikiImportTarget = { parent_id: string } | { space: WikiSpace; team_id?: string; area?: WikiArea };
+export type WikiExportFormat = "markdown" | "html";
 export type TranslateResult = { html?: string; text?: string; source_language: string };
 export type KBArticleDraft = { title: string; body_html: string; excerpt: string };
 
@@ -3044,7 +3381,7 @@ export type CollabStatus = {
   storage: CollabStorage;
 };
 
-export type SidebarSectionId = "favorites" | "mail" | "inbox" | "teams" | "views" | "workspace";
+export type SidebarSectionId = "favorites" | "mail" | "inbox" | "teams" | "views" | "pages" | "workspace";
 export type SidebarPinKind = "box" | "folder" | "account" | "view" | "team" | "ticket_folder" | "view_section";
 export type SidebarPin = { kind: SidebarPinKind; id: string };
 
@@ -3070,7 +3407,23 @@ export type SidebarPrefs = {
   mail_tabs: string[];
   /** Pins the sidebar added once by itself ("box:inbox": All inboxes, at a second account), so one unpinned stays so. */
   auto_pins: string[];
+  /** The member's own sections, placed in `order` as "custom:<id>": rows of anything the workspace offers. */
+  sections: SidebarSection[];
+  /** The member's order of a built-in section's rows ("inbox", "mail", "teams", "workspace"), as row keys spelled like `hidden`'s. Default {}. */
+  row_order: Record<string, string[]>;
+  /** The member's own labels: "section:<id>" for a built-in section, a row key as in `hidden`. Default {}. */
+  names: Record<string, string>;
+  /** The member's own emoji, keyed like `names`. Default {}. */
+  icons: Record<string, string>;
+  /** The red row on top of the ticket inbox while visitors wait in live chat with nobody on it. Default false. */
+  show_waiting_chats: boolean;
 };
+
+/** A row of a member's own section: a Space row of this workspace. */
+export type SidebarItem = Omit<SpaceItem, "workspace_id" | "kind"> & { kind: Exclude<SpaceItemKind, "section" | "everywhere"> };
+
+/** One of a member's own sidebar sections: at most 20, 60 rows each, 300 in all. */
+export type SidebarSection = { id: string; title: string; collapsed: boolean; icon?: string; items: SidebarItem[] };
 
 /** unread / total / none for mail rows; count / awaiting / urgent / overdue / none for ticket rows, and open for team rows. */
 export type SidebarBadge = "unread" | "total" | "count" | "awaiting" | "urgent" | "overdue" | "open" | "none";
@@ -3120,6 +3473,8 @@ export type WorkspacePrefs = {
   updated_at?: string;
 };
 export type WorkspacePrefsInput = Partial<Pick<WorkspacePrefs, "order" | "hidden">>;
+/** The keys a person chose for the app's shortcuts: id to keys, or null for one turned off (contracts/api.md "Keyboard shortcuts"). */
+export type ShortcutKeys = { bindings: Record<string, string | null> };
 export type WorkspaceOverview = {
   id: string;
   name: string;
@@ -3139,7 +3494,7 @@ export type WorkspaceOverview = {
 export type SpaceColor = "grey" | "blue" | "violet" | "teal" | "green" | "amber" | "red" | "pink";
 
 /** What a Space row names: a whole built-in section, or one row of a workspace. */
-export type SpaceItemKind = "section" | "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "everywhere";
+export type SpaceItemKind = "section" | "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "wiki_page" | "wiki_space" | "mailbox" | "everywhere";
 
 export type SpaceItem = {
   /** A workspace the user is a member of; "" for an everywhere row (it spans them all). */
@@ -3151,6 +3506,8 @@ export type SpaceItem = {
   name?: string;
   /** The number beside the row; left out: the row's default. */
   badge?: SidebarBadge;
+  /** One emoji in place of the row's own icon. */
+  icon?: string;
 };
 
 export type SpaceSection = {
@@ -3159,6 +3516,8 @@ export type SpaceSection = {
   /** 0..40 characters; "" shows no header. */
   title: string;
   collapsed: boolean;
+  /** One emoji beside the title. */
+  icon?: string;
   /** At most 60; at most 300 across the Space. */
   items: SpaceItem[];
 };

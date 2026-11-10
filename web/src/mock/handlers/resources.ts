@@ -682,14 +682,14 @@ function checkActionTrigger(ws: WsData, trigger: Automation["trigger"], acts: Ac
   if (acts.some((a) => a.type === "run_procedure" && !known.has(a.value))) throw invalid("ai procedure not found in this workspace");
 }
 
-function uniqueSlug(rows: { slug: string }[], base: string): string {
+export function uniqueSlug(rows: { slug: string }[], base: string): string {
   const b = base || "untitled";
   let slug = b;
   for (let i = 2; rows.some((r) => r.slug === slug); i++) slug = `${b}-${i}`;
   return slug;
 }
 
-function recountCollections(ws: WsData) {
+export function recountCollections(ws: WsData) {
   for (const c of ws.collections) c.article_count = ws.articles.filter((a) => a.collection_id === c.id).length;
 }
 
@@ -814,7 +814,7 @@ function patchReceiving(ctx: Ctx, m: Mailbox) {
   throw invalid(kind === "imap" ? "Add the mailbox again to receive over IMAP." : "Reconnect the mailbox to sync it.");
 }
 
-function mailbox(ws: WsData, init: Pick<Mailbox, "name" | "email" | "display_name" | "inbound_kind" | "outbound_kind" | "config" | "team_id">): Mailbox {
+export function mailbox(ws: WsData, init: Pick<Mailbox, "name" | "email" | "display_name" | "inbound_kind" | "outbound_kind" | "config" | "team_id">): Mailbox {
   const m: Mailbox = {
     ...init,
     brand_id: defaultBrand(ws)?.id ?? "",
@@ -859,7 +859,7 @@ function publicBrand(ctx: Ctx): { ws: WsData; brand: Brand | undefined } {
 }
 
 /** A KB brand_id from the body: a brand of the workspace, or null (""/null) for every brand. */
-function kbBrandRef(ctx: Ctx, v: unknown): string | null {
+export function kbBrandRef(ctx: Ctx, v: unknown): string | null {
   if (v === null || v === undefined || v === "") return null;
   if (typeof v !== "string" || !ctx.ws.brands.some((b) => b.id === v)) throw invalid("brand_id must be a brand of the workspace");
   return v;
