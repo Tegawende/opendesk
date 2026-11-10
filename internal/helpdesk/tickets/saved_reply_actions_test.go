@@ -78,3 +78,41 @@ func TestSavedReplyActions(t *testing.T) {
 		t.Fatalf("actions not cleared: %v", cleared.Actions)
 	}
 }
+
+// A saved reply's actions go no further than its sender may: a missing label is created only
+// when they may create labels (settings.label_creation), and a private team's reply they do not
+// see does nothing.
+func TestSavedReplyActionsSenderLimits(t *testing.T) {
+	e := hdtest.New(t, tickets.Register, resources.Register)
+	ws := e.NewWorkspace()
+	admin, agent := ws.Admin.As(ws), ws.Agent.As(ws)
+	private := addTeam(t, e, ws, ws.Admin.ID)
+	e.Exec(`UPDATE teams SET private = true WHERE id = $1`, private)
+
+	var open, hidden struct {
+		ID string `json:"id"`
+	}
+	e.Do("POST", "/v1/saved-replies", admin, map[string]any{"title": "New label", "body_html": "<p>x</p>",
+		"actions": map[string]any{"add_tags": []string{"never-seen"}}}).Want(t, 201).JSON(t, &open)
+	e.Do("POST", "/v1/saved-replies", admin, map[string]any{"title": "Private", "body_html": "<p>x</p>", "team_id": private.String(),
+		"actions": map[string]any{"assignee_id": ws.Admin.ID.String()}}).Want(t, 201).JSON(t, &hidden)
+
+	e.SetSettings(ws, map[string]any{"label_creation": "admins"})
+	tk := createTicket(t, e, ws, map[string]any{"channel": "api", "kind": "note", "contact": map[string]any{"email": "ada@example.com"}})
+	e.Do("POST", "/v1/tickets/"+tk.ID.String()+"/messages", agent, map[string]any{"kind": "reply", "body_html": "<p>x</p>",
+		"saved_reply_ids": []string{open.ID, hidden.ID}}).Want(t, 201)
+	after := getTicket(t, e, ws, tk.ID)
+	if len(after.Tags) != 0 {
+		t.Fatalf("an agent created a label through a saved reply: %v", after.Tags)
+	}
+	if after.Assignee != nil {
+		t.Fatalf("a hidden saved reply assigned the ticket: %+v", after.Assignee)
+	}
+
+	// An admin may create the label.
+	e.Do("POST", "/v1/tickets/"+tk.ID.String()+"/messages", admin, map[string]any{"kind": "reply", "body_html": "<p>x</p>",
+		"saved_reply_ids": []string{open.ID}}).Want(t, 201)
+	if got := getTicket(t, e, ws, tk.ID).Tags; len(got) != 1 || got[0].Name != "never-seen" {
+		t.Fatalf("tags after the admin's reply: %v", got)
+	}
+}

@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/useopendesk/opendesk/internal/db"
-	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
 // SavedReplyActions is the shape stored in saved_replies.actions and sent by the API.
@@ -33,16 +32,16 @@ func (a *SavedReplyActions) Clean(ctx context.Context, q db.Querier, wid uuid.UU
 		var out []string
 		seen := map[string]bool{}
 		for _, s := range in {
-			s = strings.TrimSpace(s)
-			if s == "" {
+			if strings.TrimSpace(s) == "" {
 				continue
 			}
-			if len([]rune(s)) > 100 {
-				return nil, httpx.Validation("a label name has at most 100 characters")
+			name, err := CleanTagName(s)
+			if err != nil {
+				return nil, err
 			}
-			if k := strings.ToLower(s); !seen[k] {
+			if k := strings.ToLower(name); !seen[k] {
 				seen[k] = true
-				out = append(out, s)
+				out = append(out, name)
 			}
 		}
 		return out, nil

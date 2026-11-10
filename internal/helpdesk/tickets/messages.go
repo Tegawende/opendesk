@@ -410,7 +410,7 @@ func PostMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 			return domain.Message{}, err
 		}
 	}
-	if err := applySavedReplyActions(ctx, tx, d, wid, tid, actor, b.SavedReplyIDs); err != nil {
+	if err := applySavedReplyActions(ctx, tx, d, p, tid, b.SavedReplyIDs); err != nil {
 		return domain.Message{}, err
 	}
 	if b.Status != nil {

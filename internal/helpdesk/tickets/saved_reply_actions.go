@@ -3,8 +3,9 @@ package tickets
 // applySavedReplyActions applies the actions of the saved replies a message used
 // (MessageInput.SavedReplyIDs) in the message's transaction: labels added and removed, then the
 // team, then the assignee (a later reply's team or assignee wins). They apply only once the
-// message is sent, so a discarded draft changes nothing. Unknown or deleted replies are skipped;
-// a label that no longer exists is created (the reply's author named it).
+// message is sent, so a discarded draft changes nothing. Unknown or deleted replies, and those of
+// a private team the sender does not see, are skipped; a label that no longer exists is created
+// when the sender may create labels (settings.label_creation), else skipped.
 
 import (
 	"context"
@@ -12,11 +13,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/deps"
+	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 )
 
-func applySavedReplyActions(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID, actor Actor, refs []string) error {
+func applySavedReplyActions(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal, tid uuid.UUID, refs []string) error {
 	if len(refs) == 0 {
 		return nil
 	}
@@ -29,7 +32,13 @@ func applySavedReplyActions(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, t
 	if len(ids) == 0 {
 		return nil
 	}
-	rows, err := tx.Query(ctx, `SELECT id, actions FROM saved_replies WHERE workspace_id = $1 AND id = ANY($2)`, wid, ids)
+	wid := p.WorkspaceID
+	hidden, err := domain.HiddenTeams(ctx, tx, p)
+	if err != nil {
+		return err
+	}
+	rows, err := tx.Query(ctx, `SELECT id, actions FROM saved_replies WHERE workspace_id = $1 AND id = ANY($2)
+		AND (team_id IS NULL OR team_id <> ALL($3::uuid[]))`, wid, ids, append([]uuid.UUID{}, hidden...))
 	if err != nil {
 		return err
 	}
@@ -56,13 +65,17 @@ func applySavedReplyActions(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, t
 	if all.Empty() {
 		return nil
 	}
-	p := Patch{AddTags: all.AddTags, RemoveTags: all.RemoveTags, CreateLabels: true}
+	create, err := hd.CanCreateLabels(ctx, tx, p)
+	if err != nil {
+		return err
+	}
+	patch := Patch{AddTags: all.AddTags, RemoveTags: all.RemoveTags, CreateLabels: create}
 	if all.TeamID != nil {
-		p.Team = Opt[uuid.UUID]{Set: true, Value: *all.TeamID}
+		patch.Team = Opt[uuid.UUID]{Set: true, Value: *all.TeamID}
 	}
 	if all.AssigneeID != nil {
-		p.Assignee = Opt[uuid.UUID]{Set: true, Value: *all.AssigneeID}
+		patch.Assignee = Opt[uuid.UUID]{Set: true, Value: *all.AssigneeID}
 	}
-	_, err = applyPatch(ctx, tx, d, wid, tid, actor, p, applyOpts{Enqueue: true, Lenient: true})
+	_, err = applyPatch(ctx, tx, d, wid, tid, actorOf(p), patch, applyOpts{Enqueue: true, Lenient: true})
 	return err
 }
