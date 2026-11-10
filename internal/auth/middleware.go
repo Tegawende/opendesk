@@ -122,13 +122,18 @@ func (rv *Resolver) resolveAPIKey(ctx context.Context, key string, p *Principal)
 const VisitorSessionLive = `s.last_seen_at > now() - interval '90 days' AND (NOT s.verified OR s.created_at > now() - interval '30 days')`
 
 func (rv *Resolver) resolveVisitor(ctx context.Context, token string, p *Principal) bool {
-	var widgetID *uuid.UUID
+	var widgetID, contactID *uuid.UUID
+	// A session has no contact until the visitor starts a conversation; ContactID is then zero.
 	err := rv.Pool.QueryRow(ctx, `SELECT s.id, s.workspace_id, s.contact_id, s.verified, s.widget_id FROM widget_sessions s
-		JOIN contacts c ON c.id = s.contact_id AND NOT c.blocked
+		LEFT JOIN contacts c ON c.id = s.contact_id
 		JOIN workspaces w ON w.id = s.workspace_id AND w.suspended_at IS NULL
-		WHERE s.token_hash = $1 AND `+VisitorSessionLive, crypto.HashToken(token)).Scan(&p.VisitorID, &p.WorkspaceID, &p.ContactID, &p.Verified, &widgetID)
+		WHERE s.token_hash = $1 AND NOT COALESCE(c.blocked, false) AND `+VisitorSessionLive,
+		crypto.HashToken(token)).Scan(&p.VisitorID, &p.WorkspaceID, &contactID, &p.Verified, &widgetID)
 	if err != nil {
 		return false
+	}
+	if contactID != nil {
+		p.ContactID = *contactID
 	}
 	if widgetID != nil {
 		p.WidgetID = *widgetID
@@ -136,7 +141,7 @@ func (rv *Resolver) resolveVisitor(ctx context.Context, token string, p *Princip
 	p.Kind = KindVisitor
 	if rv.shouldTouch(p.VisitorID) {
 		_, _ = rv.Pool.Exec(context.WithoutCancel(ctx), `UPDATE widget_sessions SET last_seen_at = now() WHERE id = $1`, p.VisitorID)
-		if rv.VisitorSeen != nil {
+		if rv.VisitorSeen != nil && p.ContactID != uuid.Nil {
 			rv.VisitorSeen(ctx, p.WorkspaceID, p.ContactID)
 		}
 	}

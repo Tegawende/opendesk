@@ -9,6 +9,7 @@ func TestSessionWithAnExtraAddressOfAContact(t *testing.T) {
 	e.Exec(`WITH c AS (INSERT INTO contacts (workspace_id, email, name) VALUES ($1, 'owner@work.example', 'Owner') RETURNING id)
 		INSERT INTO contact_emails (workspace_id, contact_id, email) SELECT $1, id, 'owner@home.example' FROM c`, ws.ID)
 	s := start(t, e, map[string]any{"key": ws.WidgetKey, "email": "Owner@Home.Example"})
+	s = talked(t, e, s, map[string]any{"key": ws.WidgetKey}) // the contact comes with the first message
 	var email *string
 	var widgetEmail string
 	e.Scalar(`SELECT email FROM contacts WHERE id = $1`, &email, s.Contact.ID)

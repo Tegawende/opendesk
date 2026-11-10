@@ -23,6 +23,7 @@ func TestVisitorPresence(t *testing.T) {
 		} `json:"conversation"`
 	}
 	e.Do("POST", "/v1/widget/conversations", va, map[string]any{"body": "Hello"}).Want(t, 201).JSON(t, &created)
+	s.Contact.ID = contactOf(t, e, s) // made by the first message
 	path := "/v1/tickets/" + created.Conversation.ID.String() + "/visitor-presence"
 	agent := ws.Agent.As(ws)
 

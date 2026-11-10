@@ -277,11 +277,11 @@ type widgetCompany struct {
 
 type widgetSession struct {
 	Body struct {
-		VisitorToken   string            `json:"visitor_token"`
-		Contact        domain.ContactRef `json:"contact"`
-		WSToken        string            `json:"ws_token"`
-		GatewayURL     string            `json:"gateway_url"`
-		EmailCollected bool              `json:"email_collected" doc:"The visitor supplied an address, including an unverified address held by another contact"`
+		VisitorToken   string             `json:"visitor_token"`
+		Contact        *domain.ContactRef `json:"contact" doc:"Null until the visitor starts a conversation, which makes their contact; ws_token is empty until then"`
+		WSToken        string             `json:"ws_token"`
+		GatewayURL     string             `json:"gateway_url"`
+		EmailCollected bool               `json:"email_collected" doc:"The visitor supplied an address, including an unverified address held by another contact"`
 		// Unread is the team's replies the visitor has not read in this widget's chats, and
 		// UnreadLatest the newest of them, so the widget shows both without another request.
 		Unread       int             `json:"unread"`
@@ -460,37 +460,47 @@ func (h *handler) session(ctx context.Context, in *widgetSessionInput) (*widgetS
 
 	out := &widgetSession{}
 	err = h.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+		// contactID stays zero for a visitor who has not written yet; the session remembers idn
+		// for the contact their first message makes.
 		var contactID uuid.UUID
+		var idn sessionIdentity
 		token := ""
 		if t := strings.TrimSpace(b.VisitorToken); t != "" {
-			var sessContact uuid.UUID
-			var sessWidget *uuid.UUID
+			var sessContact, sessWidget *uuid.UUID
 			var sessVerified, blocked bool
 			var external *string
-			err := tx.QueryRow(ctx, `SELECT s.contact_id, s.widget_id, s.verified, c.blocked, c.external_id FROM widget_sessions s
-				JOIN contacts c ON c.id = s.contact_id WHERE s.workspace_id = $1 AND s.token_hash = $2 AND `+auth.VisitorSessionLive,
-				wid, crypto.HashToken(t)).Scan(&sessContact, &sessWidget, &sessVerified, &blocked, &external)
+			var sessIdn sessionIdentity
+			err := tx.QueryRow(ctx, `SELECT s.contact_id, s.widget_id, s.verified, COALESCE(c.blocked, false),
+				COALESCE(c.external_id, NULLIF(s.identity->>'user_id', '')), s.identity FROM widget_sessions s
+				LEFT JOIN contacts c ON c.id = s.contact_id WHERE s.workspace_id = $1 AND s.token_hash = $2 AND `+auth.VisitorSessionLive,
+				wid, crypto.HashToken(t)).Scan(&sessContact, &sessWidget, &sessVerified, &blocked, &external, &sessIdn)
+			if sessContact != nil {
+				contactID = *sessContact
+			}
 			switch {
 			case db.IsNotFound(err):
+				contactID = uuid.Nil
 			case err != nil:
 				return err
 			case blocked:
 				return httpx.E(http.StatusForbidden, "blocked", "This conversation is not available.")
 			case verified && (external == nil || *external != userID):
 				// A different signed-in user on this browser gets a session of their own.
+				contactID = uuid.Nil
 			case sessVerified && !verified:
 				// A signed-in visitor's session is not someone's who is not signed in: on a
 				// shared computer, the next person starts anonymous and sees nothing of it.
+				contactID = uuid.Nil
 			case sessWidget != nil && *sessWidget != g.ID:
 				// The same visitor on another widget of the workspace: a session of this
 				// widget. An identity is verified with each widget's own secret, so a
 				// signed-in contact carries over only when this request verified it too
 				// (the case above); otherwise the visitor starts anonymous here.
-				if external == nil || verified {
-					contactID = sessContact
+				if external != nil && !verified {
+					contactID = uuid.Nil
 				}
 			default:
-				contactID, token = sessContact, t
+				token, idn = t, sessIdn
 				if verified && !sessVerified {
 					if _, err := tx.Exec(ctx, `UPDATE widget_sessions SET verified = true WHERE workspace_id = $1 AND token_hash = $2`,
 						wid, crypto.HashToken(t)); err != nil {
@@ -504,66 +514,90 @@ func (h *handler) session(ctx context.Context, in *widgetSessionInput) (*widgetS
 			}
 		}
 
-		if contactID == uuid.Nil {
+		if contactID == uuid.Nil && verified {
+			// A signed-in user who already has a contact gets it now (their chats); nothing is made.
 			var err error
-			if verified {
-				contactID, err = h.verifiedContact(ctx, tx, wid, userID, email, name)
-			} else {
-				contactID, err = h.newVisitorContact(ctx, tx, wid, email, name)
-			}
-			if err != nil {
+			if contactID, err = knownContact(ctx, tx, wid, userID); err != nil {
 				return err
 			}
-		} else if email != "" || name != "" {
+			if contactID != uuid.Nil {
+				if err := h.fillContact(ctx, tx, wid, contactID, email, name); err != nil {
+					return err
+				}
+			}
+		} else if contactID != uuid.Nil && (email != "" || name != "") {
 			if err := h.fillContact(ctx, tx, wid, contactID, email, name); err != nil {
 				return err
 			}
 		}
 
-		if verified {
-			if err := widgetPicture(ctx, h.d, tx, wid, contactID, strings.TrimSpace(b.AvatarURL)); err != nil {
+		var c *domain.Contact
+		if contactID != uuid.Nil {
+			idn = sessionIdentity{}
+			if verified {
+				if err := widgetPicture(ctx, h.d, tx, wid, contactID, strings.TrimSpace(b.AvatarURL)); err != nil {
+					return err
+				}
+				if err := syncProfile(ctx, tx, wid, contactID, b.Company, b.Fields); err != nil {
+					return err
+				}
+			}
+			loaded, err := domain.LoadContact(ctx, tx, wid, contactID)
+			if err != nil {
 				return err
 			}
-		}
-		if verified {
-			if err := syncProfile(ctx, tx, wid, contactID, b.Company, b.Fields); err != nil {
-				return err
+			if loaded.Blocked {
+				return httpx.E(http.StatusForbidden, "blocked", "This conversation is not available.")
+			}
+			c = &loaded
+		} else {
+			if verified {
+				idn = idn.merge(userID, email, name).verifiedProfile(strings.TrimSpace(b.AvatarURL), b.Company, b.Fields)
+			} else {
+				idn = idn.merge("", email, name)
 			}
 		}
-		c, err := domain.LoadContact(ctx, tx, wid, contactID)
-		if err != nil {
-			return err
-		}
-		if c.Blocked {
-			return httpx.E(http.StatusForbidden, "blocked", "This conversation is not available.")
+		var linked *uuid.UUID
+		if contactID != uuid.Nil {
+			linked = &contactID
 		}
 		if token == "" {
 			token = "od_vis_" + crypto.RandomToken(32)
-			if _, err := tx.Exec(ctx, `INSERT INTO widget_sessions (id, workspace_id, contact_id, token_hash, verified, user_agent, widget_id)
-				VALUES ($1,$2,$3,$4,$5,$6,$7)`, ids.New(), wid, contactID, crypto.HashToken(token), verified, hd.Truncate(in.UserAgent, 400), g.ID); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO widget_sessions (id, workspace_id, contact_id, token_hash, verified, user_agent, widget_id, identity)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, ids.New(), wid, linked, crypto.HashToken(token), verified, hd.Truncate(in.UserAgent, 400), g.ID, idn); err != nil {
 				return err
 			}
 			if _, err := tx.Exec(ctx, `UPDATE widgets SET seen_at = now() WHERE id = $1 AND seen_at IS NULL`, g.ID); err != nil {
 				return err
 			}
+		} else if _, err := tx.Exec(ctx, `UPDATE widget_sessions SET contact_id = COALESCE(contact_id, $3), identity = $4
+			WHERE workspace_id = $1 AND token_hash = $2`, wid, crypto.HashToken(token), linked, idn); err != nil {
+			return err
+		}
+		out.Body.VisitorToken = token
+		out.Body.GatewayURL = h.d.Cfg.GatewayURL + "/widget" // the widget socket, open to any origin
+		if c == nil {
+			// No contact, no socket (its topic is the contact's) and nothing unread yet.
+			out.Body.EmailCollected = idn.Email != ""
+			return nil
 		}
 		wsToken, _, err := h.d.Tokens.Sign(auth.Claims{Purpose: auth.PurposeWidgetWS, Workspace: wid.String(), Brand: g.BrandID.String()},
 			contactID.String(), auth.WSTTL)
 		if err != nil {
 			return err
 		}
-		out.Body.VisitorToken = token
-		out.Body.EmailCollected = widgetEmailCollected(c)
-		out.Body.Contact = domain.ContactRef{ID: c.ID, Email: c.Email, Name: c.Name, AvatarURL: c.AvatarURL}
+		out.Body.EmailCollected = widgetEmailCollected(*c)
+		out.Body.Contact = &domain.ContactRef{ID: c.ID, Email: c.Email, Name: c.Name, AvatarURL: c.AvatarURL}
 		out.Body.WSToken = wsToken
-		out.Body.GatewayURL = h.d.Cfg.GatewayURL + "/widget" // the widget socket, open to any origin
 		out.Body.Unread, out.Body.UnreadLatest, err = unreadFor(ctx, tx, wid, contactID, g.BrandID)
 		return err
 	})
 	if err != nil {
 		return nil, httpx.Wrap(err)
 	}
-	VisitorSeen(h.d)(ctx, wid, out.Body.Contact.ID)
+	if out.Body.Contact != nil {
+		VisitorSeen(h.d)(ctx, wid, out.Body.Contact.ID)
+	}
 	return out, nil
 }
 

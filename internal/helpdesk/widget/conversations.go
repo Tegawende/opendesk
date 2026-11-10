@@ -213,6 +213,10 @@ func (h *handler) registerConversations(api huma.API) {
 			pageURL := cleanPageURL(in.Body.PageURL)
 			out := &struct{ Body created }{}
 			err = h.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				// A session has no contact until the visitor writes: the first message makes it.
+				if _, err := h.visitorContact(ctx, tx, p); err != nil {
+					return err
+				}
 				if err := hd.CheckAttachments(ctx, tx, p.WorkspaceID, attIDs, hd.Uploader{Contact: &p.ContactID}); err != nil {
 					return err
 				}

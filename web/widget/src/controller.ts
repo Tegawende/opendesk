@@ -124,12 +124,20 @@ export class Controller {
       this.set({ unread: s.unread ?? 0, teaser: latest && (!this.persist || load(this.teaserKey) !== latest.id) ? latest : null });
     }
     this.live?.stop();
+    // No contact yet (the visitor has not written), so no socket, whose topic is the
+    // contact's, and no conversations.
+    const contact = s.contact;
+    if (!contact) {
+      this.live = null;
+      this.set({ conversations: [] });
+      return;
+    }
     this.live = new Live(
       this.env.socketFactory,
       // Already the widget endpoint (…/socket/widget); used exactly as returned.
       s.gateway_url,
       s.ws_token,
-      s.contact.id,
+      contact.id,
       async () => {
         const fresh = await this.session();
         this.set({ session: fresh });
@@ -399,7 +407,7 @@ export class Controller {
 
   needsEmail(): boolean {
     const { config, session } = this.s;
-    return !!config?.require_email && !!session && !(session.email_collected ?? !!session.contact.email);
+    return !!config?.require_email && !!session && !(session.email_collected ?? !!session.contact?.email);
   }
 
   typing() {
@@ -469,6 +477,9 @@ export class Controller {
           };
         });
         if (!message) void this.openConversation(conversation.id);
+        // The first message made the contact; the session now names it, with the socket
+        // the replies stream on.
+        if (!this.s.session?.contact && !this.s.preview) await this.joinAsContact(conversation.id);
       } else {
         const msg = await this.api.send(key, local.body_text, ids.length ? ids : undefined, page);
         this.set((s) => ({
@@ -479,6 +490,16 @@ export class Controller {
       }
     } catch {
       this.patchLocal(key, local.id, { local: "failed" });
+    }
+  }
+
+  /** The session again once it has a contact: its socket, then what was posted before it joined. */
+  private async joinAsContact(conversationId: string) {
+    try {
+      await this.startSession();
+      await this.refresh(conversationId);
+    } catch {
+      /* the next page load or reconnect catches up */
     }
   }
 

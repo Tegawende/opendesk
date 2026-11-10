@@ -99,7 +99,11 @@ export type WidgetSession = {
   /** Supplied address, even when another contact owns it. Older servers omit this. */
   email_collected?: boolean;
   visitor_token: string;
-  contact: ContactRef;
+  /**
+   * Null until the visitor starts a conversation, which makes their contact; ws_token is
+   * empty until then.
+   */
+  contact: ContactRef | null;
   ws_token: string;
   gateway_url: string;
   /** The team's replies not read yet in this widget's chats, and the newest of them. */

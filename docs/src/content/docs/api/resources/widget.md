@@ -48,6 +48,8 @@ curl https://api.opendesk.sh/v1/widget/session \
 | `company` | `{ id }`, with a verified identity only: your own id for the user's account. The contact is linked to the company whose `external_id` it is. A company is never created or changed from here, and an unknown id is ignored |
 | `fields` | with a verified identity only: contact custom fields by key. Only keys that start with `widget_` are set; others are ignored |
 
+A session makes no contact. Until the visitor starts a conversation, `contact` is `null`, `ws_token` is empty and the session remembers what you sent (the email, the name, and with a verified identity the user id, picture, company and fields). The first message, or a file attached to it, makes the contact from that; a verified user who already has a contact gets it right away. Call the session again after the first message to get the contact and its socket token (the widget does).
+
 `ws_token` is a 5-minute `widget_ws` token for the [realtime gateway](/api/realtime/#the-chat-widget)'s widget endpoint. It lets the visitor join only their own contact topic.
 
 ## Conversations

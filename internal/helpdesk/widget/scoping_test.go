@@ -24,6 +24,8 @@ func TestWidgetIdentityPerWidget(t *testing.T) {
 
 	// Signed in on the default widget.
 	signed := start(t, e, map[string]any{"key": ws.WidgetKey, "user_id": "u-42", "user_hash": crypto.HMACHex([]byte("s3cret"), "u-42")})
+	// The contact comes with the first message.
+	signed = talked(t, e, signed, map[string]any{"key": ws.WidgetKey, "user_id": "u-42", "user_hash": crypto.HMACHex([]byte("s3cret"), "u-42")})
 	// Its token presented to the shop widget, unverified: a new anonymous contact.
 	anon := start(t, e, map[string]any{"key": shopKey, "visitor_token": signed.VisitorToken})
 	if anon.Contact.ID == signed.Contact.ID {
@@ -42,6 +44,7 @@ func TestWidgetIdentityPerWidget(t *testing.T) {
 	}
 	// An anonymous visitor still carries over.
 	plain := start(t, e, map[string]any{"key": ws.WidgetKey})
+	plain = talked(t, e, plain, map[string]any{"key": ws.WidgetKey})
 	if moved := start(t, e, map[string]any{"key": shopKey, "visitor_token": plain.VisitorToken}); moved.Contact.ID != plain.Contact.ID {
 		t.Fatal("anonymous visitor did not carry over")
 	}

@@ -87,6 +87,10 @@ func (h *handler) registerAttachments(api huma.API, r chi.Router) {
 			if err := h.allowWrite(p, "upload", uploadLimit); err != nil {
 				return nil, err
 			}
+			// A file for the first message makes the contact, as the message would.
+			if err := h.visitorContactNow(ctx, p); err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			a, err := h.save(ctx, in, hd.Upload{WorkspaceID: p.WorkspaceID, UploadedByContact: &p.ContactID,
 				Accept: visitorAccept(g.Settings)})
 			if err != nil {

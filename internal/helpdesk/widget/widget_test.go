@@ -74,6 +74,8 @@ func TestSessionCreateResumeAndToken(t *testing.T) {
 	if !strings.HasPrefix(s.VisitorToken, "od_vis_") || s.GatewayURL != "ws://gateway.test/socket/widget" {
 		t.Fatal(s)
 	}
+	// The contact comes with the first message.
+	s = talked(t, e, s, map[string]any{"key": ws.WidgetKey})
 	if s.Contact.Email == nil || *s.Contact.Email != "jane@example.com" || s.Contact.Name != "jane" {
 		t.Fatalf("contact %+v", s.Contact)
 	}
@@ -124,6 +126,8 @@ func TestSessionHMAC(t *testing.T) {
 	e.Do("POST", "/v1/widget/session", hdtest.Auth{}, map[string]any{"key": ws.WidgetKey, "user_id": "user-42"}).Want(t, 422)
 
 	s := start(t, e, map[string]any{"key": ws.WidgetKey, "user_id": "user-42", "user_hash": strings.ToUpper(good), "email": "u42@example.com", "name": "Uma"})
+	// The contact comes with the first message.
+	s = talked(t, e, s, map[string]any{"key": ws.WidgetKey, "user_id": "user-42", "user_hash": good})
 	var verified bool
 	var ext string
 	e.Scalar(`SELECT verified FROM widget_sessions WHERE contact_id = $1`, &verified, s.Contact.ID)
@@ -164,6 +168,7 @@ func TestUnverifiedEmailDoesNotHijack(t *testing.T) {
 	existing := uuid.New()
 	e.Exec(`INSERT INTO contacts (id, workspace_id, email, name) VALUES ($1, $2, 'boss@example.com', 'Boss')`, existing, ws.ID)
 	s := start(t, e, map[string]any{"key": ws.WidgetKey, "email": "boss@example.com"})
+	s = talked(t, e, s, map[string]any{"key": ws.WidgetKey}) // the contact comes with the first message
 	if s.Contact.ID == existing || s.Contact.Email != nil {
 		t.Fatal("visitor linked to an existing contact by a claimed email", s.Contact)
 	}
@@ -175,6 +180,7 @@ func TestUnverifiedEmailDoesNotHijack(t *testing.T) {
 	// Even a verified user cannot take over an email held by another contact.
 	good := crypto.HMACHex([]byte("s3cret"), "u1")
 	v := start(t, e, map[string]any{"key": ws.WidgetKey, "user_id": "u1", "user_hash": good, "email": "boss@example.com"})
+	v = talked(t, e, v, map[string]any{"key": ws.WidgetKey, "user_id": "u1", "user_hash": good})
 	if v.Contact.ID == existing || v.Contact.Email != nil {
 		t.Fatal(v.Contact)
 	}
@@ -183,6 +189,7 @@ func TestUnverifiedEmailDoesNotHijack(t *testing.T) {
 func TestBlockedAndRequireEmailAndOrigins(t *testing.T) {
 	e, ws := setup(t)
 	s := start(t, e, map[string]any{"key": ws.WidgetKey})
+	s = talked(t, e, s, map[string]any{"key": ws.WidgetKey}) // the contact comes with the first message
 	e.Exec(`UPDATE contacts SET blocked = true WHERE id = $1`, s.Contact.ID)
 	e.Do("POST", "/v1/widget/session", hdtest.Auth{}, map[string]any{"key": ws.WidgetKey, "visitor_token": s.VisitorToken}).Want(t, 403)
 	e.Do("GET", "/v1/widget/conversations", hdtest.Auth{Visitor: s.VisitorToken}, nil).Want(t, 401)
@@ -224,6 +231,8 @@ func TestConversations(t *testing.T) {
 	}
 	e.Do("POST", "/v1/widget/conversations", va, map[string]any{"body": "Hello <b>there</b>\nI need help"}).Want(t, 201).JSON(t, &created)
 	tid := created.Conversation.ID
+	// The first message made the contact.
+	s.Contact.ID = contactOf(t, e, s)
 	if created.Conversation.Status != "open" || created.Message.Direction != "inbound" || created.Message.Author.Type != "contact" ||
 		created.Message.BodyHTML != "<p>Hello &lt;b&gt;there&lt;/b&gt;<br>I need help</p>" {
 		t.Fatalf("%+v", created)
@@ -701,6 +710,8 @@ func TestSeenRefreshesSession(t *testing.T) {
 		} `json:"conversation"`
 	}
 	e.Do("POST", "/v1/widget/conversations", va, map[string]any{"body": "Hello"}).Want(t, 201).JSON(t, &created)
+	// The first message made the contact.
+	s.Contact.ID = contactOf(t, e, s)
 	path := "/v1/widget/conversations/" + created.Conversation.ID.String()
 	away := func() {
 		e.Exec(`UPDATE widget_sessions SET last_seen_at = now() - interval '1 hour' WHERE contact_id = $1`, s.Contact.ID)

@@ -32,6 +32,8 @@ func TestSessionCompanyAndFields(t *testing.T) {
 		"company": map[string]any{"id": "acct-9", "name": "Renamed", "domain": "evil.example"},
 		"fields":  map[string]any{"widget_plan": "pro", "widget_seats": 12, "vip": "yes", "widget_unknown": "x", "widget_bad": "x"}}
 	s := start(t, e, signed)
+	// The session remembers them until the first message makes the contact.
+	s = talked(t, e, s, map[string]any{"key": ws.WidgetKey, "user_id": "user-7", "user_hash": hash})
 	if ext := linked(s.Contact.ID); ext == nil || *ext != "acct-9" {
 		t.Fatalf("linked to %v", ext)
 	}
@@ -63,6 +65,7 @@ func TestSessionCompanyAndFields(t *testing.T) {
 		h := crypto.HMACHex([]byte("s3cret"), "user-"+id)
 		u := start(t, e, map[string]any{"key": ws.WidgetKey, "user_id": "user-" + id, "user_hash": h,
 			"company": map[string]any{"id": id, "name": "New Co", "domain": "new.example"}})
+		u = talked(t, e, u, map[string]any{"key": ws.WidgetKey, "user_id": "user-" + id, "user_hash": h})
 		if ext := linked(u.Contact.ID); ext != nil || companies() != 1 {
 			t.Fatalf("%s: linked to %v, %d companies", id, ext, companies())
 		}
@@ -76,6 +79,7 @@ func TestSessionCompanyAndFields(t *testing.T) {
 	// Without a verified identity none of it is applied.
 	anon := start(t, e, map[string]any{"key": ws.WidgetKey, "company": map[string]any{"id": "acct-9", "name": "Evil"},
 		"fields": map[string]any{"widget_plan": "enterprise"}})
+	anon = talked(t, e, anon, map[string]any{"key": ws.WidgetKey})
 	var co *string
 	e.Scalar(`SELECT company_id::text FROM contacts WHERE id = $1`, &co, anon.Contact.ID)
 	if companies() != 1 || co != nil {

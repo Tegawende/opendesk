@@ -22,6 +22,8 @@ func TestVisitorTyping(t *testing.T) {
 		} `json:"conversation"`
 	}
 	e.Do("POST", "/v1/widget/conversations", va, map[string]any{"body": "Hello"}).Want(t, 201).JSON(t, &created)
+	// The first message made the contact.
+	s.Contact.ID = contactOf(t, e, s)
 	path := "/v1/widget/conversations/" + created.Conversation.ID.String() + "/typing"
 	// Starting the conversation may publish previews of its own (the answer bot); drain them.
 	for next() != nil {

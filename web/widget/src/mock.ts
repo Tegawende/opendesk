@@ -183,6 +183,8 @@ export type MockOptions = {
    * preview, which follows unsaved edits).
    */
   bot?: BotRef | null;
+  /** The session has no contact until a conversation is started (contracts/api.md "Widget"). */
+  lazyContact?: boolean;
 };
 
 export type Mock = {
@@ -216,6 +218,7 @@ export function createMock(o: MockOptions = {}): Mock {
   };
   const ago = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
   const b64 = (x: object) => btoa(JSON.stringify(x)).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+  let hasContact = !o.lazyContact;
   const wsToken = () => `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ purpose: "widget_ws", sub: contact.id, wid: WID, exp: Date.now() / 1000 + 300 })}.mock`;
   let n = 0;
   const uid = () => {
@@ -429,6 +432,7 @@ export function createMock(o: MockOptions = {}): Mock {
     if (path === "/v1/widget/session") {
       if (typeof body.email === "string") contact.email = body.email;
       if (typeof body.name === "string") contact.name = body.name;
+      if (!hasContact) return json({ email_collected: !!contact.email, visitor_token: "od_vis_mock", contact: null, ws_token: "", gateway_url: "wss://mock.invalid/socket/widget" });
       return json({ email_collected: !!contact.email, visitor_token: "od_vis_mock", contact: { ...contact }, ws_token: wsToken(), gateway_url: "wss://mock.invalid/socket/widget" });
     }
     if (path === "/v1/widget/conversations" && method === "GET") return json({ data: conversations, next_cursor: null });
@@ -438,6 +442,7 @@ export function createMock(o: MockOptions = {}): Mock {
         return json({ status: 422, title: "Unprocessable Entity", code: "validation_failed", detail: "topic_id is not a topic of this widget" }, 422);
       }
       lastTopic = typeof body.topic_id === "string" ? body.topic_id : null;
+      hasContact = true;
       const cid = uid();
       const text = String(body.body ?? "");
       const c: Conversation = { id: cid, subject: text.slice(0, 60) || "New conversation", status: "open", last_message_preview: text, last_message_at: ago(0) };

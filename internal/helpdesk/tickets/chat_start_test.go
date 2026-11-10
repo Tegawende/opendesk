@@ -46,6 +46,23 @@ func visitorSession(t *testing.T, e *hdtest.Env, body map[string]any) chatSessio
 	return s
 }
 
+// visitorWithContact is a visitor who has written in the chat: a session gets its contact with
+// the visitor's first message.
+func visitorWithContact(t *testing.T, e *hdtest.Env, body map[string]any) chatSession {
+	t.Helper()
+	s := visitorSession(t, e, body)
+	e.Do("POST", "/v1/widget/conversations", hdtest.Auth{Visitor: s.VisitorToken}, map[string]any{"body": "Hello"}).Want(t, 201)
+	resume := map[string]any{"visitor_token": s.VisitorToken}
+	for k, v := range body {
+		resume[k] = v
+	}
+	s = visitorSession(t, e, resume)
+	if s.Contact.ID == uuid.Nil {
+		t.Fatal("no contact after the first message")
+	}
+	return s
+}
+
 func startChat(e *hdtest.Env, ws hdtest.WS, a hdtest.Auth, body map[string]any) *hdtest.Resp {
 	body["channel"] = "chat"
 	if _, ok := body["body_html"]; !ok {
@@ -64,7 +81,7 @@ func newContact(e *hdtest.Env, ws hdtest.WS, email string, externalID *string) u
 // see it unread there, and reading it marks it seen for the team.
 func TestAgentStartsChat(t *testing.T) {
 	e, ws := chatEnv(t)
-	s := visitorSession(t, e, map[string]any{"key": ws.WidgetKey, "email": "visitor@example.com"})
+	s := visitorWithContact(t, e, map[string]any{"key": ws.WidgetKey, "email": "visitor@example.com"})
 	if s.Unread != 0 || s.UnreadLatest != nil {
 		t.Fatal("unread before anything was sent", s.Unread)
 	}
@@ -91,7 +108,7 @@ func TestAgentStartsChat(t *testing.T) {
 	va := hdtest.Auth{Visitor: s.VisitorToken}
 	var list chatList
 	e.Do("GET", "/v1/widget/conversations", va, nil).Want(t, 200).JSON(t, &list)
-	if len(list.Data) != 1 || list.Data[0].ID != tk.ID || list.Data[0].Unread != 1 {
+	if len(list.Data) != 2 || list.Data[0].ID != tk.ID || list.Data[0].Unread != 1 { // and the visitor's own
 		t.Fatalf("conversations %+v", list.Data)
 	}
 
@@ -153,7 +170,7 @@ func TestChatStartReach(t *testing.T) {
 	verified := newContact(e, ws, "u9@example.com", &ext)
 	startChat(e, ws, agent, map[string]any{"contact_id": verified}).Want(t, 201)
 	// A visitor whose session ran out is no longer reachable.
-	s := visitorSession(t, e, map[string]any{"key": ws.WidgetKey})
+	s := visitorWithContact(t, e, map[string]any{"key": ws.WidgetKey})
 	e.Exec(`UPDATE widget_sessions SET last_seen_at = now() - interval '91 days' WHERE contact_id = $1`, s.Contact.ID)
 	startChat(e, ws, agent, map[string]any{"contact_id": s.Contact.ID}).Want(t, http.StatusUnprocessableEntity)
 	// Blocked.
@@ -183,7 +200,7 @@ func TestChatStartTypedEmail(t *testing.T) {
 	typed := "ana" + at
 
 	// A visitor types a free address: the widget's contact takes it, and holds only the chat.
-	s := visitorSession(t, e, map[string]any{"key": ws.WidgetKey, "email": typed})
+	s := visitorWithContact(t, e, map[string]any{"key": ws.WidgetKey, "email": typed})
 	if s.Contact.Email == nil || *s.Contact.Email != typed {
 		t.Fatalf("contact %+v", s.Contact)
 	}
@@ -218,7 +235,7 @@ func TestChatStartTypedEmail(t *testing.T) {
 	}
 
 	// The same when the mail answers the chat itself (a reply to its follow-up email).
-	other := visitorSession(t, e, map[string]any{"key": ws.WidgetKey, "email": "ben" + at})
+	other := visitorWithContact(t, e, map[string]any{"key": ws.WidgetKey, "email": "ben" + at})
 	var conv struct {
 		Conversation struct{ ID uuid.UUID } `json:"conversation"`
 	}
@@ -246,7 +263,7 @@ func TestChatStartTypedEmail(t *testing.T) {
 func TestChatStartBrandAndWidget(t *testing.T) {
 	e, ws := chatEnv(t)
 	agent := ws.Agent.As(ws)
-	s := visitorSession(t, e, map[string]any{"key": ws.WidgetKey})
+	s := visitorWithContact(t, e, map[string]any{"key": ws.WidgetKey})
 	var c domain.Contact
 	e.Do("GET", "/v1/contacts/"+s.Contact.ID.String(), agent, nil).Want(t, 200).JSON(t, &c)
 	if !c.ChatReachable {
@@ -271,7 +288,7 @@ func TestChatStartBrandAndWidget(t *testing.T) {
 // A chat without a subject is named after its first message as the visitor reads it.
 func TestChatStartSubjectFilled(t *testing.T) {
 	e, ws := chatEnv(t)
-	s := visitorSession(t, e, map[string]any{"key": ws.WidgetKey, "name": "Ana Lopez"})
+	s := visitorWithContact(t, e, map[string]any{"key": ws.WidgetKey, "name": "Ana Lopez"})
 	var tk domain.Ticket
 	startChat(e, ws, ws.Agent.As(ws), map[string]any{"contact_id": s.Contact.ID,
 		"body_html": "<p>Hi {{ contact.first_name }}, your order shipped</p>"}).Want(t, 201).JSON(t, &tk)
@@ -284,7 +301,7 @@ func TestChatStartSubjectFilled(t *testing.T) {
 		} `json:"data"`
 	}
 	e.Do("GET", "/v1/widget/conversations", hdtest.Auth{Visitor: s.VisitorToken}, nil).Want(t, 200).JSON(t, &list)
-	if len(list.Data) != 1 || list.Data[0].Subject != "Hi Ana, your order shipped" {
+	if len(list.Data) != 2 || list.Data[0].Subject != "Hi Ana, your order shipped" { // and the visitor's own
 		t.Fatalf("widget conversations %+v", list.Data)
 	}
 }
