@@ -271,6 +271,8 @@ export type CompanyRef = { id: string; name: string; domain: string; avatar_url?
 export type Contact = {
   id: string;
   email: string | null;
+  /** Extra addresses beside the primary `email`: mail from them lands on this contact. */
+  emails: string[];
   name: string;
   phone: string;
   avatar_url: string | null;
@@ -719,7 +721,7 @@ export type BusinessHours = {
 };
 export type OnboardingStepId =
   | "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_ollie"
-  | "setup_ai_agent";
+  | "setup_ai_agent" | "connect_mail_account" | "share_mail_account";
 export type OnboardingStep = {
   id: OnboardingStepId;
   title: string;
@@ -971,6 +973,8 @@ export type Mailbox = {
   personal_replies?: MailboxPersonalReplies;
   /** Website contact forms (exact addresses or "@domain"); their authenticated mail is from the visitor in Reply-To. Admins only. */
   trusted_form_senders?: string[];
+  /** Mail marked automatic (Auto-Submitted, Precedence: bulk) is taken in instead of dropped; nothing automatic answers it. */
+  keep_automatic_mail?: boolean;
   signature_html: string;
   auto_reply_enabled: boolean;
   auto_reply_subject: string;
@@ -2537,6 +2541,14 @@ export type TicketDraft = {
   updated_at: string;
 };
 
+/** The signed-in member's own unsent reply on a ticket (contracts/api.md "Reply drafts"): private, kept on the server. */
+export type ReplyDraft = {
+  ticket_id: string;
+  body_html: string;
+  attachments: Attachment[];
+  updated_at: string;
+};
+
 /** Ollie's suggested reply on an email ticket (contracts/agent.md "Email"). */
 export type SuggestedReply = {
   id: string;
@@ -3430,7 +3442,8 @@ export type SidebarSection = { id: string; title: string; collapsed: boolean; ic
 /** unread / total / none for mail rows; count / awaiting / urgent / overdue / none for ticket rows, and open for team rows. */
 export type SidebarBadge = "unread" | "total" | "count" | "awaiting" | "urgent" | "overdue" | "open" | "none";
 
-export type MailBox = "inbox" | "unread" | "starred" | "sent" | "drafts" | "archive" | "trash" | "spam" | "all" | "shared" | "assigned" | "needs_action" | "snoozed";
+/** ai_review: Ready for review, conversations in an inbox with an AI draft waiting for a person. */
+export type MailBox = "inbox" | "unread" | "starred" | "sent" | "drafts" | "archive" | "trash" | "spam" | "all" | "shared" | "assigned" | "needs_action" | "snoozed" | "ai_review";
 
 export type MailThreadAction =
   | "read"
@@ -3451,8 +3464,8 @@ export type MailThreadAction =
   | "snooze";
 
 export type MailCounts = {
-  /** Unread conversations; assigned, shared, needs_action and snoozed: open ones. */
-  boxes: { inbox: number; unread: number; shared: number; assigned: number; drafts: number; needs_action: number; snoozed?: number };
+  /** Unread conversations; assigned, shared, needs_action, snoozed and ai_review: open ones. */
+  boxes: { inbox: number; unread: number; shared: number; assigned: number; drafts: number; needs_action: number; snoozed?: number; ai_review?: number };
   accounts: Record<string, number>;
   folders: Record<string, number>;
   /** By account with aliases, then address (its own included): unread conversations in its inbox with it on a message; missing = 0. */
@@ -3461,6 +3474,8 @@ export type MailCounts = {
   assigned: Record<string, number>;
   /** By split account, then category key (primary included): unread conversations in its inbox; missing = 0. */
   categories?: Record<string, Record<string, number>>;
+  /** boxes.ai_review by account; only accounts with some. */
+  ai_review?: Record<string, number>;
 };
 
 /** `collab.changed` event data. */

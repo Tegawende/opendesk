@@ -144,6 +144,23 @@
     "you": "Vous",
     "noMatch": "Aucun membre correspondant",
     "noMatchHint": "Essayez un autre nom ou une autre adresse e-mail.",
+    "filter": {
+      "label": "Filtrer les membres",
+      "allRoles": "Tous les rôles",
+      "roleLabel": "Rôle : {{value}}",
+      "searchRoles": "Rechercher un rôle",
+      "allTeams": "Toutes les équipes",
+      "noTeam": "Sans équipe",
+      "unknownTeam": "Équipe inconnue",
+      "teamLabel": "Équipe : {{value}}",
+      "searchTeams": "Rechercher une équipe",
+      "anyStatus": "Tous les statuts",
+      "statusLabel": "Statut : {{value}}",
+      "searchStatuses": "Rechercher un statut",
+      "shown": "{{shown}} sur {{total}}",
+      "clear": "Effacer les filtres",
+      "noMatchHint": "Essayez d’autres filtres, ou effacez-les pour voir tout le monde."
+    },
     "emptyTitle": "Vous êtes seul pour le moment",
     "emptyHint": "Invitez des collègues à partager la boîte de réception.",
     "columns": {

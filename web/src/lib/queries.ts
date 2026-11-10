@@ -5,7 +5,7 @@
 import { infiniteQueryOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import { isApiError, scopeWorkspace } from "./api/client";
 import { api, rows, type ChangelogListQuery, type CollabThreadQuery, type TicketListQuery, type TicketSummaryQuery } from "./api/endpoints";
-import type { Page, ReportsQuery, ReportsRange, SpacesResponse, WikiArea } from "./api/types";
+import type { Page, ReportsQuery, ReportsRange, SpacesResponse, TicketCounts, WikiArea } from "./api/types";
 import { normalizeSpace, normalizeSpaces } from "./spaces/model";
 
 /** The changelog list's filters, as its key holds them. */
@@ -80,6 +80,7 @@ export const qk = {
   suggestedReply: (id: string) => w(["tickets", "suggested-reply", id] as const),
   /** The ticket's shared draft (contracts/api.md "Drafts"). */
   ticketDraft: (id: string) => w(["tickets", "draft", id] as const),
+  replyDraft: (id: string) => w(["tickets", "reply-draft", id] as const),
   get contactLists() {
     return w(["contacts", "list"] as const);
   },
@@ -389,6 +390,9 @@ async function bothAreas<R extends object>(fn: (area: WikiArea) => Promise<{ dat
   return { data: [...wiki.data, ...pages.data.map((n) => ({ ...n, area: "pages" as const }))] };
 }
 
+/** A workspace with Tickets off has no tickets to count. */
+const NO_TICKET_COUNTS: TicketCounts = { unassigned: 0, mine: 0, open: 0, pending: 0, on_hold: 0, solved: 0, spam: 0, views: {} };
+
 async function allPages<R>(fn: (q: { limit: number; cursor: string | null }) => Promise<Page<R>>) {
   const all: R[] = [];
   let cursor: string | null = null;
@@ -420,7 +424,17 @@ export const q = {
   starter: () => queryOptions({ queryKey: qk.starter, queryFn: async () => normalizeSpace((await api.starterSpace.get())?.space), staleTime: 60_000 }),
   workspace: () => queryOptions({ queryKey: qk.workspace, queryFn: api.workspaces.current }),
   sessions: () => list(qk.sessions, api.me.sessions),
-  counts: () => queryOptions({ queryKey: qk.counts, queryFn: api.tickets.counts, staleTime: 30_000 }),
+  /** Sidebar ticket counts: all zero while the workspace has Tickets off, which the API answers with feature_disabled. */
+  counts: () =>
+    queryOptions({
+      queryKey: qk.counts,
+      queryFn: () =>
+        api.tickets.counts().catch((e: unknown) => {
+          if (isApiError(e, "feature_disabled")) return NO_TICKET_COUNTS;
+          throw e;
+        }),
+      staleTime: 30_000,
+    }),
   ticketSummary: (query: TicketSummaryQuery) => queryOptions({ queryKey: qk.ticketSummary(query), queryFn: () => api.tickets.summary(query), staleTime: 15_000 }),
   tickets: (query: TicketListQuery) =>
     infiniteQueryOptions({
@@ -437,6 +451,8 @@ export const q = {
   suggestedReply: (id: string) =>
     queryOptions({ queryKey: qk.suggestedReply(id), queryFn: async () => (await api.ai.suggestedReply.get(id)).suggested_reply }),
   ticketDraft: (id: string) => queryOptions({ queryKey: qk.ticketDraft(id), queryFn: async () => (await api.tickets.draft.get(id)).draft }),
+  replyDraft: (id: string) =>
+    queryOptions({ queryKey: qk.replyDraft(id), queryFn: async () => (await api.tickets.replyDraft.get(id)).draft, staleTime: 0, gcTime: 0 }),
   contacts: (query: { q?: string; company_id?: string }) =>
     infiniteQueryOptions({
       queryKey: qk.contacts(query),

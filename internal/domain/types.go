@@ -32,6 +32,7 @@ type CompanyRef struct {
 type Contact struct {
 	ID           uuid.UUID      `json:"id"`
 	Email        *string        `json:"email"`
+	Emails       []string       `json:"emails" doc:"Extra addresses, beside email (the primary): mail from them lands on this contact"`
 	Name         string         `json:"name"`
 	Phone        string         `json:"phone"`
 	AvatarURL    Avatar         `json:"avatar_url"`

@@ -26,6 +26,7 @@ import { folderById, listQuery, parseInboxSearch, teamQuery } from "./lib/folder
 import { withRememberedSort } from "./lib/listSort";
 import { isMailRouteBox, mailListQuery, parseMailSearch } from "./lib/collab/boxes";
 import { parsePrintSearch } from "./lib/ticketPrint";
+import { parseMemberSearch } from "./lib/memberFilters";
 import { parseBeside, type PageSearch } from "./lib/wiki/split";
 
 export type RouterContext = { queryClient: QueryClient };
@@ -220,6 +221,13 @@ const onboardingRoute = createRoute({
   component: page(() => import("./pages/onboarding/Workspace")),
   staticData: { title: "createAWorkspace" },
 });
+const onboardingProductsRoute = createRoute({
+  getParentRoute: () => authLayout,
+  path: "/onboarding/products",
+  beforeLoad: ({ location }) => requireWorkspace(location.href),
+  component: page(() => import("./pages/onboarding/Products")),
+  staticData: { title: "whatIsItFor" },
+});
 const onboardingMailboxRoute = createRoute({
   getParentRoute: () => authLayout,
   path: "/onboarding/mailbox",
@@ -252,7 +260,9 @@ const appLayout = createRoute({
     void qc.prefetchQuery(q.notifications());
     // Collab's mail sections join the sidebar when the workspace has it.
     void qc.prefetchQuery(q.collabStatus());
-    return Promise.all([qc.ensureQueryData(q.counts()), qc.ensureQueryData(q.views())]);
+    // Ticket counts only while the workspace has Tickets: with it off, Mail, Pages and settings still load.
+    const counts = qc.ensureQueryData(q.workspace()).then((ws) => (productsOf(ws).tickets ? qc.ensureQueryData(q.counts()) : null));
+    return Promise.all([counts, qc.ensureQueryData(q.views())]);
   },
   component: AppLayout,
 });
@@ -771,9 +781,18 @@ const sPages = settingsPage("/pages", "pagesSettings", () => import("./pages/set
 const sWorkspace = settingsPage("/workspace", "general", () => import("./pages/settings/WorkspaceSettings"), (qc) =>
   Promise.all([qc.ensureQueryData(q.workspace()), qc.ensureQueryData(q.members())]),
 );
-const sMembers = settingsPage("/members", "members", () => import("./pages/settings/Members"), (qc) =>
-  Promise.all([qc.ensureQueryData(q.members()), qc.ensureQueryData(q.invitations())]),
-);
+// Filters live in the URL (lib/memberFilters.ts); the list is loaded whole and filtered in the page.
+const sMembers = createRoute({
+  getParentRoute: () => settingsLayout,
+  path: "/members",
+  validateSearch: parseMemberSearch,
+  loader: ({ context }) => {
+    void context.queryClient.prefetchQuery(q.teams());
+    return Promise.all([context.queryClient.ensureQueryData(q.members()), context.queryClient.ensureQueryData(q.invitations())]);
+  },
+  component: page(() => import("./pages/settings/Members")),
+  staticData: { title: "members" },
+});
 const sTeams = settingsPage("/teams", "teams", () => import("./pages/settings/Teams"), (qc) => {
   void qc.prefetchQuery(q.mailboxes());
   return Promise.all([qc.ensureQueryData(q.teams()), qc.ensureQueryData(q.members())]);
@@ -893,7 +912,12 @@ const sMailboxDetail = createRoute({
 const sMailAccounts = createRoute({
   getParentRoute: () => settingsLayout,
   path: "/mail-accounts",
-  validateSearch: (s: Record<string, unknown>): { connected?: string; error?: string } => ({ connected: str(s.connected), error: str(s.error) }),
+  // connect=1 opens the Connect dialog (first run for a shared inbox).
+  validateSearch: (s: Record<string, unknown>): { connected?: string; error?: string; connect?: string } => ({
+    connected: str(s.connected),
+    error: str(s.error),
+    connect: s.connect === "1" || s.connect === 1 ? "1" : undefined,
+  }),
   loader: async ({ context }) => {
     const qc = context.queryClient;
     const status = await qc.ensureQueryData(q.collabStatus());
@@ -1129,6 +1153,7 @@ const routeTree = rootRoute.addChildren([
     unsubscribeRoute,
     oauthConsentRoute,
     onboardingRoute,
+    onboardingProductsRoute,
     onboardingMailboxRoute,
   ]),
   appLayout.addChildren([

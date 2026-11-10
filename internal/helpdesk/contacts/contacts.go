@@ -194,7 +194,7 @@ func registerContacts(d *deps.Deps, api huma.API) {
 			q := strings.TrimSpace(in.Q)
 			rows, err := d.DB.Pool.Query(ctx, domain.ContactSelect+` WHERE ct.workspace_id = $1
 				AND ($2 = '' OR ct.search @@ websearch_to_tsquery('simple', $2) OR ct.fields_search @@ websearch_to_tsquery('simple', $2)
-					OR ct.email::text ILIKE $3 OR ct.name ILIKE $3)
+					OR ct.email::text ILIKE $3 OR ct.name ILIKE $3 OR `+domain.ExtraEmailLikeSQL("lower($3)")+`)
 				AND ($4::uuid IS NULL OR ct.company_id = $4)
 				AND ($5::timestamptz IS NULL OR (ct.created_at, ct.id) < ($5, $6))`+extra+`
 				ORDER BY ct.created_at DESC, ct.id DESC LIMIT $7`,
@@ -307,6 +307,16 @@ func registerContacts(d *deps.Deps, api huma.API) {
 				}
 				if row.Email == nil && row.Name == "" {
 					return httpx.Validation("a contact needs an email or a name")
+				}
+				if row.Email == nil && oldEmail != nil {
+					// Extra addresses sit beside a primary one.
+					var extras bool
+					if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM contact_emails WHERE workspace_id = $1 AND contact_id = $2)`, p.WorkspaceID, id).Scan(&extras); err != nil {
+						return err
+					}
+					if extras {
+						return httpx.Validation("a contact with other email addresses keeps a primary one: make one of them the primary instead")
+					}
 				}
 				if err := applyFields(ctx, tx, p.WorkspaceID, domain.FieldEntityContact, &row.Fields, in.Body.Fields); err != nil {
 					return err

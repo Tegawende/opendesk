@@ -553,7 +553,8 @@ func (h *handler) session(ctx context.Context, in *widgetSessionInput) (*widgetS
 
 func emailTaken(ctx context.Context, tx pgx.Tx, wid uuid.UUID, email string, except uuid.UUID) (bool, error) {
 	var taken bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM contacts WHERE workspace_id = $1 AND email = $2 AND id <> $3)`,
+	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM contacts WHERE workspace_id = $1 AND email = $2 AND id <> $3)
+		OR EXISTS (SELECT 1 FROM contact_emails WHERE workspace_id = $1 AND email = $2 AND contact_id <> $3)`,
 		wid, email, except).Scan(&taken)
 	return taken, err
 }

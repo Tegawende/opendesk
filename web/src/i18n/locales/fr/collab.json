@@ -31,6 +31,7 @@
     "assigned": "Attribués à moi",
     "needs_action": "À traiter",
     "snoozed": "En pause",
+    "ai_review": "À relire",
     "folder": "Dossier"
   },
   "customize": {
@@ -136,6 +137,8 @@
       "sharedHint": "Lorsqu’un collègue partage une conversation ou un compte avec vous, cela apparaît ici.",
       "assigned": "Aucune conversation attribuée",
       "assignedHint": "Les conversations que vos collègues vous attribuent apparaissent ici.",
+      "aiReview": "Aucun brouillon IA à relire",
+      "aiReviewHint": "Quand un client IA rédige une réponse, la conversation attend ici jusqu’à ce que quelqu’un envoie, modifie ou supprime le brouillon.",
       "starred": "Aucune conversation suivie",
       "starredHint": "Suivez une conversation avec s pour la garder à portée de main."
     },
@@ -362,7 +365,9 @@
     "people": "Personnes",
     "addTeams": "Ajouter des équipes",
     "addPeople": "Ajouter des personnes",
-    "needSomeone": "Choisissez au moins une équipe ou une personne, ou partagez avec tout le monde",
+    "nobodyYet": "Personne n’a encore été ajouté. Vous seul le voyez jusqu’à ce que vous ajoutiez des équipes ou des personnes, ici maintenant ou plus tard dans les paramètres du compte.",
+    "nobodyYetHere": "Personne n’a encore été ajouté. Vous seul le voyez jusqu’à ce que vous ajoutiez des équipes ou des personnes.",
+    "changeLater": "Vous pourrez modifier plus tard qui le voit dans les paramètres du compte.",
     "summaryEveryone": "Tout le monde",
     "summaryTeams_one": "{{count}} équipe",
     "summaryTeams_other": "{{count}} équipes",
@@ -370,7 +375,7 @@
     "summaryPeople_one": "{{count}} personne",
     "summaryPeople_other": "{{count}} personnes",
     "summaryPeople_many": "{{count}} personnes",
-    "onlyYou": "Vous seul"
+    "summaryNobody": "Personne pour l’instant"
   },
   "accounts": {
     "title": "Comptes de messagerie",
@@ -430,6 +435,7 @@
     "imap": "Autre (IMAP)",
     "imapHint": "Tout serveur avec IMAP et SMTP",
     "none": "Aucun fournisseur n’est encore configuré sur cette instance. Demandez à la personne qui la gère d’ajouter un client Google ou Microsoft, ou d’activer IMAP.",
+    "missing": "Les comptes {{providers}} nécessitent d’abord une application OAuth sur cette instance. La personne qui la gère définit {{vars}} (Auto-hébergement → Applications OAuth dans la documentation).",
     "continueWith": "Continuer avec {{provider}}",
     "continue": "Continuer",
     "back": "Retour",

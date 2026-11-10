@@ -22,6 +22,7 @@ Scopes: `contacts:read` to read, `contacts:write` to change.
 type Contact = {
   id: string;
   email: string | null;
+  emails: string[];            // extra addresses beside the primary email
   name: string;
   phone: string;
   avatar_url: string;
@@ -52,6 +53,18 @@ type Company = {
 ```
 
 A contact's email is unique within the workspace, and so is its `external_id`, your own id for the person (set by [verified widget sessions](/guides/live-chat/identity-verification/)). A company's domain is unique within the workspace.
+
+## Several email addresses
+
+A person who writes from more than one address stays one contact. Besides the primary `email`, a contact has extra addresses in `emails`. Mail from any of them lands on the contact, and a search finds it by any. An address belongs to one contact, primary or extra: adding one that another contact (or this one) already has is `409`.
+
+| Method | Path | |
+| --- | --- | --- |
+| `POST` | `/v1/contacts/{id}/emails` | `{ "email": "..." }` adds an extra address (`201`, at most 20) |
+| `DELETE` | `/v1/contacts/{id}/emails/{email}` | takes an extra address off (the primary changes with `PATCH`) |
+| `POST` | `/v1/contacts/{id}/emails/{email}/make-primary` | swaps an extra address with the primary; the old primary becomes an extra |
+
+Each answers with the contact. Blocking a contact blocks every address. Customer-portal sign-in uses the primary address only, so making another address the primary ends the contact's portal sessions.
 
 Writes to contacts and companies take `tags` (replaces), `add_tags`, `remove_tags` and `fields` (merged, `null` clears), with the same rules as tickets. See [Labels and custom fields](/api/resources/labels-fields/).
 

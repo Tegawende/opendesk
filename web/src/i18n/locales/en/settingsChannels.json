@@ -399,6 +399,11 @@
     "publicDomain": "{{domain}} is a public email provider. Enter the form's exact address instead.",
     "ownAddress": "That's this mailbox's own address."
   },
+  "automatic": {
+    "title": "Automatic email",
+    "hint": "Some help desks mark every email they send as automatic, even one a person wrote. Such email is ignored unless this mailbox keeps it. Kept email becomes a ticket as usual, and nothing automatic answers it: no auto-reply, automation reply or Ollie answer. Out-of-office replies stay ignored.",
+    "toggle": "Keep automatic email"
+  },
   "connect": {
     "detecting": "Looking up {{domain}}",
     "unknownHost": "Unknown provider",

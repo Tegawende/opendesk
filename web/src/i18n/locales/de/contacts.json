@@ -71,6 +71,21 @@
     "block": "Kontakt blockieren",
     "blockHint": "Neue E-Mails und Chats von dieser Person landen im Spam."
   },
+  "emails": {
+    "label": "Weitere E-Mail-Adressen",
+    "hint": "E-Mails von diesen Adressen werden diesem Kontakt zugeordnet.",
+    "placeholder": "name@example.com",
+    "add": "Hinzufügen",
+    "added": "Adresse hinzugefügt",
+    "removed": "Adresse entfernt",
+    "madePrimary": "Hauptadresse geändert",
+    "failed": "Die Adresse konnte nicht geändert werden",
+    "makePrimary": "Zur Hauptadresse machen",
+    "remove": "Entfernen",
+    "removeLabel": "{{email}} entfernen",
+    "primaryTitle": "Als Hauptadresse festlegen?",
+    "primaryBody": "{{email}} wird zur E-Mail-Adresse des Kontakts, {{old}} bleibt als weitere Adresse erhalten. Die Anmeldung im Kundenportal läuft dann über {{email}}."
+  },
   "empty": {
     "title": "Noch keine Kontakte",
     "description": "Kontakte entstehen, wenn Kunden dir schreiben oder mit dir chatten. Du kannst auch selbst einen hinzufügen.",
