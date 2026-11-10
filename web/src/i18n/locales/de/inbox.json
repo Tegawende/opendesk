@@ -498,6 +498,7 @@
     "fieldCleared": "<b>{{who}}</b> hat <b>{{field}}</b> geleert",
     "slaFirst": "Das Ziel für die erste Antwort wurde verfehlt",
     "slaResolution": "Das Lösungsziel wurde verfehlt",
+    "followUpSkipped": "Nicht per E-Mail an den Besucher gesendet: Diese Marke hat kein Postfach, das senden kann",
     "subject": "<b>{{who}}</b> hat den Betreff geändert",
     "alias": "<b>{{who}}</b> hat die Ticketreferenz geändert",
     "snoozed": "<b>{{who}}</b> hat dies zurückgestellt",
@@ -595,6 +596,7 @@
     "addressChosen": "Diese und die nächsten Antworten werden von dieser Adresse gesendet.",
     "addressMoved": "Zu dieser Adresse gewechselt, als das Ticket nach {{team}} verschoben wurde.",
     "cannotSend": "Diese Adresse kann noch keine Antworten senden. Ein Admin kann in den Postfach-Einstellungen eine Versandmöglichkeit verbinden.",
+    "noFollowUpSender": "Diese Marke hat kein Postfach, das senden kann. Der Besucher bekommt Antworten nur im Chat, nicht per E-Mail.",
     "thread": "Nebenunterhaltung",
     "threadHint": "Frag jemanden außerhalb deines Teams. Der Kunde sieht es nie.",
     "threadPlaceholder": "Schreib ihnen. Ihre Antworten kommen in dieses Ticket zurück.",
@@ -625,7 +627,11 @@
     "replyToEmpty": "E-Mail-Adresse eingeben",
     "replyToUse": "Verwenden",
     "replyActions": "Beim Senden:",
-    "dropReplyActions": "Diese Aktionen entfernen"
+    "dropReplyActions": "Diese Aktionen entfernen",
+    "chatReply": "Im Chat · per E-Mail, falls der Besucher gegangen ist",
+    "chatReplyHint": "Ihre Antwort erscheint sofort im Chat des Besuchers. Hat er die Seite verlassen (2 Minuten ohne Aktivität), geht sie eine Minute später zusätzlich an seine E-Mail-Adresse, außer er kommt zurück.",
+    "chatReplyHere": "Im Chat",
+    "chatReplyAway": "Im Chat · per E-Mail, falls er sie nicht liest"
   },
   "sharedDraft": {
     "label": "Geteilter Entwurf",
@@ -1115,6 +1121,13 @@
     "attachments": "Anhänge",
     "nothing": "Nichts zu drucken",
     "nothingHint": "Mit diesen Optionen gibt es keine Nachrichten zum Drucken, oder die Nachricht ist nicht mehr im Ticket."
+  },
+  "visitorPresence": {
+    "here": "Gerade auf der Seite",
+    "away": "Vor {{time}} gegangen",
+    "never": "Nicht auf der Seite",
+    "email": "Ihre Antwort wird ihm auch per E-Mail geschickt",
+    "hint": "Nach der Aktivität des Chat-Widgets. Nach 2 Minuten ohne Aktivität gilt der Besucher als gegangen: Eine Antwort geht dann eine Minute später auch per E-Mail an ihn, außer er kommt zurück."
   },
   "wiki": {
     "title": "Wiki",

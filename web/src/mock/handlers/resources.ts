@@ -95,8 +95,20 @@ export function registerResources() {
     let list = ctx.ws.contacts;
     if (company) list = list.filter((c) => c.company?.id === company);
     list = recordFilter(ctx, "contact", list);
+    const blocked = ctx.query.get("blocked");
+    if (blocked) list = list.filter((c) => c.blocked === (blocked === "true"));
     if (q) list = list.filter((c) => [c.name, c.email ?? "", ...c.emails, c.company?.name ?? "", c.phone, fieldsText(c.fields)].join(" ").toLowerCase().includes(q));
-    list = list.slice().sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+    const sort = ctx.query.get("sort") ?? "";
+    const byName = (a: Contact, b: Contact) => a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    const order: Record<string, (a: Contact, b: Contact) => number> = {
+      created: (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at),
+      "-created": (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
+      name: byName,
+      "-name": (a, b) => byName(b, a),
+      tickets: (a, b) => a.ticket_count - b.ticket_count,
+      "-tickets": (a, b) => b.ticket_count - a.ticket_count,
+    };
+    list = list.slice().sort(order[sort] ?? ((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)));
     const page = paginate(ctx, list);
     return { ...page, data: page.data.map((c) => contactOut(ctx.ws, c)) };
   });
@@ -186,7 +198,16 @@ export function registerResources() {
     let list = ctx.ws.companies;
     list = recordFilter(ctx, "company", list);
     if (q) list = list.filter((c) => [c.name, c.domain, fieldsText(c.fields)].join(" ").toLowerCase().includes(q));
-    list = list.slice().sort((a, b) => a.name.localeCompare(b.name));
+    const byName = (a: Company, b: Company) => a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    const size = (c: Company) => ctx.ws.contacts.filter((p) => p.company?.id === c.id).length;
+    const order: Record<string, (a: Company, b: Company) => number> = {
+      "-name": (a, b) => byName(b, a),
+      created: (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at),
+      "-created": (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
+      contacts: (a, b) => size(a) - size(b),
+      "-contacts": (a, b) => size(b) - size(a),
+    };
+    list = list.slice().sort(order[ctx.query.get("sort") ?? ""] ?? byName);
     const page = paginate(ctx, list);
     return { ...page, data: page.data.map((c) => companyOut(ctx.ws, c)) };
   });

@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
+import { DirectoryFilters } from "@/components/contacts/DirectoryFilters";
 import { DirectoryNav } from "@/components/contacts/DirectoryNav";
 import { ContactDrawer } from "@/components/contacts/ContactDrawer";
 import { CompanyPicker } from "@/components/contacts/CompanyPicker";
@@ -49,17 +50,18 @@ export default function ContactsPage() {
 
   useEffect(() => {
     if ((debounced || undefined) === search.q) return;
-    void navigate({ search: (s) => ({ ...s, q: debounced || undefined }), replace: true });
-  }, [debounced, search.q, navigate]);
+    void navigate({ search: { ...search, q: debounced || undefined }, replace: true });
+  }, [debounced, search, navigate]);
 
-  const list = useInfiniteQuery(q.contacts({ q: search.q, company_id: search.company }));
+  const list = useInfiniteQuery(q.contacts({ q: search.q, company_id: search.company, tag: search.tag, blocked: search.blocked, sort: search.sort }));
   const company = useQuery({ ...q.company(search.company ?? ""), enabled: !!search.company });
   const rows = list.data?.pages.flatMap((p) => p.data) ?? [];
   const sentinel = useSentinel(() => {
     if (list.hasNextPage && !list.isFetchingNextPage) void list.fetchNextPage();
   }, !!list.hasNextPage);
 
-  const open = (id: string | undefined) => navigate({ to: "/contacts/{-$contactId}", params: { contactId: id }, search: (s) => s });
+  const filtered = !!(search.q || search.company || search.tag || search.blocked);
+  const open = (id: string | undefined) => navigate({ to: "/contacts/{-$contactId}", params: { contactId: id }, search });
 
   const companies = new Set(rows.map((c) => c.company?.id).filter(Boolean)).size;
   const tickets = rows.reduce((a, c) => a + c.ticket_count, 0);
@@ -85,9 +87,19 @@ export default function ContactsPage() {
       </PageHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <DirectoryFilters
+          scope="contacts"
+          tag={search.tag}
+          onTag={(tag) => void navigate({ search: { ...search, tag } })}
+          blocked={search.blocked}
+          onBlocked={(blocked) => void navigate({ search: { ...search, blocked } })}
+          sort={search.sort}
+          onSort={(sort) => void navigate({ search: { ...search, sort } })}
+        />
+
         {!list.isLoading && rows.length > 0 && (
           <StatStrip>
-            <Stat label={t("stat.people")} value={<><AnimatedNumber value={rows.length} flash />{more}</>} sub={search.q || search.company ? t("stat.matching") : t("stat.inDirectory")} />
+            <Stat label={t("stat.people")} value={<><AnimatedNumber value={rows.length} flash />{more}</>} sub={filtered ? t("stat.matching") : t("stat.inDirectory")} />
             <Stat label={t("stat.companies")} value={<AnimatedNumber value={companies} />} sub={t("stat.represented")} />
             <Stat label={t("stat.tickets")} value={<AnimatedNumber value={tickets} />} sub={t("stat.fromThesePeople")} />
             <Stat label={t("stat.blocked")} value={<AnimatedNumber value={blocked} />} sub={t("stat.blockedHint")} />
@@ -103,7 +115,7 @@ export default function ContactsPage() {
               <button
                 type="button"
                 aria-label={t("clearCompany")}
-                onClick={() => void navigate({ search: (s) => ({ ...s, company: undefined }) })}
+                onClick={() => void navigate({ search: { ...search, company: undefined } })}
                 className="flex size-5 items-center justify-center rounded-sm text-fg-4 transition-colors hover:bg-active hover:text-fg"
               >
                 <X className="size-3" />
@@ -127,7 +139,7 @@ export default function ContactsPage() {
         ) : list.error ? (
           <EmptyState lit={3} title={t("error.listTitle")} description={errorMessage(list.error)} action={<Button onClick={() => void list.refetch()}>{t("retry")}</Button>} />
         ) : rows.length === 0 ? (
-          search.q || search.company ? (
+          filtered ? (
             <EmptyState
               art="search"
               ghost={<GhostList variant="people" />}
@@ -137,7 +149,7 @@ export default function ContactsPage() {
                 <Button
                   onClick={() => {
                     setTerm("");
-                    void navigate({ search: (s) => ({ ...s, q: undefined, company: undefined }) });
+                    void navigate({ search: { ...search, q: undefined, company: undefined, tag: undefined, blocked: undefined } });
                   }}
                 >
                   {t("clearFilters")}
@@ -164,7 +176,7 @@ export default function ContactsPage() {
                   <Link
                     to="/contacts/{-$contactId}"
                     params={{ contactId: c.id }}
-                    search={(s) => s}
+                    search={search}
                     data-active={contactId === c.id || undefined}
                     className={`${cols} h-11 border-b border-line-soft px-4 text-[13px] transition-colors duration-100 hover:bg-sunken data-[active]:bg-hover md:px-5`}
                   >

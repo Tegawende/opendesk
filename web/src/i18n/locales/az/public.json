@@ -120,7 +120,15 @@
       "subject": "Mövzu",
       "message": "Sizə necə kömək edə bilərik?",
       "send": "Sorğunu göndər",
-      "limit": "Ardıcıl bir neçə sorğu göndərdiniz. Bir az gözləyin və yenidən cəhd edin."
-    }
+      "limit": "Ardıcıl bir neçə sorğu göndərdiniz. Bir az gözləyin və yenidən cəhd edin.",
+      "attach": "Fayl seç",
+      "drop": "Faylları bura buraxın və ya ekran görüntüsü yapışdırın.",
+      "remove": "{{name}} faylını sil",
+      "too_big": "{{name}} 10 MB-dan böyükdür.",
+      "max_files": "Ən çox 5 fayl əlavə edə bilərsiniz.",
+      "upload_failed": "{{name}} yüklənə bilmədi.",
+      "uploading": "Yüklənir…"
+    },
+    "attachments": "Əlavələr"
   }
 }

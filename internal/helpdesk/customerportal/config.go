@@ -55,4 +55,5 @@ func Register(d *deps.Deps, api huma.API, _ chi.Router) {
 	})
 	s.registerAuth(api)
 	s.registerTickets(api)
+	s.registerAttachments(api)
 }

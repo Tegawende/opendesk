@@ -35,6 +35,39 @@ A signed-in customer can start a request (below). The portal does not change tic
 
 See [API routes](api.md#customer-portal-tickets) and [token rules](tokens.md#customer-portal) for wire details.
 
+## Per-brand OIDC configuration and identity ownership
+
+Brands default to `portal_auth.mode: "local"`. Admins can choose `local`, `oidc`, or
+`local_and_oidc` when creating or updating a brand. OIDC scopes are fixed to
+`openid email profile`. Provider settings are read separately through the admin-only
+`GET /v1/brands/{id}/portal/auth`; ordinary brand reads expose only the mode.
+
+An OIDC configuration supplies an HTTPS issuer, client ID and write-only client secret.
+Saving loads bounded discovery metadata through the public-address guarded HTTP client,
+refuses redirects, checks the exact issuer, and validates the authorization, token and
+JWKS HTTPS endpoints. Secrets are sealed with `d.Box`, included in credential-key rotation,
+and never included in responses, events or audit metadata. Omitting a secret preserves
+it only for the same issuer and client ID. Selecting `local` clears the provider settings.
+Configuration changes are audited; configuration events go to admins only.
+
+External identities belong to a workspace and contact, keyed uniquely by
+`(workspace_id, issuer, subject)`, with the originating brand recorded. A revoked link
+retains that key as a tombstone. Email matching cannot transfer an identity between
+contacts. A contact's `customer_oidc_relink_required` state prevents normal first-time
+email matching from bypassing administrative recovery. Contact deletion removes its
+identity data, and workspace deletion removes all workspace identity data. Brand deletion
+clears only the optional originating brand reference: active ownership and revoked
+tombstones remain workspace-scoped, so another brand cannot remap the subject. Brand
+configuration and brand-bound relink authorizations are removed with the brand.
+
+An admin with a recent user sign-in and MFA when enabled can authorize one relink through
+`POST /v1/brands/{id}/portal/relink-authorizations` with `contact_id`. The server checks
+both workspace boundaries and rejects blocked contacts. The authorization expires in
+15 minutes; creating another revokes the previous unused authorization for that brand
+and contact. It is server-side permission, not a bearer credential. The callback must
+consume it atomically with a link only after verifying the provider email matches the
+contact's current email. The actor and target are audited without credentials.
+
 ## Starting a request
 
 `POST /v1/customer/portal/tickets` with `{workspace_slug, subject, body}` opens a ticket for the signed-in
@@ -48,4 +81,18 @@ status, priority, severity, team, assignee, labels and fields are the team's. A 
 workspace is refused by the same session checks as every portal route, and the contact row is locked while the
 ticket is written. A customer starts at most 10 requests an hour, counted for the whole instance (`429`).
 The answer is the same `CustomerTicket` the list returns.
+
+### Files
+
+`POST /v1/customer/portal/attachments` (multipart, field `file`) stores one file for the signed-in customer and
+answers `201` with the attachment (`id`, `filename`, `content_type`, `size_bytes`, `url`). It is an unattached
+upload of that contact, as the widget's is: only they can attach it, once, to a request. Programs and scripts are
+refused (`422 file_type_refused`) and active types are stored as plain text, as for every upload; a file over
+10 MB is `413`, an empty one `422`; a customer uploads at most 30 files an hour, counted for the whole instance.
+`POST /v1/customer/portal/tickets` takes `attachment_ids` (at most 5, `422 too_many_files`); a file that is not the
+customer's own unsent upload is `422`, and another customer's file is never read. The files go on the first message.
+`CustomerMessage` carries `attachments: [{id, filename, content_type, size_bytes, url}]` for the public replies the
+customer reads (never inline pictures of an email's layout, a deleted or purged message's files, or a note's).
+`url` is a link signed for one to two hours, like every attachment link, so an image can show in the page; reading
+the conversation again signs a fresh one. Replies take no files.
 

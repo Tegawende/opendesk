@@ -4,7 +4,7 @@
 
 import { infiniteQueryOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import { isApiError, scopeWorkspace } from "./api/client";
-import { api, rows, type ChangelogListQuery, type CollabThreadQuery, type TicketListQuery, type TicketSummaryQuery } from "./api/endpoints";
+import { api, rows, type ChangelogListQuery, type CollabThreadQuery, type CompanySort, type ContactSort, type TicketListQuery, type TicketSummaryQuery } from "./api/endpoints";
 import type { Page, ReportsQuery, ReportsRange, SpacesResponse, TicketCounts, WikiArea } from "./api/types";
 import { normalizeSpace, normalizeSpaces } from "./spaces/model";
 
@@ -84,14 +84,14 @@ export const qk = {
   get contactLists() {
     return w(["contacts", "list"] as const);
   },
-  contacts: (q: { q?: string; company_id?: string }) => w(["contacts", "list", q] as const),
+  contacts: (q: { q?: string; company_id?: string; tag?: string; blocked?: "true" | "false"; sort?: string }) => w(["contacts", "list", q] as const),
   contact: (id: string) => w(["contacts", "detail", id] as const),
   contactTickets: (id: string) => w(["contacts", "tickets", id] as const),
   contactPicker: (q: string) => w(["contacts", "picker", q] as const),
   get companyLists() {
     return w(["companies", "list"] as const);
   },
-  companies: (q: { q?: string }) => w(["companies", "list", q] as const),
+  companies: (q: { q?: string; tag?: string; sort?: string }) => w(["companies", "list", q] as const),
   company: (id: string) => w(["companies", "detail", id] as const),
   get tags() {
     return w(["tags"] as const);
@@ -453,7 +453,7 @@ export const q = {
   ticketDraft: (id: string) => queryOptions({ queryKey: qk.ticketDraft(id), queryFn: async () => (await api.tickets.draft.get(id)).draft }),
   replyDraft: (id: string) =>
     queryOptions({ queryKey: qk.replyDraft(id), queryFn: async () => (await api.tickets.replyDraft.get(id)).draft, staleTime: 0, gcTime: 0 }),
-  contacts: (query: { q?: string; company_id?: string }) =>
+  contacts: (query: { q?: string; company_id?: string; tag?: string; blocked?: "true" | "false"; sort?: ContactSort }) =>
     infiniteQueryOptions({
       queryKey: qk.contacts(query),
       queryFn: ({ pageParam }) => api.contacts.search({ ...query, limit: 50, cursor: pageParam }),
@@ -462,7 +462,7 @@ export const q = {
     }),
   contact: (id: string) => queryOptions({ queryKey: qk.contact(id), queryFn: () => api.contacts.get(id) }),
   contactTickets: (id: string) => list(qk.contactTickets(id), () => api.contacts.tickets(id, { limit: 20 })),
-  companies: (query: { q?: string }) =>
+  companies: (query: { q?: string; tag?: string; sort?: CompanySort }) =>
     infiniteQueryOptions({
       queryKey: qk.companies(query),
       queryFn: ({ pageParam }) => api.companies.search({ ...query, limit: 50, cursor: pageParam }),

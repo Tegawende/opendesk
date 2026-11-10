@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -152,6 +153,14 @@ func companyUniqueErr(err error) error {
 
 type companyOut struct{ Body Company }
 
+// companyOrders are the sorts a list can ask for, by their `sort` value; name is the default.
+var companyOrders = map[string]string{
+	"name": "lower(co.name)", "-name": "lower(co.name)",
+	"created": "co.created_at", "-created": "co.created_at",
+	"contacts":  "(SELECT count(*) FROM contacts c WHERE c.workspace_id = co.workspace_id AND c.company_id = co.id)",
+	"-contacts": "(SELECT count(*) FROM contacts c WHERE c.workspace_id = co.workspace_id AND c.company_id = co.id)",
+}
+
 type companyCursor struct {
 	Name string    `json:"n"`
 	ID   uuid.UUID `json:"id"`
@@ -168,16 +177,28 @@ func registerCompanies(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, err
 			}
+			order := listOrder(in.Sort, companyOrders, "co.id")
+			if in.Sort == "name" {
+				order = "" // the default order, which keeps its keyset
+			}
 			var cur companyCursor
-			if err := httpx.DecodeCursor(in.Cursor, &cur); err != nil {
+			var offset offsetCursor
+			if order != "" {
+				if err := httpx.DecodeCursor(in.Cursor, &offset); err != nil {
+					return nil, err
+				}
+			} else if err := httpx.DecodeCursor(in.Cursor, &cur); err != nil {
 				return nil, err
+			}
+			tail := " ORDER BY co.name, co.id LIMIT $7"
+			if order != "" {
+				tail = " ORDER BY " + order + " LIMIT $7 OFFSET " + strconv.Itoa(max(offset.O, 0))
 			}
 			q := strings.TrimSpace(in.Q)
 			like := "%" + strings.TrimSuffix(likePrefix(q), "%") + "%"
 			rows, err := d.DB.Pool.Query(ctx, companySelect+` WHERE co.workspace_id = $1
 				AND ($2 = '' OR co.name ILIKE $3 OR co.domain::text ILIKE $3 OR co.fields_search @@ websearch_to_tsquery('simple', $2))
-				AND (NOT $4 OR (co.name, co.id) > ($5, $6))`+extra+`
-				ORDER BY co.name, co.id LIMIT $7`, append([]any{p.WorkspaceID, q, like, in.Cursor != "", cur.Name, cur.ID, in.Limit + 1}, args...)...)
+				AND (NOT $4 OR (co.name, co.id) > ($5, $6))`+extra+tail, append([]any{p.WorkspaceID, q, like, in.Cursor != "" && order == "", cur.Name, cur.ID, in.Limit + 1}, args...)...)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -185,7 +206,12 @@ func registerCompanies(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			page := httpx.NewPage(list, in.Limit, func(c Company) any { return companyCursor{Name: c.Name, ID: c.ID} })
+			page := httpx.NewPage(list, in.Limit, func(c Company) any {
+				if order != "" {
+					return offsetCursor{O: offset.O + in.Limit}
+				}
+				return companyCursor{Name: c.Name, ID: c.ID}
+			})
 			return &struct{ Body httpx.Page[Company] }{page}, nil
 		})
 

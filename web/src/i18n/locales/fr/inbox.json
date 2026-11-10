@@ -522,6 +522,7 @@
     "fieldCleared": "<b>{{who}}</b> a effacé <b>{{field}}</b>",
     "slaFirst": "L’objectif de première réponse n’a pas été respecté",
     "slaResolution": "L’objectif de résolution n’a pas été respecté",
+    "followUpSkipped": "Non envoyé par e-mail au visiteur : cette marque n’a aucune boîte mail qui peut envoyer",
     "subject": "<b>{{who}}</b> a modifié l’objet",
     "alias": "<b>{{who}}</b> a modifié la référence du ticket",
     "snoozed": "<b>{{who}}</b> a mis ce ticket en attente",
@@ -617,6 +618,7 @@
     "addressChosen": "Cette réponse et les suivantes seront envoyées depuis cette adresse.",
     "addressMoved": "Cette adresse a été choisie lors du déplacement du ticket vers {{team}}.",
     "cannotSend": "Cette adresse ne peut pas encore envoyer de réponses. Un administrateur peut configurer un mode d’envoi dans les paramètres de sa boîte mail.",
+    "noFollowUpSender": "Cette marque n’a aucune boîte mail qui peut envoyer : le visiteur reçoit les réponses dans le chat uniquement, pas par e-mail.",
     "thread": "Conversation parallèle",
     "threadHint": "Interrogez une personne extérieure à votre équipe. Le client ne voit jamais cette conversation.",
     "threadPlaceholder": "Écrivez-lui. Ses réponses apparaîtront dans ce ticket.",
@@ -642,7 +644,11 @@
     "replyToEmpty": "Saisissez une adresse e-mail",
     "replyToUse": "Utiliser",
     "replyActions": "À l’envoi :",
-    "dropReplyActions": "Retirer ces actions"
+    "dropReplyActions": "Retirer ces actions",
+    "chatReply": "Dans le chat · par e-mail si le visiteur est parti",
+    "chatReplyHint": "Votre réponse s’affiche en direct dans le chat du visiteur. S’il a quitté la page (aucune activité depuis 2 minutes), elle part aussi à son adresse e-mail une minute plus tard, sauf s’il revient.",
+    "chatReplyHere": "Dans le chat",
+    "chatReplyAway": "Dans le chat · par e-mail s’il ne la lit pas"
   },
   "sharedDraft": {
     "label": "Brouillon partagé",
@@ -1101,6 +1107,13 @@
     "attachments": "Pièces jointes",
     "nothing": "Rien à imprimer",
     "nothingHint": "Aucun message à imprimer avec ces options, ou le message n’est plus dans le ticket."
+  },
+  "visitorPresence": {
+    "here": "Sur la page maintenant",
+    "away": "Parti il y a {{time}}",
+    "never": "Pas sur la page",
+    "email": "Votre réponse lui sera aussi envoyée par e-mail",
+    "hint": "D’après l’activité du widget de chat. Après 2 minutes sans activité, le visiteur compte comme parti : une réponse lui est alors aussi envoyée par e-mail une minute plus tard, sauf s’il revient."
   },
   "wiki": {
     "title": "Wiki",

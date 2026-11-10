@@ -122,7 +122,15 @@
       "subject": "Asunto",
       "message": "¿Cómo podemos ayudarte?",
       "send": "Enviar solicitud",
-      "limit": "Has enviado varias solicitudes seguidas. Espera un rato e inténtalo de nuevo."
-    }
+      "limit": "Has enviado varias solicitudes seguidas. Espera un rato e inténtalo de nuevo.",
+      "attach": "Elegir archivos",
+      "drop": "Suelta archivos aquí o pega una captura de pantalla.",
+      "remove": "Quitar {{name}}",
+      "too_big": "{{name}} supera los 10 MB.",
+      "max_files": "Puedes adjuntar hasta 5 archivos.",
+      "upload_failed": "No se pudo subir {{name}}.",
+      "uploading": "Subiendo…"
+    },
+    "attachments": "Adjuntos"
   }
 }

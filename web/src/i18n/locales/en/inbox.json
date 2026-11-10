@@ -502,6 +502,7 @@
     "fieldCleared": "<b>{{who}}</b> cleared <b>{{field}}</b>",
     "slaFirst": "First response target was missed",
     "slaResolution": "Resolution target was missed",
+    "followUpSkipped": "Not emailed to the visitor: this brand has no mailbox that can send",
     "subject": "<b>{{who}}</b> changed the subject",
     "alias": "<b>{{who}}</b> changed the ticket reference",
     "snoozed": "<b>{{who}}</b> snoozed this",
@@ -599,6 +600,7 @@
     "addressChosen": "This reply and the next ones go from this address.",
     "addressMoved": "Switched to this address when the ticket moved to {{team}}.",
     "cannotSend": "This address can't send replies yet. An admin can connect a way to send in its mailbox settings.",
+    "noFollowUpSender": "This brand has no mailbox that can send, so the visitor gets replies in the chat only, not by email.",
     "thread": "Side conversation",
     "threadHint": "Ask someone outside your team. The customer never sees it.",
     "threadPlaceholder": "Write to them. Their answers come back into this ticket.",
@@ -629,7 +631,11 @@
     "replyToEmpty": "Type an email address",
     "replyToUse": "Use",
     "replyActions": "When sent:",
-    "dropReplyActions": "Remove these actions"
+    "dropReplyActions": "Remove these actions",
+    "chatReply": "In the chat · by email if the visitor has left",
+    "chatReplyHint": "Your reply appears live in the visitor's chat. If they have left the page (no activity for 2 minutes), it is also sent to their email address a minute later, unless they come back.",
+    "chatReplyHere": "In the chat",
+    "chatReplyAway": "In the chat · by email if they don't read it"
   },
   "sharedDraft": {
     "label": "Shared draft",
@@ -1119,6 +1125,13 @@
     "attachments": "Attachments",
     "nothing": "Nothing to print",
     "nothingHint": "There are no messages to print with these options, or the message is no longer on the ticket."
+  },
+  "visitorPresence": {
+    "here": "On the page now",
+    "away": "Left {{time}} ago",
+    "never": "Not on the page",
+    "email": "Your reply will also be sent to them by email",
+    "hint": "From the chat widget's activity. After 2 minutes without it the visitor counts as gone, and a reply is also emailed a minute later unless they come back."
   },
   "wiki": {
     "title": "Wiki",

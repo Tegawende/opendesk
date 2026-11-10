@@ -46,6 +46,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/helpdesk"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/helpdesk/helpsite"
+	"github.com/useopendesk/opendesk/internal/helpdesk/widget"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/idempotency"
 	"github.com/useopendesk/opendesk/internal/integrations"
@@ -197,7 +198,9 @@ func Router(d *deps.Deps) http.Handler {
 	// Help centers answer on their own hosts and at /help/<slug>, before the API's
 	// sessions are read (contracts/teams.md "Help center addresses").
 	r.Use(helpsite.Middleware(d))
-	resolver := &auth.Resolver{Pool: d.DB.Pool, Tokens: d.Tokens, ClientIP: httpx.ClientIP(cfg.TrustProxy, cfg.ProxyHops)}
+	resolver := &auth.Resolver{Pool: d.DB.Pool, Tokens: d.Tokens, ClientIP: httpx.ClientIP(cfg.TrustProxy, cfg.ProxyHops),
+		// A chat's visitor back on the page: the agents on their chats see it (contracts/realtime.md).
+		VisitorSeen: widget.VisitorSeen(d)}
 	// apilog right after the resolver: an API key's recorded requests include rate limits and replays.
 	r.Use(resolver.Middleware, apilog.Middleware(d.DB.Pool, d.Log), httpx.CredentialLimit(d.Limiter, httpx.ClientIP(cfg.TrustProxy, cfg.ProxyHops)), idempotency.New(d.DB.Pool, d.Box, cfg.AuthSecret, d.Log).Middleware)
 

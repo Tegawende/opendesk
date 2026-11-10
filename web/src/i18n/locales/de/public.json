@@ -120,7 +120,15 @@
       "subject": "Betreff",
       "message": "Wie können wir helfen?",
       "send": "Anfrage senden",
-      "limit": "Sie haben mehrere Anfragen hintereinander gesendet. Warten Sie eine Weile und versuchen Sie es erneut."
-    }
+      "limit": "Sie haben mehrere Anfragen hintereinander gesendet. Warten Sie eine Weile und versuchen Sie es erneut.",
+      "attach": "Dateien auswählen",
+      "drop": "Dateien hierher ziehen oder einen Screenshot einfügen.",
+      "remove": "{{name}} entfernen",
+      "too_big": "{{name}} ist größer als 10 MB.",
+      "max_files": "Sie können bis zu 5 Dateien anhängen.",
+      "upload_failed": "{{name}} konnte nicht hochgeladen werden.",
+      "uploading": "Wird hochgeladen…"
+    },
+    "attachments": "Anhänge"
   }
 }

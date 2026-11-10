@@ -160,5 +160,28 @@
     "search": "to search everything",
     "domains": "Companies group contacts by their email domain"
   },
-  "callWith": "Call with {{provider}}"
+  "callWith": "Call with {{provider}}",
+  "filter": {
+    "labels": "Label",
+    "label": "Label: {{name}}",
+    "clearLabel": "Clear the label filter",
+    "searchLabels": "Find a label",
+    "noLabels": "No labels for this list yet.",
+    "blockedTitle": "Blocked",
+    "blockedAny": "Blocked or not",
+    "blockedOnly": "Blocked only",
+    "notBlocked": "Not blocked"
+  },
+  "sort": {
+    "label": "Sorted by {{by}}",
+    "title": "Sort by",
+    "-created": "Newest first",
+    "created": "Oldest first",
+    "name": "Name, A to Z",
+    "-name": "Name, Z to A",
+    "-tickets": "Most tickets",
+    "tickets": "Fewest tickets",
+    "-contacts": "Most people",
+    "contacts": "Fewest people"
+  }
 }

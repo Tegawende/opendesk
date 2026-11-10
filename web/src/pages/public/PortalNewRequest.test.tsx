@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/client";
 import { customerPortal } from "@/lib/customerPortal/client";
-import { NewRequest } from "./PortalNewRequest";
+import { MAX_FILES, NewRequest } from "./PortalNewRequest";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
@@ -47,7 +47,8 @@ describe("the portal's new request form", () => {
   it("asks for a subject and a message, and nothing the team sets", async () => {
     const host = await mount();
     expect(host.textContent).toContain("New request");
-    expect([...host.querySelectorAll("input, textarea")].map((e) => e.getAttribute("name"))).toEqual(["subject", "body"]);
+    // Two fields of text, and a file picker: nothing the team sets.
+    expect([...host.querySelectorAll("input, textarea")].map((e) => e.getAttribute("name") ?? e.getAttribute("type"))).toEqual(["subject", "body", "file"]);
     expect(sendButton(host).disabled).toBe(true);
     await fill(host, "Order is late", "   ");
     expect(sendButton(host).disabled).toBe(true);
@@ -62,7 +63,7 @@ describe("the portal's new request form", () => {
     const host = await mount();
     await fill(host, "  Order is late ", "  It has not arrived\n");
     await submit(host);
-    expect(create).toHaveBeenCalledWith("acme", "Order is late", "It has not arrived");
+    expect(create).toHaveBeenCalledWith("acme", "Order is late", "It has not arrived", []);
     expect(navigate).toHaveBeenCalledWith({ to: "/portal/$slug/tickets/$ticketId", params: { slug: "acme", ticketId: "t-9" } });
   });
 
@@ -82,5 +83,99 @@ describe("the portal's new request form", () => {
     await fill(host, "x", "y");
     await submit(host);
     await vi.waitFor(() => expect(host.textContent).toContain("Something went wrong"));
+  });
+
+  describe("files", () => {
+    const file = (name: string, type = "text/plain", bytes = 10) => new File([new Uint8Array(bytes)], name, { type });
+    const choose = async (host: HTMLElement, files: File[]) => {
+      const input = host.querySelector<HTMLInputElement>('input[type="file"]')!;
+      Object.defineProperty(input, "files", { value: files, configurable: true });
+      await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    };
+    const stubUrls = () => {
+      vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:preview"), revokeObjectURL: vi.fn() }));
+    };
+    const upload = (id: string) => ({ id, filename: "", content_type: "", size_bytes: 1, url: "", inline: false });
+
+    it("uploads a chosen file at once, shows it, and sends its id with the request", async () => {
+      stubUrls();
+      const up = vi.spyOn(customerPortal, "upload").mockResolvedValue(upload("a-1"));
+      const create = vi.spyOn(customerPortal, "create").mockResolvedValue({ id: "t-1", number: 1, subject: "s", status: "open", created_at: "", updated_at: "" });
+      const host = await mount();
+      await choose(host, [file("notes.txt")]);
+      expect(up).toHaveBeenCalledWith("acme", expect.objectContaining({ name: "notes.txt" }));
+      await vi.waitFor(() => expect(host.textContent).toContain("1 KB"));
+      await fill(host, "Subject", "Message");
+      await submit(host);
+      expect(create).toHaveBeenCalledWith("acme", "Subject", "Message", ["a-1"]);
+    });
+
+    it("takes a screenshot pasted into the form, as a picture", async () => {
+      stubUrls();
+      const up = vi.spyOn(customerPortal, "upload").mockResolvedValue(upload("a-2"));
+      const host = await mount();
+      const paste = new Event("paste", { bubbles: true, cancelable: true });
+      Object.assign(paste, { clipboardData: { files: [file("image.png", "image/png")] } });
+      await act(async () => host.querySelector("textarea")!.dispatchEvent(paste));
+      expect(up).toHaveBeenCalledTimes(1);
+      expect(paste.defaultPrevented).toBe(true);
+      expect(host.querySelector("li img")).not.toBeNull();
+      // Pasted text is left to the field.
+      const text = new Event("paste", { bubbles: true, cancelable: true });
+      Object.assign(text, { clipboardData: { files: [] } });
+      await act(async () => host.querySelector("textarea")!.dispatchEvent(text));
+      expect(text.defaultPrevented).toBe(false);
+      expect(up).toHaveBeenCalledTimes(1);
+    });
+
+    it("takes dropped files", async () => {
+      stubUrls();
+      const up = vi.spyOn(customerPortal, "upload").mockResolvedValue(upload("a-3"));
+      const host = await mount();
+      const drop = new Event("drop", { bubbles: true, cancelable: true });
+      Object.assign(drop, { dataTransfer: { files: [file("a.pdf", "application/pdf")] } });
+      await act(async () => host.querySelector("[data-over], .border-dashed")!.dispatchEvent(drop));
+      expect(up).toHaveBeenCalledTimes(1);
+    });
+
+    it("holds the request back while a file uploads, and drops a removed one from it", async () => {
+      stubUrls();
+      let finish!: (u: ReturnType<typeof upload>) => void;
+      vi.spyOn(customerPortal, "upload").mockReturnValueOnce(new Promise((r) => { finish = r; })).mockResolvedValueOnce(upload("keep"));
+      const create = vi.spyOn(customerPortal, "create").mockResolvedValue({ id: "t", number: 1, subject: "s", status: "open", created_at: "", updated_at: "" });
+      const host = await mount();
+      await fill(host, "Subject", "Message");
+      await choose(host, [file("slow.txt")]);
+      expect(host.textContent).toContain("Uploading");
+      expect(sendButton(host).disabled).toBe(true);
+      await act(async () => finish(upload("slow")));
+      expect(sendButton(host).disabled).toBe(false);
+      await choose(host, [file("keep.txt")]);
+      await vi.waitFor(() => expect(host.textContent).not.toContain("Uploading"));
+      await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Remove slow.txt"]')!.click());
+      await submit(host);
+      expect(create).toHaveBeenCalledWith("acme", "Subject", "Message", ["keep"]);
+    });
+
+    it("refuses a file over 10 MB and more than five files before uploading, and shows a failed upload", async () => {
+      stubUrls();
+      const up = vi.spyOn(customerPortal, "upload").mockResolvedValue(upload("ok"));
+      const host = await mount();
+      await choose(host, [{ ...file("big.txt"), size: 10 * 1024 * 1024 + 1, name: "big.txt", type: "text/plain" } as unknown as File]);
+      expect(up).not.toHaveBeenCalled();
+      expect(host.textContent).toContain("big.txt is over 10 MB.");
+      await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Remove big.txt"]')!.click());
+
+      await choose(host, Array.from({ length: MAX_FILES + 1 }, (_, n) => file(`f${n}.txt`)));
+      expect(up).toHaveBeenCalledTimes(MAX_FILES);
+      expect(host.textContent).toContain("up to 5 files");
+
+      up.mockRejectedValueOnce(new ApiError({ status: 422 }));
+      await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Remove f0.txt"]')!.click());
+      await choose(host, [file("bad.exe")]);
+      await vi.waitFor(() => expect(host.textContent).toContain("bad.exe could not be uploaded."));
+      // A failed file is not sent with the request.
+      expect(sendButton(host).disabled).toBe(true);
+    });
   });
 });

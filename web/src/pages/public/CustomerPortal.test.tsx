@@ -143,8 +143,8 @@ it("shows list loading, empty, error and ticket rows", async () => {
 
 it("loads a transcript and submits a reply with the keyboard", async () => {
   vi.spyOn(customerPortal, "ticket").mockResolvedValue({ id: "1", number: 42, subject: "Delivery", status: "open", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" });
-  vi.spyOn(customerPortal, "messages").mockResolvedValue({ data: [{ id: "m", direction: "outbound", body_text: "We are checking.", created_at: "2026-01-01T00:00:00Z" }], next_cursor: null });
-  const reply = vi.spyOn(customerPortal, "reply").mockResolvedValue({ id: "n", direction: "inbound", body_text: "Thanks", created_at: "2026-01-01T00:00:00Z" });
+  vi.spyOn(customerPortal, "messages").mockResolvedValue({ data: [{ id: "m", direction: "outbound", body_text: "We are checking.", created_at: "2026-01-01T00:00:00Z", attachments: [] }], next_cursor: null });
+  const reply = vi.spyOn(customerPortal, "reply").mockResolvedValue({ id: "n", direction: "inbound", body_text: "Thanks", created_at: "2026-01-01T00:00:00Z", attachments: [] });
   const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
   await act(async () => root.render(<QueryClientProvider client={queryClient}><Ticket slug="detail" id="1" /></QueryClientProvider>));
   await vi.waitFor(() => expect(container.textContent).toContain("We are checking."));
@@ -154,6 +154,23 @@ it("loads a transcript and submits a reply with the keyboard", async () => {
   const button = container.querySelector('button[type="submit"]')! as HTMLButtonElement;
   await act(async () => { button.focus(); button.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); button.click(); });
   await vi.waitFor(() => expect(reply).toHaveBeenCalledWith("detail", "1", "Thanks"));
+  await act(async () => root.unmount()); container.remove();
+});
+
+it("shows the files of a message: a picture small, anything else as a link, opening in a new tab", async () => {
+  vi.spyOn(customerPortal, "ticket").mockResolvedValue({ id: "1", number: 42, subject: "Delivery", status: "open", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" });
+  vi.spyOn(customerPortal, "messages").mockResolvedValue({ data: [{ id: "m", direction: "inbound", body_text: "See attached", created_at: "2026-01-01T00:00:00Z", attachments: [
+    { id: "a", filename: "screenshot.png", content_type: "image/png", size_bytes: 2048, url: "https://api.example/v1/attachments/a?exp=1&sig=x" },
+    { id: "b", filename: "invoice.pdf", content_type: "application/pdf", size_bytes: 4096, url: "https://api.example/v1/attachments/b?exp=1&sig=y" },
+  ] }], next_cursor: null });
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><Ticket slug="files" id="1" /></QueryClientProvider>));
+  await vi.waitFor(() => expect(container.textContent).toContain("screenshot.png"));
+  const links = [...container.querySelectorAll<HTMLAnchorElement>('ul[aria-label="Attachments"] a')];
+  expect(links.map((a) => a.getAttribute("href"))).toEqual(["https://api.example/v1/attachments/a?exp=1&sig=x", "https://api.example/v1/attachments/b?exp=1&sig=y"]);
+  expect(links.every((a) => a.target === "_blank" && a.rel.includes("noopener"))).toBe(true);
+  expect(links[0].querySelector("img")).not.toBeNull();
+  expect(links[1].querySelector("img")).toBeNull();
   await act(async () => root.unmount()); container.remove();
 });
 
@@ -211,9 +228,9 @@ it("treats a revoked session as signed out but preserves state on network failur
 
 it("keeps a new reply visible on an older message page", async () => {
   vi.spyOn(customerPortal, "ticket").mockResolvedValue({ id: "1", number: 42, subject: "Delivery", status: "open", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" });
-  const newer = { id: "new", direction: "inbound" as const, body_text: "Latest reply", created_at: "2026-01-02T00:00:00Z" };
+  const newer = { id: "new", direction: "inbound" as const, body_text: "Latest reply", created_at: "2026-01-02T00:00:00Z", attachments: [] };
   let sent = false;
-  vi.spyOn(customerPortal, "messages").mockImplementation(async (_slug, _id, cursor) => cursor ? { data: [{ id: "old", direction: "outbound", body_text: "Older message", created_at: "2026-01-01T00:00:00Z" }], next_cursor: null } : { data: sent ? [newer] : [], next_cursor: "older" });
+  vi.spyOn(customerPortal, "messages").mockImplementation(async (_slug, _id, cursor) => cursor ? { data: [{ id: "old", direction: "outbound", body_text: "Older message", created_at: "2026-01-01T00:00:00Z", attachments: [] }], next_cursor: null } : { data: sent ? [newer] : [], next_cursor: "older" });
   vi.spyOn(customerPortal, "reply").mockImplementation(async () => { sent = true; return newer; });
   const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
   await act(async () => root.render(<QueryClientProvider client={queryClient}><Ticket slug="pagination" id="1" /></QueryClientProvider>));

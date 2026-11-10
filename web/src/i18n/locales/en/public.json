@@ -120,7 +120,15 @@
       "subject": "Subject",
       "message": "How can we help?",
       "send": "Send request",
-      "limit": "You have sent several requests in a row. Wait a while and try again."
-    }
+      "limit": "You have sent several requests in a row. Wait a while and try again.",
+      "attach": "Choose files",
+      "drop": "Drop files here or paste a screenshot.",
+      "remove": "Remove {{name}}",
+      "too_big": "{{name}} is over 10 MB.",
+      "max_files": "You can attach up to 5 files.",
+      "upload_failed": "{{name}} could not be uploaded.",
+      "uploading": "Uploading…"
+    },
+    "attachments": "Attachments"
   }
 }

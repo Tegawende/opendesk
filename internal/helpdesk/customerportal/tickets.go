@@ -35,10 +35,11 @@ type customerTicket struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 type customerMessage struct {
-	ID        uuid.UUID `json:"id"`
-	Direction string    `json:"direction"`
-	BodyText  string    `json:"body_text"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          uuid.UUID            `json:"id"`
+	Direction   string               `json:"direction"`
+	BodyText    string               `json:"body_text"`
+	CreatedAt   time.Time            `json:"created_at"`
+	Attachments []customerAttachment `json:"attachments"`
 }
 type portalCursor struct {
 	At time.Time `json:"at"`
@@ -134,6 +135,20 @@ func (s *service) registerTickets(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
+			ids := make([]uuid.UUID, len(messages))
+			for i, m := range messages {
+				ids[i] = m.ID
+			}
+			files, err := attachmentsOf(ctx, s.d.DB.Pool, p.WorkspaceID, ids)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			for i := range messages {
+				messages[i].Attachments = files[messages[i].ID]
+				if messages[i].Attachments == nil {
+					messages[i].Attachments = []customerAttachment{}
+				}
+			}
 			page := httpx.NewPage(messages, in.Limit, func(m customerMessage) any { return portalCursor{m.CreatedAt, m.ID} })
 			return &struct{ Body httpx.Page[customerMessage] }{page}, nil
 		})
@@ -144,6 +159,8 @@ func (s *service) registerTickets(api huma.API) {
 			Slug    string `json:"workspace_slug" minLength:"1" maxLength:"40" doc:"The portal's brand; never selects the workspace, which is the customer's own"`
 			Subject string `json:"subject" minLength:"1" maxLength:"200"`
 			Body    string `json:"body" minLength:"1" maxLength:"10000"`
+			// AttachmentIDs are this customer's own uploads (POST /v1/customer/portal/attachments).
+			AttachmentIDs []string `json:"attachment_ids,omitempty" maxItems:"20" doc:"Files from POST /v1/customer/portal/attachments, at most 5"`
 		}
 	}) (*struct{ Body customerTicket }, error) {
 		p, err := auth.RequireCustomer(ctx)
@@ -176,6 +193,10 @@ func (s *service) registerTickets(api huma.API) {
 			if blocked {
 				return auth.ErrUnauthenticated
 			}
+			files, err := s.requestFiles(ctx, tx, p, in.Body.AttachmentIDs)
+			if err != nil {
+				return err
+			}
 			var email *string
 			if err := tx.QueryRow(ctx, `SELECT email FROM contacts WHERE workspace_id=$1 AND id=$2`, p.WorkspaceID, p.ContactID).Scan(&email); err != nil {
 				return err
@@ -203,7 +224,7 @@ func (s *service) registerTickets(api huma.API) {
 			if _, err := domain.AddMessage(ctx, tx, s.d.Jobs, domain.NewMessage{
 				WorkspaceID: p.WorkspaceID, TicketID: t.ID, Kind: "reply", Direction: "inbound",
 				AuthorType: "contact", AuthorContactID: &p.ContactID, BodyHTML: hd.TextToHTML(text), BodyText: text,
-				Trigger: jobs.TriggerTicketCreated,
+				Trigger: jobs.TriggerTicketCreated, AttachmentIDs: files,
 			}); err != nil {
 				return err
 			}
@@ -245,7 +266,7 @@ func (s *service) registerTickets(api huma.API) {
 			if err != nil {
 				return err
 			}
-			message = customerMessage{m.ID, m.Direction, m.BodyText, m.CreatedAt}
+			message = customerMessage{m.ID, m.Direction, m.BodyText, m.CreatedAt, []customerAttachment{}}
 			return nil
 		})
 		if err != nil {

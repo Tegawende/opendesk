@@ -7,13 +7,13 @@ Scopes: `contacts:read` to read, `contacts:write` to change.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/v1/contacts` | List contacts. Filters: `q`, `company_id`, `tag`, `field.<key>` |
+| `GET` | `/v1/contacts` | List contacts. Filters: `q`, `company_id`, `tag`, `blocked`, `field.<key>`. `sort`: `-created` (default), `created`, `name`, `-name`, `-tickets`, `tickets` |
 | `POST` | `/v1/contacts` | Create a contact |
 | `GET` | `/v1/contacts/{id}` | Get a contact |
 | `PATCH` | `/v1/contacts/{id}` | Update a contact |
 | `DELETE` | `/v1/contacts/{id}` | Delete a contact |
 | `GET` | `/v1/contacts/{id}/tickets` | The contact's tickets |
-| `GET`, `POST` | `/v1/companies` | List or create companies. Filters: `q`, `tag`, `field.<key>` |
+| `GET`, `POST` | `/v1/companies` | List or create companies. Filters: `q`, `tag`, `field.<key>`. `sort`: `name` (default), `-name`, `created`, `-created`, `contacts`, `-contacts` |
 | `GET`, `PATCH`, `DELETE` | `/v1/companies/{id}` | Get, update or delete a company |
 
 ## Objects

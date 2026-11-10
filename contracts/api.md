@@ -138,7 +138,7 @@ type Message = {
 };
 type Attachment = { id: string; filename: string; content_type: string; size_bytes: number; inline: boolean; url: string };
 type Activity = { id: string; ticket_id: string; actor: { type: string; user: UserRef | null; api_key: { id: string; name: string } | null /* type "api": the key that made the change (data.api_key_id); null for an older entry or a deleted key */ }; type: string; data: Record<string, unknown>; created_at: string };
-// activity types: status_changed{from,to, reason?: "sender_unverified" | "thread_replied", message_id?} (with "sender_unverified", from equals to: a reply that failed sender checks left the status where it was, actor "system"; "thread_replied": an answer in a third-party thread opened a pending or on-hold ticket, actor "system") priority_changed{from,to} severity_changed{from: Severity | null, to: Severity | null} alias_changed{from: string | null, to: string | null} assigned{from,to,via?: "round_robin"|"load_balanced"|"triage"|"previous_ticket"|"chat", previous_ticket_id?, previous_ticket_number? /* via "previous_ticket": the closed ticket a follow-up took its assignee from; both null when it is in another, private team */, mode?: AssignMode /* via "chat" */} (actor "system", or "ai" for via "triage") team_changed{from,to,via: "agent"|"automation"|"api"|"triage"|..., mailbox_from?, mailbox_to? /* the reply address switched with the team */} brand_changed{from,to} mailbox_changed{from,to} /* the reply address */ tagged{tag} untagged{tag} sla_breached{kind} merged{into, into_number /* null when the target is in another, private team */, via?: "import" /* actor "system": an import's sync followed the source's merge */} csat_received{score} linked{link_id,url,title,provider} unlinked{url,title,provider} contact_changed{from,to} /* each {id, name} (the name, else the email) or null */
+// activity types: status_changed{from,to, reason?: "sender_unverified" | "thread_replied", message_id?} (with "sender_unverified", from equals to: a reply that failed sender checks left the status where it was, actor "system"; "thread_replied": an answer in a third-party thread opened a pending or on-hold ticket, actor "system") priority_changed{from,to} severity_changed{from: Severity | null, to: Severity | null} alias_changed{from: string | null, to: string | null} assigned{from,to,via?: "round_robin"|"load_balanced"|"triage"|"previous_ticket"|"chat", previous_ticket_id?, previous_ticket_number? /* via "previous_ticket": the closed ticket a follow-up took its assignee from; both null when it is in another, private team */, mode?: AssignMode /* via "chat" */} (actor "system", or "ai" for via "triage") team_changed{from,to,via: "agent"|"automation"|"api"|"triage"|..., mailbox_from?, mailbox_to? /* the reply address switched with the team */} brand_changed{from,to} mailbox_changed{from,to} /* the reply address */ tagged{tag} untagged{tag} sla_breached{kind} merged{into, into_number /* null when the target is in another, private team */, via?: "import" /* actor "system": an import's sync followed the source's merge */} csat_received{score} linked{link_id,url,title,provider} unlinked{url,title,provider} contact_changed{from,to} /* each {id, name} (the name, else the email) or null */ follow_up_skipped{message_id, reason: "no_mailbox"} /* actor "system": a chat reply was not emailed to the away visitor, contracts/teams.md "Chat follow-up" */
 // thread_started{thread_id, subject, to} thread_closed{thread_id, subject} thread_reopened{thread_id, subject} ("Threads"); note_edited{message_id} and note_deleted{message_id} record internal note changes without the note text; reply_retracted{message_id} records a chat reply taken back from the customer; message_deleted{message_id}, message_restored{message_id} and message_purged{message_id} record deletions of messages other than notes; note_sent_as_reply{message_id, reply_id} records a note sent as the reply written from it
 // field_changed{key, name, from, to} (one per custom field; from/to are FieldValue | null)
 // call{CallData} (actor "system", contracts/phone.md "Timeline"): one per phone call, updated in place as the call moves on (activity.updated)
@@ -614,6 +614,7 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 | GET | `/v1/tickets/{id}/draft` | viewer → `{draft: Draft \| null}` ("Drafts") |
 | PUT | `/v1/tickets/{id}/draft` | agent (`tickets:write`). `{body_html}` → `Draft`; replaces the ticket's draft. Sanitized like a reply, `422` when empty |
 | DELETE | `/v1/tickets/{id}/draft` | agent (`tickets:write`) → 204; idempotent |
+| GET | `/v1/tickets/{id}/visitor-presence` | viewer (`tickets:read`) → `{chat, present, last_seen_at, away_after_seconds, email_follow_up}`. Whether a chat's visitor is on the page, by the chat follow-up's own signal (contracts/teams.md "Chat follow-up"): `present` while one of their widget sessions made a request within `away_after_seconds` (120); `email_follow_up` when an agent's reply would also be emailed while they are away (the widget's `email_follow_up` on, an email known, not blocked). `chat: false` (the rest empty) for a ticket that is not a chat with a contact. Agents on the ticket get `"customer_presence"` when the visitor comes back (contracts/realtime.md "Live events"); going away sends nothing, so read it again after `last_seen_at + away_after_seconds`. A ticket the caller cannot see is `404` |
 | GET | `/v1/tickets/{id}/reply-draft` | agent, signed-in member → `{draft: ReplyDraft \| null}`: the caller's own unsent reply on the ticket ("Reply drafts") |
 | PUT | `/v1/tickets/{id}/reply-draft` | agent (`tickets:write`), signed-in member. `{body_html, attachment_ids?}` → `{draft}`; saves the caller's own reply, replacing the one before. Sanitized like a reply; `attachment_ids` are the caller's uploads not on a message yet (`422` otherwise). No text, image or file discards it (`{draft: null}`). A hidden ticket is `404`; an API key is `403` |
 | DELETE | `/v1/tickets/{id}/reply-draft` | agent (`tickets:write`), signed-in member → 204; idempotent |
@@ -624,12 +625,12 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 | POST | `/v1/tickets/{id}/threads/{threadId}/messages` | `{body_html, attachment_ids?}` → 201 `Message` |
 | PATCH | `/v1/tickets/{id}/threads/{threadId}` | `{status: "open"\|"closed"}` → `Thread` |
 | GET | `/v1/messages/{id}/original` | → `{full_html}`: an inbound email in full (with its quoted history); for an email we sent (a reply, a side conversation's message), the copy kept when it went out: the layout, the reply, the signature and the quoted conversation, sanitized like every stored email, its inline images pointing at their attachments. A copy too large to keep (over 1 MB) is not kept. The kept copies of emails sent after a reply are dropped when that reply is deleted or purged (`message.updated`), since their quoted conversation may hold it; the body when there is none |
-| CRUD | `/v1/contacts`, `/v1/contacts/{id}` | list supports `q`, `company_id`, `tag`, `field.<key>`. Write bodies also take `tags?: string[]` (replaces), `add_tags?`, `remove_tags?` (names, as for tickets) and `fields?` (merged; null clears) |
+| CRUD | `/v1/contacts`, `/v1/contacts/{id}` | list supports `q`, `company_id`, `tag`, `blocked` (`true`/`false`), `field.<key>` and `sort` (`-created` newest first, the default; `created`, `name`, `-name`, `-tickets`, `tickets`; a requested sort pages by position, the default by key). Write bodies also take `tags?: string[]` (replaces), `add_tags?`, `remove_tags?` (names, as for tickets) and `fields?` (merged; null clears) |
 | GET | `/v1/contacts/{id}/tickets` | list |
 | POST | `/v1/contacts/{id}/emails` | agent (`contacts:write`). `{email}` → `201 Contact`: gives the contact an extra address ("Contact emails"). An address that belongs to any contact in the workspace, primary or extra, this contact's included, is `409`; at most 20 extras (`422`) |
 | DELETE | `/v1/contacts/{id}/emails/{email}` | agent (`contacts:write`) → `Contact`; takes an extra address off (`404` when it is not one; the primary is changed with `PATCH`) |
 | POST | `/v1/contacts/{id}/emails/{email}/make-primary` | agent (`contacts:write`) → `Contact`; swaps an extra address with the primary (`404` when it is not an extra). Customer-portal credentials end, as for any change of `email` |
-| CRUD | `/v1/companies`, `/v1/companies/{id}` | list supports `q`, `tag`, `field.<key>`; write bodies take `external_id?` (`null` clears it; taken by another company: `409`), `tags?`, `add_tags?`, `remove_tags?`, `fields?` as contacts |
+| CRUD | `/v1/companies`, `/v1/companies/{id}` | list supports `q`, `tag`, `field.<key>` and `sort` (`name` A to Z, the default; `-name`, `created`, `-created`, `contacts`, `-contacts`); write bodies take `external_id?` (`null` clears it; taken by another company: `409`), `tags?`, `add_tags?`, `remove_tags?`, `fields?` as contacts |
 | PUT/DELETE | `/v1/contacts/{id}/avatar`, `/v1/companies/{id}/avatar` | agent (`contacts:write`). PUT multipart `file` (image, 5 MB) → `Contact` / `Company` with `avatar_source: "upload"`, which automatic sources never replace. DELETE removes it and looks up the automatic sources again. Audit `contact.avatar_updated` / `company.avatar_updated` (and `_removed`); publishes `contact.updated` / `company.updated` |
 | POST | `/v1/contacts/{id}/avatar/refresh`, `/v1/companies/{id}/avatar/refresh` | agent → 202. Looks the automatic sources up again now (no effect on an upload) |
 | GET | `/v1/tags` | `?q=&group_id=<uuid\|none>&archived=true\|false\|any` (default `any`) `&applies_to=tickets\|contacts\|companies` → `{data: Tag[], next_cursor: null}` (all of them, ordered by group position, then position, then name) |
@@ -1044,15 +1045,17 @@ Responses are `Cache-Control: no-store`.
 
 ```ts
 type CustomerTicket = { id: string; number: number; subject: string; status: TicketStatus; created_at: string; updated_at: string };
-type CustomerMessage = { id: string; direction: "inbound" | "outbound"; body_text: string; created_at: string };
+type CustomerAttachment = { id: string; filename: string; content_type: string; size_bytes: number; url: string /* signed, 1 to 2 hours */ };
+type CustomerMessage = { id: string; direction: "inbound" | "outbound"; body_text: string; created_at: string; attachments: CustomerAttachment[] };
 ```
 
 | method | path | notes |
 | --- | --- | --- |
 | GET | `/v1/customer/portal/tickets` | `{data: CustomerTicket[], next_cursor: string \| null}`; `limit` defaults to 50, range 1..100. Ordered by `updated_at DESC, id DESC`; pass `next_cursor` as `cursor` for the next page |
-| POST | `/v1/customer/portal/tickets` | `{workspace_slug, subject /* 1..200 */, body /* 1..10000, plain text */}` → `201 CustomerTicket`. Opens a ticket on the portal channel for the signed-in customer, on the brand `workspace_slug` names, routed like any ticket; 10 an hour per customer (`429`). See [Customer portal](customer-portal.md#starting-a-request) |
+| POST | `/v1/customer/portal/attachments` | multipart `file` (at most 10 MB) → `201` attachment `{id, filename, content_type, size_bytes, url}`. The customer's own unsent upload, attachable once to a new request (`attachment_ids`); 30 an hour. See [Customer portal](customer-portal.md#files) |
+| POST | `/v1/customer/portal/tickets` | `{workspace_slug, subject /* 1..200 */, body /* 1..10000, plain text */, attachment_ids? /* at most 5 */}` → `201 CustomerTicket`. Opens a ticket on the portal channel for the signed-in customer, on the brand `workspace_slug` names, routed like any ticket; 10 an hour per customer (`429`). See [Customer portal](customer-portal.md#starting-a-request) |
 | GET | `/v1/customer/portal/tickets/{id}` | `CustomerTicket` |
-| GET | `/v1/customer/portal/tickets/{id}/messages` | `{data: CustomerMessage[], next_cursor: string \| null}`; same bounded `limit` and `cursor`, ordered chronologically by `created_at ASC, id ASC`. Only public replies, with text only; notes, side threads, removed/purged/retracted messages and failed sender-check messages are omitted |
+| GET | `/v1/customer/portal/tickets/{id}/messages` | `{data: CustomerMessage[], next_cursor: string \| null}`; same bounded `limit` and `cursor`, ordered chronologically by `created_at ASC, id ASC`. Only public replies, with their text and files; notes, side threads, removed/purged/retracted messages and failed sender-check messages are omitted |
 | POST | `/v1/customer/portal/tickets/{id}/messages` | `{body: string}` (1..10000 characters; whitespace-only refused) → `201 CustomerMessage`. Plain text is trimmed and safely converted to HTML for storage. Written as an inbound contact reply through the normal message transaction, ticket events and `customer_replied` trigger. Pending, on-hold and solved tickets reopen; closed tickets stay closed (closed is final for the customer; a team member reopens one by its status, or by merging an open ticket into it, `POST /v1/tickets/{id}/merge`) |
 
 The customer shapes expose no internal ticket fields, agent identities, HTML, email headers,
@@ -1359,3 +1362,28 @@ defined in `contracts/support-channels.md`.
 
 ### System
 `GET /healthz` (liveness), `GET /readyz` (db + nats), `GET /v1/openapi.json`, `GET /docs` (API reference UI).
+
+### Customer portal OIDC settings
+
+`POST /v1/brands` and `PATCH /v1/brands/{id}` accept optional `portal_auth`:
+`{mode: "local" | "oidc" | "local_and_oidc", issuer?: string, client_id?: string,
+client_secret?: string}`. Settings writes require admin and `settings:write` for API
+keys. OIDC writes require issuer and client ID, and a secret on first configuration or
+when either changes. An omitted secret preserves the existing secret for the same
+issuer/client ID. Empty secrets are refused. `local` accepts no provider fields and
+clears saved provider settings. Brand responses include `portal_auth: {mode}` only.
+
+`GET /v1/brands/{id}/portal/auth` requires admin (`settings:read` for API keys), and
+returns `{mode, issuer, client_id, secret_configured}`. No operation returns the secret.
+Discovery is limited to 10 seconds and 1 MiB, uses HTTPS public endpoints and refuses
+redirects. Invalid or unsafe metadata/configuration returns `422 invalid_oidc_config`;
+a missing replacement secret returns `422 oidc_secret_required`.
+
+`POST /v1/brands/{id}/portal/relink-authorizations` requires a recently signed-in admin
+user with MFA if enabled (API keys are refused). Body: `{contact_id}`. Returns `201`
+`{id, brand_id, contact_id, expires_at}`. Permission expires in 15 minutes, replaces
+any prior unused authorization for this brand/contact, and is consumed once by a
+verified OIDC relink. It does not carry a token. An old or insufficient sign-in returns
+`403 reauth_required`; foreign brands/contacts are refused and blocked contacts return
+`422 validation_failed`. Settings and relink actions are audited with actor and target;
+`brand.portal_auth_updated` events contain only `brand_id` and go to admins.

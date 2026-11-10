@@ -3,6 +3,7 @@ package contacts
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +40,14 @@ type contactWriteBody struct {
 }
 
 type contactOut struct{ Body domain.Contact }
+
+// contactOrders are the sorts a list can ask for, by their `sort` value.
+var contactOrders = map[string]string{
+	"-created": "ct.created_at", "created": "ct.created_at",
+	"name": "lower(ct.name)", "-name": "lower(ct.name)",
+	"tickets":  "(SELECT count(*) FROM tickets tk WHERE tk.contact_id = ct.id AND tk.deleted_at IS NULL)",
+	"-tickets": "(SELECT count(*) FROM tickets tk WHERE tk.contact_id = ct.id AND tk.deleted_at IS NULL)",
+}
 
 type contactCursor struct {
 	T  time.Time `json:"t"`
@@ -175,8 +184,21 @@ func registerContacts(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, err
 			}
+			switch in.Blocked {
+			case "true":
+				extra += " AND ct.blocked"
+			case "false":
+				extra += " AND NOT ct.blocked"
+			}
+			// A requested sort pages by position; the default (newest first) keeps its keyset.
+			order := listOrder(in.Sort, contactOrders, "ct.id")
 			var cur contactCursor
-			if err := httpx.DecodeCursor(in.Cursor, &cur); err != nil {
+			var offset offsetCursor
+			if order != "" {
+				if err := httpx.DecodeCursor(in.Cursor, &offset); err != nil {
+					return nil, err
+				}
+			} else if err := httpx.DecodeCursor(in.Cursor, &cur); err != nil {
 				return nil, err
 			}
 			var companyID *uuid.UUID
@@ -188,16 +210,19 @@ func registerContacts(d *deps.Deps, api huma.API) {
 				companyID = &id
 			}
 			var curT *time.Time
-			if in.Cursor != "" {
+			if in.Cursor != "" && order == "" {
 				curT = &cur.T
+			}
+			tail := " ORDER BY ct.created_at DESC, ct.id DESC LIMIT $7"
+			if order != "" {
+				tail = " ORDER BY " + order + " LIMIT $7 OFFSET " + strconv.Itoa(max(offset.O, 0))
 			}
 			q := strings.TrimSpace(in.Q)
 			rows, err := d.DB.Pool.Query(ctx, domain.ContactSelect+` WHERE ct.workspace_id = $1
 				AND ($2 = '' OR ct.search @@ websearch_to_tsquery('simple', $2) OR ct.fields_search @@ websearch_to_tsquery('simple', $2)
 					OR ct.email::text ILIKE $3 OR ct.name ILIKE $3 OR `+domain.ExtraEmailLikeSQL("lower($3)")+`)
 				AND ($4::uuid IS NULL OR ct.company_id = $4)
-				AND ($5::timestamptz IS NULL OR (ct.created_at, ct.id) < ($5, $6))`+extra+`
-				ORDER BY ct.created_at DESC, ct.id DESC LIMIT $7`,
+				AND ($5::timestamptz IS NULL OR (ct.created_at, ct.id) < ($5, $6))`+extra+tail,
 				append([]any{p.WorkspaceID, q, likePrefix(q), companyID, curT, cur.ID, in.Limit + 1}, args...)...)
 			if err != nil {
 				return nil, httpx.Wrap(err)
@@ -206,7 +231,12 @@ func registerContacts(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			page := httpx.NewPage(list, in.Limit, func(c domain.Contact) any { return contactCursor{T: c.CreatedAt, ID: c.ID} })
+			page := httpx.NewPage(list, in.Limit, func(c domain.Contact) any {
+				if order != "" {
+					return offsetCursor{O: offset.O + in.Limit}
+				}
+				return contactCursor{T: c.CreatedAt, ID: c.ID}
+			})
 			return &struct{ Body httpx.Page[domain.Contact] }{page}, nil
 		})
 

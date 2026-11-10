@@ -28,6 +28,7 @@ import { variableText } from "./composerTemplates";
 import { ReplySignature } from "./ReplySignature";
 import { ReplyPreview } from "./ReplyPreview";
 import { SendButton } from "./SendButton";
+import { ChatReplyLine } from "./ChatReplyLine";
 import { statusLabel } from "../bits";
 import { useDisplay } from "../fields";
 import { useTicketViewers } from "../presence";
@@ -39,7 +40,8 @@ import { useReplyDraftSync } from "./replyDraft";
 import { backToNote, deliver, hold, undoSeconds as undoSecondsFor, useUnsent, type Upload } from "./outbox";
 import { EmailChips, SavedReplyButton, UploadChip, uploadFiles } from "./composerParts";
 import { mergeReplyActions, ReplyActionChips, replyActionLabels } from "./ReplyActions";
-import { addressLabel, fromLine, replyAddresses, TeamDot, useTeamsCtx, type TeamsCtx } from "../teams";
+import { NoFollowUpSender } from "./NoFollowUpSender";
+import { addressLabel, followUpMailbox, fromLine, replyAddresses, TeamDot, useTeamsCtx, type TeamsCtx } from "../teams";
 import { AccountDot } from "@/components/collab/bits";
 import { conversationMaxWidth, useConversationWidth } from "@/lib/conversationWidth";
 import { identitySignature } from "@/lib/collab/identities";
@@ -238,9 +240,13 @@ export const Composer = forwardRef<
   const viewers = useTicketViewers(ticket.id);
   const others = viewers.filter((v) => v.state === "replying");
 
+  // The address a reply goes out from: the one picked, else the ticket's. A chat's is emailed only from
+  // an address that can still send, as the follow-up picks it, and none when the brand has no such address.
+  const replyMailboxId = draft.mailboxId ?? (ticket.channel === "chat" ? (followUpMailbox(teams, ticket)?.id ?? null) : ticket.mailbox_id);
+
   // Variables in replies: "{{" offers them with this ticket's values, from the address the reply goes out from.
   const catalog = useCatalog("reply");
-  const { data: vars } = useQuery({ ...q.ticketVariables(ticket.id, draft.mailboxId ?? ticket.mailbox_id), enabled: mode === "reply" });
+  const { data: vars } = useQuery({ ...q.ticketVariables(ticket.id, replyMailboxId), enabled: mode === "reply" });
   const varItems: VarItem[] = catalog.variables.map((v) => {
     const value = vars?.values[v.key];
     return { key: v.key, label: v.label, group: templateGroupLabel(v.group), value: vars ? (v.html && value ? t("composer.valueSet") : (value ?? "")) : undefined };
@@ -596,7 +602,6 @@ export const Composer = forwardRef<
   const threadMode = mode === "thread";
   const recipient = ticket.contact?.email ?? ticket.contact?.name ?? t("composer.theCustomer");
   // An email reply: from one of my own addresses, or from a team address.
-  const replyMailboxId = draft.mailboxId ?? ticket.mailbox_id;
   const replyMailbox = teams.mailbox(replyMailboxId);
   const emailReply = mode === "reply" && (!!personalSender || (!!replyMailbox && (ticket.channel === "email" || !!ticket.mailbox_id)));
   // The signature it carries, filled by the server: the team's, else the address's, else mine; from my own address, that address's.
@@ -798,6 +803,8 @@ export const Composer = forwardRef<
               ) : (
                 <span className="min-w-0 flex-1 truncate text-xs text-fg-3">{t("composer.threadHint")}</span>
               )
+            ) : ticket.channel === "chat" ? (
+              <ChatReplyLine ticket={ticket} />
             ) : (
               <span className="min-w-0 flex-1 truncate text-xs text-fg-3">
                 {t("composer.to")} <span className="mono text-fg-2" data-ph-mask>{recipient}</span>
@@ -850,7 +857,7 @@ export const Composer = forwardRef<
             <ReplyingAs
               ticket={ticket}
               ctx={teams}
-              mailboxId={draft.mailboxId ?? ticket.mailbox_id}
+              mailboxId={replyMailboxId}
               chosen={!personalSender && !!draft.mailboxId && draft.mailboxId !== ticket.mailbox_id}
               onChange={(id) => setDraft({ mailboxId: id === ticket.mailbox_id ? undefined : id, fromAccount: personal.sticky ? null : undefined })}
               senders={personal.senders}
@@ -859,6 +866,7 @@ export const Composer = forwardRef<
               onPersonal={(f) => setDraft({ fromAccount: f, mailboxId: undefined })}
             />
           )}
+          {mode === "reply" && !replyMailboxId && <NoFollowUpSender ticket={ticket} ctx={teams} />}
           <div ref={writingArea}>
             <RichEditor
               ref={editor}

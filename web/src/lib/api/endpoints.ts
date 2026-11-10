@@ -96,8 +96,10 @@ function bulkQuery(q: TicketBulkQuery) {
 	return { ...q, spam: q.spam === true ? "true" : q.spam === false ? "false" : q.spam, merged: q.merged === true ? "true" : q.merged === false ? "false" : q.merged };
 }
 
-export type ContactListQuery = ListQuery & { q?: string; company_id?: string; tag?: string; fields?: T.FieldFilter[] };
-export type CompanyListQuery = ListQuery & { q?: string; tag?: string; fields?: T.FieldFilter[] };
+export type ContactSort = "-created" | "created" | "name" | "-name" | "-tickets" | "tickets";
+export type CompanySort = "name" | "-name" | "created" | "-created" | "contacts" | "-contacts";
+export type ContactListQuery = ListQuery & { q?: string; company_id?: string; tag?: string; blocked?: "true" | "false"; sort?: ContactSort; fields?: T.FieldFilter[] };
+export type CompanyListQuery = ListQuery & { q?: string; tag?: string; sort?: CompanySort; fields?: T.FieldFilter[] };
 
 /** Labels and custom fields on contact and company writes. */
 type LabelWrites = { tags?: string[]; add_tags?: string[]; remove_tags?: string[]; fields?: T.FieldValuesPatch };

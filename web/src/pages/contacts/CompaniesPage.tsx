@@ -12,6 +12,7 @@ import { Field, SearchInput, TextInput } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { DirectoryFilters } from "@/components/contacts/DirectoryFilters";
 import { DirectoryNav } from "@/components/contacts/DirectoryNav";
 import { CompanyDrawer } from "@/components/contacts/CompanyDrawer";
 import { CompanyGlyph, Labels, labelsOf } from "@/components/contacts/bits";
@@ -45,15 +46,15 @@ export default function CompaniesPage() {
 
   useEffect(() => {
     if ((debounced || undefined) === search.q) return;
-    void navigate({ search: (s) => ({ ...s, q: debounced || undefined }), replace: true });
-  }, [debounced, search.q, navigate]);
+    void navigate({ search: { ...search, q: debounced || undefined }, replace: true });
+  }, [debounced, search, navigate]);
 
-  const list = useInfiniteQuery(q.companies({ q: search.q }));
+  const list = useInfiniteQuery(q.companies({ q: search.q, tag: search.tag, sort: search.sort }));
   const rows = list.data?.pages.flatMap((p) => p.data) ?? [];
   const sentinel = useSentinel(() => {
     if (list.hasNextPage && !list.isFetchingNextPage) void list.fetchNextPage();
   }, !!list.hasNextPage);
-  const open = (id: string | undefined) => navigate({ to: "/companies/{-$companyId}", params: { companyId: id }, search: (s) => s });
+  const open = (id: string | undefined) => navigate({ to: "/companies/{-$companyId}", params: { companyId: id }, search });
 
   // People and ticket totals per company, from the directory's first page of contacts.
   // Ticket totals only show when every contact is loaded, so they are never partial.
@@ -89,9 +90,17 @@ export default function CompaniesPage() {
       </PageHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <DirectoryFilters
+          scope="companies"
+          tag={search.tag}
+          onTag={(tag) => void navigate({ search: { ...search, tag } })}
+          sort={search.sort}
+          onSort={(sort) => void navigate({ search: { ...search, sort } })}
+        />
+
         {!list.isLoading && rows.length > 0 && (
           <StatStrip>
-            <Stat label={t("stat.companies")} value={<><AnimatedNumber value={rows.length} />{list.hasNextPage ? "+" : ""}</>} sub={search.q ? t("stat.matching") : t("stat.inDirectory")} />
+            <Stat label={t("stat.companies")} value={<><AnimatedNumber value={rows.length} />{list.hasNextPage ? "+" : ""}</>} sub={search.q || search.tag ? t("stat.matching") : t("stat.inDirectory")} />
             <Stat label={t("stat.linkedPeople")} value={<AnimatedNumber value={linked} />} sub={t("stat.linkedHint")} />
             <Stat label={t("stat.withDomain")} value={<AnimatedNumber value={withDomain} />} sub={t("stat.withDomainHint")} />
             <Stat
@@ -116,13 +125,22 @@ export default function CompaniesPage() {
         ) : list.error ? (
           <EmptyState lit={3} title={t("error.companiesTitle")} description={errorMessage(list.error)} action={<Button onClick={() => void list.refetch()}>{t("retry")}</Button>} />
         ) : rows.length === 0 ? (
-          search.q ? (
+          search.q || search.tag ? (
             <EmptyState
               art="search"
               ghost={<GhostList variant="table" />}
               title={t("empty.noCompanyMatch")}
-              description={t("empty.noMatchFor", { q: search.q })}
-              action={<Button onClick={() => setTerm("")}>{t("clearSearch")}</Button>}
+              description={search.q ? t("empty.noMatchFor", { q: search.q }) : t("empty.noMatchHint")}
+              action={
+                <Button
+                  onClick={() => {
+                    setTerm("");
+                    void navigate({ search: { ...search, q: undefined, tag: undefined } });
+                  }}
+                >
+                  {search.tag ? t("clearFilters") : t("clearSearch")}
+                </Button>
+              }
               tips={[{ label: t("tips.spelling") }, { label: t("tips.tryDomain") }]}
             />
           ) : (
@@ -146,7 +164,7 @@ export default function CompaniesPage() {
                     <Link
                       to="/companies/{-$companyId}"
                       params={{ companyId: c.id }}
-                      search={(s) => s}
+                      search={search}
                       data-active={companyId === c.id || undefined}
                       className={`${cols} h-11 border-b border-line-soft px-4 text-[13px] transition-colors duration-100 hover:bg-sunken data-[active]:bg-hover md:px-5`}
                     >

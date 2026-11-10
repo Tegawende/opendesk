@@ -120,7 +120,15 @@
       "subject": "Konu",
       "message": "Size nasıl yardımcı olabiliriz?",
       "send": "Talebi gönder",
-      "limit": "Art arda birkaç talep gönderdiniz. Bir süre bekleyip tekrar deneyin."
-    }
+      "limit": "Art arda birkaç talep gönderdiniz. Bir süre bekleyip tekrar deneyin.",
+      "attach": "Dosya seç",
+      "drop": "Dosyaları buraya bırakın veya bir ekran görüntüsü yapıştırın.",
+      "remove": "{{name}} dosyasını kaldır",
+      "too_big": "{{name}} 10 MB sınırını aşıyor.",
+      "max_files": "En fazla 5 dosya ekleyebilirsiniz.",
+      "upload_failed": "{{name}} yüklenemedi.",
+      "uploading": "Yükleniyor…"
+    },
+    "attachments": "Ekler"
   }
 }

@@ -569,6 +569,8 @@ export type ActivityType =
   | "tagged"
   | "untagged"
   | "sla_breached"
+  /** data: {message_id, reason: "no_mailbox"}. A chat reply was not emailed to the visitor who left. */
+  | "follow_up_skipped"
   | "merged"
   | "csat_received"
   /** data: {key, name, from, to} with FieldValue | null values. */

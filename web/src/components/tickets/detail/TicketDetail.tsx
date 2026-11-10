@@ -50,6 +50,7 @@ import { PrintDialog } from "./PrintDialog";
 import { TicketTeamChips, useTeamsCtx } from "../teams";
 import { SnoozeMenu } from "./SnoozeMenu";
 import { readPanel, savePanel } from "./panel";
+import { useVisitorPresence, VisitorPresenceBar } from "./VisitorPresence";
 
 const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
@@ -484,6 +485,7 @@ export default function TicketDetail({
           </div>
         ))}
 
+      {t?.channel === "chat" && <ChatPresence ticket={t} />}
       <div ref={rowRef} className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <Timeline
@@ -620,4 +622,9 @@ function HeaderSeverity({ t }: { t: Ticket }) {
       </span>
     </Tooltip>
   );
+}
+
+/** Whether a chat's visitor is on the page, above the conversation. */
+function ChatPresence({ ticket }: { ticket: Ticket }) {
+  return <VisitorPresenceBar p={useVisitorPresence(ticket)} />;
 }

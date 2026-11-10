@@ -1,6 +1,7 @@
 package customerportal
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/url"
 	"strings"
@@ -168,7 +169,7 @@ func TestPortalPublicMessages(t *testing.T) {
 	// A tie in creation time still has a stable ID order.
 	e.Exec(`UPDATE messages SET created_at='2026-01-01T12:00:00Z' WHERE id=ANY($1)`, []uuid.UUID{first.ID, second.ID})
 	rows, next := pageRows(t, e.Do("GET", path+"?limit=1", customer, nil))
-	if len(rows) != 1 || rows[0]["id"] != first.ID.String() || len(rows[0]) != 4 || next == nil {
+	if len(rows) != 1 || rows[0]["id"] != first.ID.String() || len(rows[0]) != 5 || next == nil {
 		t.Fatalf("first message page: %+v", rows)
 	}
 	rows, next = pageRows(t, e.Do("GET", path+"?limit=1&cursor="+url.QueryEscape(*next), customer, nil))
@@ -176,7 +177,7 @@ func TestPortalPublicMessages(t *testing.T) {
 		t.Fatalf("public message page: %+v", rows)
 	}
 	r := e.Do("GET", path, customer, nil).Want(t, 200)
-	for _, hidden := range []string{"Private", "Failed sender", "Deleted reply", "Purged reply", "Retracted marker", "body_html", "author_user_id", "from_email", "attachment", "thread_id"} {
+	for _, hidden := range []string{"Private", "Failed sender", "Deleted reply", "Purged reply", "Retracted marker", "body_html", "author_user_id", "from_email", "storage_key", "uploaded_by", "thread_id"} {
 		if strings.Contains(string(r.Body), hidden) {
 			t.Fatalf("hidden message data %q: %s", hidden, r.Body)
 		}
@@ -194,7 +195,7 @@ func TestPortalReply(t *testing.T) {
 			r := e.Do("POST", portalTickets+"/"+tk.ID.String()+"/messages", customer, map[string]any{"body": text}).Want(t, 201)
 			m := r.Map(t)
 			delete(m, "$schema")
-			if len(m) != 4 || m["body_text"] != text || m["direction"] != "inbound" {
+			if len(m) != 5 || m["body_text"] != text || m["direction"] != "inbound" {
 				t.Fatalf("reply DTO: %s", r.Body)
 			}
 			var author, kind, direction, html, delivery string
@@ -377,4 +378,98 @@ func TestPortalCreateTicketIsRateLimited(t *testing.T) {
 	if n != newRequestsPerHour {
 		t.Fatalf("%d tickets", n)
 	}
+}
+
+const portalUploads = "/v1/customer/portal/attachments"
+
+func TestPortalRequestWithFiles(t *testing.T) {
+	e, ws, cid, customer := ticketSession(t)
+	var shot domain.Attachment
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 64)...)
+	e.Upload(portalUploads, customer, "screenshot.png", png).Want(t, 201).JSON(t, &shot)
+	if shot.Filename != "screenshot.png" || shot.ContentType != "image/png" || shot.SizeBytes != int64(len(png)) || shot.URL == "" {
+		t.Fatalf("upload %+v", shot)
+	}
+	var notes domain.Attachment
+	e.Upload(portalUploads, customer, "notes.txt", []byte("what I did")).Want(t, 201).JSON(t, &notes)
+	var uploader string
+	e.Scalar(`SELECT uploaded_by_contact_id::text FROM attachments WHERE id=$1`, &uploader, shot.ID)
+	if uploader != cid.String() {
+		t.Fatalf("uploaded by %s", uploader)
+	}
+
+	// Sent with the request, the files belong to the first message and the customer reads them back.
+	var out map[string]any
+	e.Do("POST", portalTickets, customer, map[string]any{"workspace_slug": ws.Slug, "subject": "Broken page", "body": "See the screenshot",
+		"attachment_ids": []string{shot.ID.String(), notes.ID.String()}}).Want(t, 201).JSON(t, &out)
+	id := out["id"].(string)
+	msgs, _ := pageRows(t, e.Do("GET", portalTickets+"/"+id+"/messages", customer, nil))
+	files, _ := msgs[0]["attachments"].([]any)
+	if len(msgs) != 1 || len(files) != 2 {
+		t.Fatalf("messages %v", msgs)
+	}
+	first := files[0].(map[string]any)
+	u, err := url.Parse(first["url"].(string))
+	if err != nil || first["filename"] != "screenshot.png" || first["content_type"] != "image/png" ||
+		!domain.VerifyAttachmentSig(shot.ID, u.Query().Get("exp"), u.Query().Get("sig"), false) {
+		t.Fatalf("attachment %v", first)
+	}
+	// A reply has none, and says so with an empty list, not null.
+	var reply map[string]any
+	e.Do("POST", portalTickets+"/"+id+"/messages", customer, map[string]any{"body": "Thanks"}).Want(t, 201).JSON(t, &reply)
+	if a, ok := reply["attachments"].([]any); !ok || len(a) != 0 {
+		t.Fatalf("reply attachments %v", reply["attachments"])
+	}
+	// A request without files still lists an empty array.
+	e.Do("POST", portalTickets, customer, map[string]any{"workspace_slug": ws.Slug, "subject": "Plain", "body": "x"}).Want(t, 201).JSON(t, &out)
+	msgs, _ = pageRows(t, e.Do("GET", portalTickets+"/"+out["id"].(string)+"/messages", customer, nil))
+	if a, ok := msgs[0]["attachments"].([]any); !ok || len(a) != 0 {
+		t.Fatalf("plain attachments %v", msgs[0]["attachments"])
+	}
+	// A file belongs to one message: the same id cannot go on a second request.
+	e.Do("POST", portalTickets, customer, map[string]any{"workspace_slug": ws.Slug, "subject": "Again", "body": "x", "attachment_ids": []string{shot.ID.String()}}).Want(t, 422)
+}
+
+func TestPortalUploadRefusals(t *testing.T) {
+	e, ws, _, customer := ticketSession(t)
+	// Signed out, or a member's token.
+	e.Upload(portalUploads, hdtest.Auth{}, "a.txt", []byte("x")).Want(t, 401)
+	e.Upload(portalUploads, ws.Agent.As(ws), "a.txt", []byte("x")).Want(t, 401)
+	// Programs and scripts, an empty file and one over 10 MB.
+	e.Upload(portalUploads, customer, "run.exe", []byte("MZ\x90\x00 program")).Want(t, 422)
+	e.Upload(portalUploads, customer, "setup.sh", []byte("#!/bin/sh\nrm -rf /\n")).Want(t, 422)
+	e.Upload(portalUploads, customer, "empty.txt", nil).Want(t, 422)
+	e.Upload(portalUploads, customer, "big.txt", bytes.Repeat([]byte("a"), 10<<20+1)).Want(t, 413)
+	var n int
+	e.Scalar(`SELECT count(*) FROM attachments WHERE workspace_id=$1`, &n, ws.ID)
+	if n != 0 {
+		t.Fatalf("a refused upload left %d files", n)
+	}
+
+	// Only the uploader may attach a file: another customer's, a member's, and one that does not exist.
+	var mine domain.Attachment
+	e.Upload(portalUploads, customer, "mine.txt", []byte("mine")).Want(t, 201).JSON(t, &mine)
+	theirs, theirFile := ids.New(), ids.New()
+	e.Exec(`INSERT INTO contacts (id, workspace_id, name, email) VALUES ($1, $2, 'Other', 'other@example.com')`, theirs, ws.ID)
+	e.Exec(`INSERT INTO attachments (id, workspace_id, filename, content_type, size_bytes, storage_key, uploaded_by_contact_id)
+		VALUES ($1, $2, 'theirs.txt', 'text/plain', 5, 'workspaces/x/attachments/theirs', $3)`, theirFile, ws.ID, theirs)
+	otherID := theirFile
+	post := func(att ...string) *hdtest.Resp {
+		return e.Do("POST", portalTickets, customer, map[string]any{"workspace_slug": ws.Slug, "subject": "x", "body": "x", "attachment_ids": att})
+	}
+	post(ids.New().String()).Want(t, 422)
+	post(otherID.String()).Want(t, 422)
+	// Over five files, and a malformed id.
+	six := make([]string, 6)
+	for i := range six {
+		six[i] = mine.ID.String()
+	}
+	post(six...).Want(t, 422)
+	post("not-an-id").Want(t, 422)
+	e.Scalar(`SELECT count(*) FROM tickets WHERE workspace_id=$1`, &n, ws.ID)
+	if n != 0 {
+		t.Fatalf("refused requests left %d tickets", n)
+	}
+	// The same upload goes through once the request is valid.
+	post(mine.ID.String()).Want(t, 201)
 }

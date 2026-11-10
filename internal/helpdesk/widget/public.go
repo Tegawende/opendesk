@@ -563,6 +563,7 @@ func (h *handler) session(ctx context.Context, in *widgetSessionInput) (*widgetS
 	if err != nil {
 		return nil, httpx.Wrap(err)
 	}
+	VisitorSeen(h.d)(ctx, wid, out.Body.Contact.ID)
 	return out, nil
 }
 

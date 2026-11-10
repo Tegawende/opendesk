@@ -107,6 +107,7 @@ view to its owner.
 | `wiki_comment.changed` | agents | the page's readers, like `wiki_page.*` (a private page's member: `private`, `user:<uid>`; a private team's page: `team:<wid>:<tid>`) | `{ "page_id", "thread_id" }`: a thread of the page changed; refetch its comments (`contracts/wiki.md` "Comments") |
 | `webhook.*` | agents | admins (`private`, `user:<uid>`) | `{ "webhook": Webhook }` / `{ "webhook_id" }` |
 | `brand.created` / `brand.updated` / `brand.deleted` | agents | — | `{ "brand": Brand }` / `{ "brand_id" }` |
+| `brand.portal_auth_updated` | agents | admins (`private`, `user:<uid>`) | `{ "brand_id" }`: the brand's customer portal sign-in settings changed; admins refetch `GET /v1/brands/{id}/portal/auth` (`contracts/customer-portal.md`; never the secret) |
 | `routing_rule.created` / `routing_rule.updated` / `routing_rule.deleted` | agents | — | `{ "routing_rule": RoutingRule }` / `{ "routing_rule_id" }` |
 | `skill.created` / `skill.updated` / `skill.members_updated` | agents, owner/admin recipients only | — | `{ "skill": { "id", "name", "archived", "member_ids" } }`; updated includes archive/restore, members_updated replaces the full set |
 | `widget.created` / `widget.updated` / `widget.deleted` | agents | — | `{ "widget": Widget }` / `{ "widget_id" }` |

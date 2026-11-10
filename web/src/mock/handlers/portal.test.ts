@@ -24,4 +24,28 @@ describe("mock customer portal", () => {
     expect((await call("POST", "/v1/customer/portal/tickets", { workspace_slug: slug, subject: " ", body: "x" })).status).toBe(422);
     expect((await call("POST", "/v1/customer/portal/tickets", { workspace_slug: "nope", subject: "x", body: "x" })).status).toBe(404);
   });
+
+  it("takes an uploaded file once, onto the request it starts", async () => {
+    const slug = db.workspaces[0].brands.find((b) => b.help_center.enabled)!.slug;
+    const ws = db.workspaces[0].workspace.id;
+    const upload = async (name: string, size = 12) => {
+      const form = new FormData();
+      form.append("file", new File([new Uint8Array(size)], name, { type: "image/png" }));
+      const r = await dispatch("http://mock/v1/customer/portal/attachments", { method: "POST", body: form, headers: { "OD-Workspace": ws } });
+      return { status: r.status, body: await r.json() };
+    };
+    const shot = await upload("shot.png");
+    expect(shot.status).toBe(201);
+    expect(shot.body).toMatchObject({ filename: "shot.png", content_type: "image/png", size_bytes: 12 });
+    expect((await upload("run.exe")).status).toBe(422);
+    expect((await upload("huge.png", 10 * 1024 * 1024 + 1)).status).toBe(413);
+
+    const made = await call("POST", "/v1/customer/portal/tickets", { workspace_slug: slug, subject: "With a file", body: "x", attachment_ids: [shot.body.id] });
+    expect(made.status).toBe(201);
+    const msgs = (await call("GET", `/v1/customer/portal/tickets/${made.body.id}/messages`)).body.data;
+    expect(msgs[0].attachments).toMatchObject([{ id: shot.body.id, filename: "shot.png" }]);
+    // The same file cannot go on a second request, and a made-up id is refused.
+    expect((await call("POST", "/v1/customer/portal/tickets", { workspace_slug: slug, subject: "Again", body: "x", attachment_ids: [shot.body.id] })).status).toBe(422);
+    expect((await call("POST", "/v1/customer/portal/tickets", { workspace_slug: slug, subject: "Six", body: "x", attachment_ids: Array(6).fill("x") })).status).toBe(422);
+  });
 });

@@ -124,7 +124,15 @@
       "subject": "Temat",
       "message": "W czym możemy pomóc?",
       "send": "Wyślij zgłoszenie",
-      "limit": "Wysłano kilka zgłoszeń z rzędu. Poczekaj chwilę i spróbuj ponownie."
-    }
+      "limit": "Wysłano kilka zgłoszeń z rzędu. Poczekaj chwilę i spróbuj ponownie.",
+      "attach": "Wybierz pliki",
+      "drop": "Upuść pliki tutaj lub wklej zrzut ekranu.",
+      "remove": "Usuń {{name}}",
+      "too_big": "{{name}} przekracza 10 MB.",
+      "max_files": "Możesz załączyć do 5 plików.",
+      "upload_failed": "Nie udało się przesłać pliku {{name}}.",
+      "uploading": "Przesyłanie…"
+    },
+    "attachments": "Załączniki"
   }
 }
