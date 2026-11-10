@@ -104,6 +104,7 @@ view to its owner.
 | `billing.updated`        | agents     | —                                     | `Billing` (`contracts/billing.md`): plan, status, seats, limits, usage, AI balance, prices. Sent on subscription changes, seat syncs, AI top-ups and recharges |
 | `saved_reply.*`, `view.*`, `automation.*`, `sla_policy.*`, `kb_article.*`, `kb_collection.*`, `changelog_entry.*`, `team.*` | agents | — (a personal `view.*`: its owner, `private`) | `{ "<resource>": Obj }` / `{ "<resource>_id" }` |
 | `wiki_page.created` / `wiki_page.updated` / `wiki_page.moved` / `wiki_page.deleted` | agents | — | `{ "wiki_page": WikiNode, "updated_by": UserRef \| null }` (no body: refetch the page) / `{ "wiki_page_id", "wiki_page_ids": [...] }` (the page and its subpages, all removed) (`contracts/wiki.md`) |
+| `wiki_comment.changed` | agents | the page's readers, like `wiki_page.*` (a private page's member: `private`, `user:<uid>`; a private team's page: `team:<wid>:<tid>`) | `{ "page_id", "thread_id" }`: a thread of the page changed; refetch its comments (`contracts/wiki.md` "Comments") |
 | `webhook.*` | agents | admins (`private`, `user:<uid>`) | `{ "webhook": Webhook }` / `{ "webhook_id" }` |
 | `brand.created` / `brand.updated` / `brand.deleted` | agents | — | `{ "brand": Brand }` / `{ "brand_id" }` |
 | `routing_rule.created` / `routing_rule.updated` / `routing_rule.deleted` | agents | — | `{ "routing_rule": RoutingRule }` / `{ "routing_rule_id" }` |
@@ -119,7 +120,7 @@ view to its owner.
 | `ticket_link.created` / `ticket_link.updated` / `ticket_link.deleted` | agents | — | `{ "ticket_id", "link": Link }` / `{ "ticket_id", "link": Link }` / `{ "ticket_id", "link_id" }` |
 | `ticket_panel.created` / `ticket_panel.updated` / `ticket_panel.deleted` | agents | — | `{ "panel": TicketPanel }` / `{ "panel_id" }` (`contracts/integrations.md` "Ticket panels"; never a token, a secret or a URL's path). Updated too when a lookup finds the credentials refused, or working again |
 | `import.created` / `import.updated` | agents | — | `{ "import": Import }` (`contracts/imports.md`; never credentials). `updated` on every state change and as it writes, at most once a second and after every page. Imported tickets, messages, contacts and articles publish no events of their own: refetch lists |
-| `collab.changed` / `collab.accounts` | agents | scoped to people | ids only (contracts/collab.md "Events") |
+| `collab.changed` / `collab.accounts` / `collab.sidebar` | agents | scoped to people | ids only (contracts/collab.md "Events") |
 | `chat.typing` (not stored; gateway only) | public | `contact:<wid>:<cid>` | `{ "ticket_id": "...", "user": {"id","name"} }` |
 
 Webhooks receive the envelope unchanged (minus `topics`); an event of a private team's ticket (`events.team_id`)
