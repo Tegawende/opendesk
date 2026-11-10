@@ -55,7 +55,8 @@ func (w *WidgetAnswerWorker) Work(ctx context.Context, job *river.Job[jobs.AIWid
 	err := w.S.WidgetAnswer(ctx, job.Args)
 	if err != nil && skippable(err) {
 		w.S.d.Log.Info("widget answer skipped", "ticket_id", job.Args.TicketID, "reason", errReason(err))
-		return nil
+		// The agent stays silent (no balance, the provider failing): the chat waits for the team.
+		return w.S.assignWaitingChat(ctx, job.Args.WorkspaceID, job.Args.TicketID)
 	}
 	return err
 }
@@ -490,7 +491,11 @@ func (s *Service) decline(ctx context.Context, wid, tid, mid uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	// A chat the capped bot leaves goes to a member who takes chats.
+	return s.assignWaitingChat(ctx, wid, tid)
+}
+
+// assignWaitingChat gives a chat the agent leaves unanswered to a member who takes chats.
+func (s *Service) assignWaitingChat(ctx context.Context, wid, tid uuid.UUID) error {
 	return s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
 		_, err := hd.AssignChat(ctx, tx, wid, tid)
 		return err

@@ -878,8 +878,8 @@ notification. With nothing to merge into, the other actions run as usual.
   and eligibility as above, plus the skill `settings.chat_assign_skill_id` (`chat_skill_id`) when set, together with the
   ticket's own required skills. When the answer bot takes chats (the instance has AI, `ai.enabled` and
   `ai.widget_answers`), a chat is not assigned before the bot hands over, since an assignee stops the bot: it is assigned
-  in `MarkAIHandoff` (the bot or the visitor asks for a person, or the bot's reply limit), or when the bot declines at its
-  monthly cap; else at `ticket_created`. With nobody eligible it stays unassigned (and the hand-over notifies as below),
+  in `MarkAIHandoff` (the bot or the visitor asks for a person, or the bot's reply limit), or when the bot stays silent
+  (its monthly cap, no AI balance, the provider failing); else at `ticket_created`. With nobody eligible it stays unassigned (and the hand-over notifies as below),
   and is tried again on the visitor's next message (`customer_replied`). A chat with an assignee keeps them. The
   `assigned` activity has actor `system`, `via` `chat` and `mode`; at a hand-over that assigned, only the assignee is
   notified (`assigned`, no `ai_handoff`). The web app shows an `assigned` notification whose `data.channel` is `chat`
