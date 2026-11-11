@@ -132,6 +132,7 @@ func TestTrash(t *testing.T) {
 	e.Do("POST", "/v1/tickets/"+a.ID.String()+"/restore", ws.Admin.As(ws), nil).Want(t, 404)
 	e.Do("POST", "/v1/tickets/"+live.ID.String()+"/restore", ws.Admin.As(ws), nil).Want(t, 404)
 	e.Do("POST", "/v1/tickets/"+c.ID.String()+"/restore", ws.Admin.As(ws), nil).Want(t, 409)
+	e.Do("POST", "/v1/tickets/nope/restore", ws.Admin.As(ws), nil).Want(t, 404)
 	other := e.NewWorkspace()
 	e.Do("POST", "/v1/tickets/"+b.ID.String()+"/restore", other.Admin.As(other), nil).Want(t, 404)
 	e.Do("GET", "/v1/tickets/deleted", ws.Admin.As(ws), nil).Want(t, 200).JSON(t, &page)

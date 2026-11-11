@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -192,12 +193,21 @@ func registerTrash(d *deps.Deps, api huma.API) {
 
 // deletedTicket finds a deleted ticket the caller may see, by uuid or number, locked for the restore.
 func deletedTicket(ctx context.Context, tx pgx.Tx, p *auth.Principal, ref string) (restoreTarget, error) {
-	ref = strings.TrimPrefix(strings.TrimSpace(ref), "#")
 	var r restoreTarget
+	ref = strings.TrimSpace(ref)
+	by, key := "id", any(nil)
+	if id, err := uuid.Parse(ref); err == nil {
+		key = id
+	} else if m := domain.TicketNumberRef.FindStringSubmatch(ref); m != nil {
+		n, _ := strconv.ParseInt(m[1], 10, 64)
+		by, key = "number", n
+	} else {
+		return r, httpx.NotFound("Deleted ticket")
+	}
 	var team, assignee, merged *uuid.UUID
 	var deleted bool
 	err := tx.QueryRow(ctx, `SELECT id, number, deleted_at IS NOT NULL, merged_into_id, team_id, assignee_id
-		FROM tickets WHERE workspace_id = $1 AND (id::text = $2 OR number::text = $2) FOR UPDATE`, p.WorkspaceID, ref).
+		FROM tickets WHERE workspace_id = $1 AND `+by+` = $2 FOR UPDATE`, p.WorkspaceID, key).
 		Scan(&r.ID, &r.Number, &deleted, &merged, &team, &assignee)
 	if db.IsNotFound(err) || (err == nil && !deleted) {
 		return r, httpx.NotFound("Deleted ticket")
