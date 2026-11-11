@@ -510,6 +510,8 @@
     "unsnoozed": "Snooze ended",
     "spam": "<b>{{who}}</b> marked this as spam",
     "unspam": "<b>{{who}}</b> moved this out of spam",
+    "ticketDeleted": "<b>{{who}}</b> deleted this ticket",
+    "ticketRestored": "<b>{{who}}</b> restored this ticket",
     "custom": "<b>{{who}}</b> updated custom fields",
     "customKeys": "<b>{{who}}</b> updated <m>{{keys}}</m>",
     "mergedInto": "<b>{{who}}</b> merged this into <m>#{{number}}</m>",

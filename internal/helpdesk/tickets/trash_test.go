@@ -23,6 +23,9 @@ func TestDeleteRecordsWho(t *testing.T) {
 	if n := countRows(t, e, `SELECT count(*) FROM tickets WHERE id = $1 AND deleted_by = $2 AND deleted_by_api_key_id IS NULL`, a.ID, ws.Agent.ID); n != 1 {
 		t.Fatal("deleted_by not the agent")
 	}
+	if n := countRows(t, e, `SELECT count(*) FROM activities WHERE ticket_id = $1 AND type = 'deleted' AND actor_user_id = $2`, a.ID, ws.Agent.ID); n != 1 {
+		t.Fatalf("deleted by the agent on the timeline %d", n)
+	}
 	key := e.APIKey(ws, "tickets:read", "tickets:write")
 	e.Do("POST", "/v1/tickets/bulk", hdtest.Auth{Bearer: key, Workspace: ws.ID}, map[string]any{"ids": []string{b.ID.String()}, "delete": true}).Want(t, 200)
 	if n := countRows(t, e, `SELECT count(*) FROM audit_logs WHERE entity_id = $1 AND action = 'ticket.deleted' AND actor_api_key_id IS NOT NULL`, b.ID); n != 1 {

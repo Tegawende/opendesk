@@ -530,6 +530,8 @@
     "unsnoozed": "Mise en attente terminée",
     "spam": "<b>{{who}}</b> a marqué ce ticket comme indésirable",
     "unspam": "<b>{{who}}</b> a retiré ce ticket des indésirables",
+    "ticketDeleted": "<b>{{who}}</b> a supprimé ce ticket",
+    "ticketRestored": "<b>{{who}}</b> a restauré ce ticket",
     "custom": "<b>{{who}}</b> a mis à jour les champs personnalisés",
     "customKeys": "<b>{{who}}</b> a mis à jour <m>{{keys}}</m>",
     "mergedInto": "<b>{{who}}</b> a fusionné ce ticket avec <m>#{{number}}</m>",
