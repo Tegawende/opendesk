@@ -5,3 +5,5 @@ ALTER TABLE tickets ADD COLUMN IF NOT EXISTS deleted_by uuid REFERENCES users(id
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS deleted_by_api_key_id uuid REFERENCES api_keys(id) ON DELETE SET NULL;
 -- The trash lists a workspace's deleted tickets, newest first.
 CREATE INDEX IF NOT EXISTS tickets_deleted_idx ON tickets (workspace_id, deleted_at DESC, id DESC) WHERE deleted_at IS NOT NULL;
+-- Removing a user sets deleted_by to null on the tickets they deleted.
+CREATE INDEX IF NOT EXISTS tickets_deleted_by_idx ON tickets (deleted_by) WHERE deleted_by IS NOT NULL;
