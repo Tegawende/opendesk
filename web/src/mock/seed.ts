@@ -936,6 +936,16 @@ function seedMargin(): WsData {
     finalize(ws, t, x.status);
   }
 
+  // An email the customer also sent to a colleague and a Cc: the recipients row and Reply all.
+  {
+    const t = ws.tickets.find((x) => x.subject === "Reseller agreement for the Nordics");
+    const m = t && ws.messages.find((x) => x.ticket_id === t.id && x.direction === "inbound");
+    if (m) {
+      m.to = ["anna@nordicresellers.example", ...m.to];
+      m.cc = ["legal@nordicresellers.example"];
+    }
+  }
+
   // Make one generated open, unassigned, high ticket close to its first-response deadline.
   const dueSoon = ws.tickets.find((t) => t.status === "open" && !t.assignee && t.number < 1061 && !t.first_responded_at);
   if (dueSoon) {

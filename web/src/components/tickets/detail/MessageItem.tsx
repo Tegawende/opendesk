@@ -36,6 +36,8 @@ import { authorName, messageHtml, sanitizeBody, type SanitizedBody } from "./mes
 import { asNote, release, undo, useHeld } from "./outbox";
 import { showInTimeline } from "./Timeline";
 import { inConversation } from "./SideIncludes";
+import { InboundRecipients } from "./ReplyAll";
+import { inboundRecipients } from "./replyAllRecipients";
 
 /** A message body, sanitized once (sanitizeBody). */
 function useBody(html: string, inbound: boolean, designable: boolean, remote: boolean, note = false): SanitizedBody {
@@ -646,6 +648,8 @@ export const MessageItem = memo(function MessageItem({
   const translated = !!(tr.showing && tr.html);
   const body = useBody(translated ? tr.html! : messageHtml(m), inbound, !translated, remote, note);
   const replyTo = inbound && m.reply_to && m.reply_to.toLowerCase() !== m.from_email.toLowerCase() ? m.reply_to : null;
+  // An email written to several people lists them all, To then Cc, under its header.
+  const recipients = inbound ? inboundRecipients(m) : null;
 
   // A note sent as a reply is hidden like a deleted message, and says where its words went.
   if (m.sent_as_reply_id) return <SentAsReply m={m} name={name} admin={admin} />;
@@ -766,8 +770,9 @@ export const MessageItem = memo(function MessageItem({
       </header>
       <div className="px-4 pb-3.5 pl-[50px] pt-1">
         {inThread && thread && <ThreadBar thread={thread} actions={threadActions} first={threadFirst} />}
-        {(replyTo || (inbound && m.form_sender)) && (
+        {(replyTo || (inbound && m.form_sender) || recipients) && (
           <div className="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11.5px] text-fg-3" data-ph-mask>
+            {recipients && <InboundRecipients to={recipients.to} cc={recipients.cc} />}
             {inbound && m.form_sender && (
               <span className="flex min-w-0 items-center gap-1.5">
                 <Globe className="size-3 shrink-0 text-fg-4" />
