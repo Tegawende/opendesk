@@ -508,7 +508,7 @@
     "agentOn": "Ollie responde primero los chats nuevos",
     "agentOff": "El agente de IA está desactivado",
     "agentHint": "El nombre, las instrucciones, las herramientas y los límites están en los ajustes del agente de IA.",
-    "identifyBody": "Calcula user_hash en tu servidor como el HMAC-SHA256 en hexadecimal de user_id, usando como clave el secreto de tu widget. Nunca pongas el secreto en el código del navegador. Las sesiones sin un hash válido siguen funcionando, pero quedan marcadas como no verificadas. Con un hash válido, company vincula al usuario con la empresa de ese ID externo, si la hay, y fields define los campos de contacto cuya clave empieza con widget_. Vuelve a llamar opendesk('update', …) cuando cambien.",
+    "identifyBody": "Calcula user_hash en tu servidor como el HMAC-SHA256 en hexadecimal de user_id, usando como clave el secreto de tu widget. Nunca pongas el secreto en el código del navegador. Las sesiones sin un hash válido siguen funcionando, pero quedan marcadas como no verificadas. Con un hash válido, company vincula al usuario con la empresa de ese ID externo, si la hay, y fields define los campos de contacto cuya clave empieza con widget_. Con un company_hash válido, el HMAC de user_id, un salto de línea y company.id, también se crea una empresa desconocida con su nombre, y company.fields define sus campos cuya clave empieza con widget_. Vuelve a llamar opendesk('update', …) cuando cambien.",
     "rotate": "Rotar secreto",
     "rotateTitle": "¿Rotar el secreto del widget?",
     "rotateBody": "Las sesiones identificadas dejan de verificarse hasta que publiques el secreto nuevo. Los chats que ya existen siguen funcionando.",

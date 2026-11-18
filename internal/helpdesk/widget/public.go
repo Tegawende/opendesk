@@ -261,18 +261,23 @@ type widgetSessionInput struct {
 		Name         string         `json:"name,omitempty" maxLength:"200"`
 		UserID       string         `json:"user_id,omitempty" maxLength:"200"`
 		UserHash     string         `json:"user_hash,omitempty" maxLength:"128"`
+		CompanyHash  string         `json:"company_hash,omitempty" maxLength:"128" doc:"hex HMAC-SHA256(widget_secret, user_id + \"\\n\" + company.id): your server vouches that the user belongs to that company, so identify may create it and set its widget_ fields. A missing or wrong hash leaves the company a claim, linked only"`
 		AvatarURL    string         `json:"avatar_url,omitempty" maxLength:"2000" doc:"https picture of the signed-in user; used only with a valid user_hash"`
 		Company      *widgetCompany `json:"company,omitempty" doc:"The signed-in user's account in your product; used only with a valid user_hash"`
 		Fields       map[string]any `json:"fields,omitempty" doc:"Contact custom fields to set, by key; used only with a valid user_hash, and only fields whose key starts with widget_ (anything else is ignored)"`
 	}
 }
 
-// widgetCompany is the account a signed-in user belongs to in the host product. Only the id
-// is read; other keys a page sends along (a name, a domain) are accepted and ignored, so the
-// session never fails over them.
+// widgetCompany is the account a signed-in user belongs to in the host product. The id links
+// the contact; the name, domain and fields are read only when company_hash vouches for the user
+// and this id (syncCompany). They are not typed, and other keys a page sends along are accepted
+// and ignored, so the session never fails over them.
 type widgetCompany struct {
-	_  struct{} `additionalProperties:"true"`
-	ID string   `json:"id" maxLength:"200" doc:"Your own id for the account. The contact is linked to the workspace's company with this external_id; an unknown id links nothing. A company is never created or changed from here"`
+	_      struct{} `additionalProperties:"true"`
+	ID     string   `json:"id" maxLength:"200" doc:"Your own id for the account. The contact is linked to the workspace's company with this external_id; an unknown id links nothing, unless company_hash is valid, which creates the company"`
+	Name   any      `json:"name,omitempty" doc:"A string: the name of a company created with a valid company_hash (else it is named after id). An existing company's name is never changed"`
+	Domain any      `json:"domain,omitempty" doc:"A string: the domain of a company created with a valid company_hash, unless another company has it. An existing company's domain is never changed"`
+	Fields any      `json:"fields,omitempty" doc:"An object: company custom fields to set, by key; used only with a valid company_hash, and only fields whose key starts with widget_ (anything else is ignored)"`
 }
 
 type widgetSession struct {
@@ -378,7 +383,8 @@ func (h *handler) registerPublic(api huma.API) {
 	huma.Register(api, huma.Operation{OperationID: "widget-session", Method: http.MethodPost, Path: "/v1/widget/session",
 		Summary: "Start or resume a chat widget session", Tags: []string{"Widget"}, Security: []map[string][]string{},
 		Description: "Returns a visitor token for the widget API and a short-lived realtime token. " +
-			"user_hash = hex HMAC-SHA256(widget_secret, user_id) marks the visitor verified.",
+			"user_hash = hex HMAC-SHA256(widget_secret, user_id) marks the visitor verified. " +
+			"company_hash = hex HMAC-SHA256(widget_secret, user_id + \"\\n\" + company.id) lets a verified identify create that company and set its widget_ fields.",
 		Middlewares: huma.Middlewares{h.withClientIP}},
 		h.session)
 
@@ -527,6 +533,11 @@ func (h *handler) session(ctx context.Context, in *widgetSessionInput) (*widgetS
 		}
 		if verified {
 			if err := syncProfile(ctx, tx, wid, contactID, b.Company, b.Fields); err != nil {
+				return err
+			}
+		}
+		if verified {
+			if err := h.syncCompany(ctx, tx, g, contactID, userID, b.Company, b.CompanyHash); err != nil {
 				return err
 			}
 		}

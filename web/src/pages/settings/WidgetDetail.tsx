@@ -292,9 +292,10 @@ function WidgetEditor({ widget, brand, back }: { widget: Widget; brand: Brand | 
   const identify = `window.opendesk('identify', {
   user_id: "42",
   user_hash: "<hmac from your server>",
+  company_hash: "<hmac from your server>",
   email: "ada@example.com",
   name: "Ada Lovelace",
-  company: { id: "acct-9" },
+  company: { id: "acct-9", name: "Acme" },
   fields: { widget_plan: "pro" },
 });`;
 

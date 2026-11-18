@@ -59,7 +59,7 @@ type Company = {
 };
 ```
 
-A contact's email is unique within the workspace, and so is its `external_id`, your own id for the person (set by [verified widget sessions](/guides/live-chat/identity-verification/)). A company's domain is unique within the workspace, and so is its `external_id`, your own id for the account. Set it so [verified widget sessions](/guides/live-chat/identity-verification/#send-the-users-company-and-attributes) can link people to the company; `null` clears it.
+A contact's email is unique within the workspace, and so is its `external_id`, your own id for the person (set by [verified widget sessions](/guides/live-chat/identity-verification/)). A company's domain is unique within the workspace, and so is its `external_id`, your own id for the account. Set it so [verified widget sessions](/guides/live-chat/identity-verification/#send-the-users-company-and-attributes) can link people to the company; `null` clears it. A session that [vouches for the company](/guides/live-chat/identity-verification/#create-and-fill-in-the-company) creates it with this id when none has it.
 
 ## Sorting and paging
 

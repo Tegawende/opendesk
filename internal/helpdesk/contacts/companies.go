@@ -91,14 +91,11 @@ type companyRow struct {
 
 func (b *companyWriteBody) apply(row *companyRow) error {
 	if b.Name != nil {
-		s, err := cleanText("name", *b.Name, 200, false)
+		s, err := cleanCompanyName(*b.Name)
 		if err != nil {
 			return err
 		}
-		if strings.ContainsAny(s, "<>") {
-			return httpx.Validation("name contains characters that are not allowed")
-		}
-		row.Name = strings.Join(strings.Fields(s), " ")
+		row.Name = s
 	}
 	if row.Name == "" {
 		return httpx.Validation("name is required")
@@ -140,6 +137,49 @@ func (b *companyWriteBody) apply(row *companyRow) error {
 		row.Custom = map[string]any{}
 	}
 	return nil
+}
+
+// cleanCompanyName is a company name as it is kept: trimmed, spaces collapsed, at most 200
+// characters, no control characters and no angle brackets.
+func cleanCompanyName(s string) (string, error) {
+	s, err := cleanText("name", s, 200, false)
+	if err != nil {
+		return "", err
+	}
+	if strings.ContainsAny(s, "<>") {
+		return "", httpx.Validation("name contains characters that are not allowed")
+	}
+	return strings.Join(strings.Fields(s), " "), nil
+}
+
+// CompanyName is a name as the companies API keeps it, for a company written outside the API
+// (the chat widget's identify); "" for a name the API would refuse.
+func CompanyName(s string) string {
+	n, err := cleanCompanyName(s)
+	if err != nil {
+		return ""
+	}
+	return n
+}
+
+// CompanyDomain is a domain as the companies API keeps it; "" for one the API would refuse.
+func CompanyDomain(s string) string {
+	d, err := cleanDomain(s)
+	if err != nil {
+		return ""
+	}
+	return d
+}
+
+// PublishCompany announces a company written outside this package, as company.created or
+// company.updated with the contract shape.
+func PublishCompany(ctx context.Context, tx pgx.Tx, wid, id uuid.UUID, typ string) error {
+	c, err := loadCompany(ctx, tx, wid, id)
+	if err != nil {
+		return err
+	}
+	_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: wid, Type: typ, Data: map[string]any{"company": c}})
+	return err
 }
 
 func companyUniqueErr(err error) error {

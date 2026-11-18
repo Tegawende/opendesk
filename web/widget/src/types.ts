@@ -177,10 +177,16 @@ export type LiveEvent =
 export type SessionIdentity = {
   user_id?: string;
   user_hash?: string;
+  /** hex HMAC-SHA256(widget secret, user_id + "\n" + company.id): lets `company` create the company and set its fields. */
+  company_hash?: string;
   email?: string;
   name?: string;
-  /** The user's account in the host product: `id` is the host's own id for it, linked to the workspace's company with that external id. */
-  company?: { id: string };
+  /**
+   * The user's account in the host product: `id` is the host's own id for it, linked to the workspace's company with that
+   * external id. With a valid `company_hash`, an unknown id creates the company with `name` and `domain`, and `fields` sets
+   * its fields whose key starts with `widget_`.
+   */
+  company?: { id: string; name?: string; domain?: string; fields?: Record<string, string | number | boolean | null> };
   /** Contact custom fields by key; only fields whose key starts with `widget_` are set. */
   fields?: Record<string, string | number | boolean | null>;
   avatar_url?: string;

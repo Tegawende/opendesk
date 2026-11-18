@@ -11,8 +11,8 @@ import (
 	"github.com/useopendesk/opendesk/internal/domain"
 )
 
-// FieldPrefix starts the key of a contact field a signed-in visitor's page may set: the
-// workspace opts a field in by naming it so, and a field without the prefix is never written
+// FieldPrefix starts the key of a contact or company field a signed-in visitor's page may set:
+// the workspace opts a field in by naming it so, and a field without the prefix is never written
 // from the widget.
 const FieldPrefix = "widget_"
 
@@ -71,6 +71,18 @@ func setFields(ctx context.Context, tx pgx.Tx, wid, contactID uuid.UUID, in map[
 	if err := tx.QueryRow(ctx, `SELECT fields FROM contacts WHERE workspace_id = $1 AND id = $2`, wid, contactID).Scan(&cur); err != nil {
 		return false, err
 	}
+	next, changed := widgetFields(defs, cur, in)
+	if !changed {
+		return false, nil
+	}
+	_, err = tx.Exec(ctx, `UPDATE contacts SET fields = $3, updated_at = now() WHERE workspace_id = $1 AND id = $2`, wid, contactID, next)
+	return true, err
+}
+
+// widgetFields merges what a page sent into a contact's or company's fields: only fields whose
+// key starts with FieldPrefix, and only values that fit, so one bad attribute is skipped. It
+// reports whether any changed.
+func widgetFields(defs domain.FieldDefs, cur, in map[string]any) (map[string]any, bool) {
 	if cur == nil {
 		cur = map[string]any{}
 	}
@@ -87,9 +99,5 @@ func setFields(ctx context.Context, tx pgx.Tx, wid, contactID uuid.UUID, in map[
 		}
 		next, changed = merged, changed || len(changes) > 0
 	}
-	if !changed {
-		return false, nil
-	}
-	_, err = tx.Exec(ctx, `UPDATE contacts SET fields = $3, updated_at = now() WHERE workspace_id = $1 AND id = $2`, wid, contactID, next)
-	return true, err
+	return next, changed
 }

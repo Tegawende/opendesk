@@ -514,7 +514,7 @@
     "agentOn": "Ollie odpovídá na nové chaty jako první",
     "agentOff": "AI agent je vypnutý",
     "agentHint": "Jméno, pokyny, nástroje a bezpečnostní omezení najdete v nastavení AI agenta.",
-    "identifyBody": "Na serveru vypočítejte user_hash jako hexadecimální HMAC-SHA256 hodnoty user_id s tajným klíčem widgetu. Tajný klíč nikdy nevkládejte do kódu prohlížeče. Relace bez platného hashe fungují dál, ale jsou označené jako neověřené. S platným hashem propojí company uživatele s firmou s daným externím ID, pokud existuje, a fields nastaví pole kontaktu, jejichž klíč začíná na widget_. Při jejich změně znovu zavolejte opendesk('update', …).",
+    "identifyBody": "Na serveru vypočítejte user_hash jako hexadecimální HMAC-SHA256 hodnoty user_id s tajným klíčem widgetu. Tajný klíč nikdy nevkládejte do kódu prohlížeče. Relace bez platného hashe fungují dál, ale jsou označené jako neověřené. S platným hashem propojí company uživatele s firmou s daným externím ID, pokud existuje, a fields nastaví pole kontaktu, jejichž klíč začíná na widget_. S platným company_hash, tedy HMAC z user_id, konce řádku a company.id, se neznámá firma navíc vytvoří se svým názvem a company.fields nastaví její pole, jejichž klíč začíná na widget_. Při jejich změně znovu zavolejte opendesk('update', …).",
     "rotate": "Vyměnit tajný klíč",
     "rotateTitle": "Vyměnit tajný klíč widgetu?",
     "rotateBody": "Identifikované relace se přestanou ověřovat, dokud nenasadíte nový tajný klíč. Existující chaty fungují dál.",

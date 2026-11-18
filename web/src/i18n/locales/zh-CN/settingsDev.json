@@ -496,7 +496,7 @@
     "agentOn": "Ollie 会先回复新聊天",
     "agentOff": "AI 客服已关闭",
     "agentHint": "名称、指令、工具和防护规则都在 AI 客服设置中。",
-    "identifyBody": "在你的服务器上用聊天组件密钥对 user_id 计算十六进制 HMAC-SHA256，作为 user_hash。切勿把密钥放进浏览器代码。没有有效哈希的会话仍然可用，但会标记为未验证。哈希有效时，company 会把用户关联到具有该外部 ID 的公司（如果存在），fields 则会设置 key 以 widget_ 开头的联系人字段。这些值变化后，再次调用 opendesk('update', …)。",
+    "identifyBody": "在你的服务器上用聊天组件密钥对 user_id 计算十六进制 HMAC-SHA256，作为 user_hash。切勿把密钥放进浏览器代码。没有有效哈希的会话仍然可用，但会标记为未验证。哈希有效时，company 会把用户关联到具有该外部 ID 的公司（如果存在），fields 则会设置 key 以 widget_ 开头的联系人字段。如果 company_hash（对 user_id、换行符和 company.id 计算的 HMAC）有效，还会用其名称创建尚不存在的公司，company.fields 会设置该公司 key 以 widget_ 开头的字段。这些值变化后，再次调用 opendesk('update', …)。",
     "rotate": "轮换密钥",
     "rotateTitle": "轮换聊天组件密钥？",
     "rotateBody": "在你部署新密钥之前，已验证身份的会话将无法通过验证。现有聊天不受影响。",
