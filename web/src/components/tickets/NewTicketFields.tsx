@@ -14,6 +14,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { api } from "@/lib/api/endpoints";
 import { q, qk } from "@/lib/queries";
 import { addressLabel, TeamDot } from "./teams";
+import { TypedAddress } from "./detail/addressEdit";
 import type { NewTicketState } from "./useNewTicket";
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -63,10 +64,14 @@ export function NewTicketTo({ s }: { s: NewTicketState }) {
         to ? (
           <div className="flex h-8 items-center gap-2 rounded-md border border-line bg-surface pl-2 pr-1 text-sm">
             <Avatar name={to.contact?.name || to.email || "?"} size="xs" />
-            <span className="min-w-0 flex-1 truncate" data-ph-mask>
-              {to.contact ? `${to.contact.name} ` : ""}
-              <span className="text-fg-3">{to.contact?.email ?? to.email}</span>
-            </span>
+            {to.contact || !to.email ? (
+              <span className="min-w-0 flex-1 truncate" data-ph-mask>
+                {to.contact ? `${to.contact.name} ` : ""}
+                <span className="text-fg-3">{to.contact?.email ?? to.email}</span>
+              </span>
+            ) : (
+              <TypedAddress email={to.email} isEmail={(v) => emailRe.test(v)} onChange={(email) => s.set({ to: email ? { email } : null })} />
+            )}
             <Button size="xs" variant="ghost" onClick={() => s.set({ to: null })}>
               {tr("newTicket.change")}
             </Button>
