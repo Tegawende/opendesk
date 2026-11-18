@@ -773,16 +773,22 @@ function reports(ctx: Ctx): ReportsOverview {
   const brandF = (ctx.query.get("brand_id") ?? "").trim();
   if (teamF && teamF !== "none" && !ws.teams.some((t) => t.id === teamF)) throw invalid("team_id must be a team of the workspace or none");
   if (brandF && !ws.brands.some((b) => b.id === brandF)) throw invalid("brand_id must be a brand of the workspace");
+  // assignee_id: one member's tickets. A member who is not an admin may only name themselves.
+  const personF = (ctx.query.get("assignee_id") ?? "").trim();
+  if (personF && !ws.members.some((m) => m.user_id === personF)) throw invalid("assignee_id must be a member of the workspace");
+  if (personF && personF !== db.meId && !isAdmin(ws, db.meId)) throw forbidden();
+  const agentShares = [0.27, 0.22, 0.21, 0.18, 0.12];
+  const personShare = personF ? (agentShares[db.users.findIndex((u) => u.id === personF)] ?? 0.05) : 1;
   const teamKeys: (string | null)[] = [...ws.teams.map((t) => t.id), null];
   const teamShare = shares(teamKeys, (k) => (k === null ? 0.55 : 0.35 + hash(k)));
   const brandShare = shares(
     ws.brands.map((b) => b.id),
     (id) => (ws.brands.find((b) => b.id === id)?.is_default ? 3 : 0.4 + hash(id) * 0.4),
   );
-  const factor = (teamF ? (teamShare.get(teamF === "none" ? null : teamF) ?? 0) : 1) * (brandF ? (brandShare.get(brandF) ?? 0) : 1);
+  const factor = (teamF ? (teamShare.get(teamF === "none" ? null : teamF) ?? 0) : 1) * (brandF ? (brandShare.get(brandF) ?? 0) : 1) * personShare;
   const live = ws.tickets.filter((t) => !t.spam && !ws.deletedTickets.has(t.id) && OPENISH_REPORT.includes(t.status));
   const openOf = (team: string | null | undefined, brand: string | undefined) =>
-    live.filter((t) => (team === undefined || (t.team_id ?? null) === team) && (brand === undefined || t.brand_id === brand)).length;
+    live.filter((t) => (team === undefined || (t.team_id ?? null) === team) && (brand === undefined || t.brand_id === brand) && (!personF || t.assignee?.id === personF)).length;
   const teamArg = teamF ? (teamF === "none" ? null : teamF) : undefined;
   const brandArg = brandF || undefined;
 
@@ -801,8 +807,7 @@ function reports(ctx: Ctx): ReportsOverview {
   }
   const created = by_day.reduce((a, b) => a + b.created, 0);
   const solved = by_day.reduce((a, b) => a + b.solved, 0);
-  const key = `${by_day[0]?.date}-${by_day.length}-${teamF}-${brandF}`;
-  const agentShares = [0.27, 0.22, 0.21, 0.18, 0.12];
+  const key = `${by_day[0]?.date}-${by_day.length}-${teamF}-${brandF}-${personF}`;
   const frp = (k: string) => Math.round(22 + hash(key + k) * 50);
   const group = (share: number, k: string, open: number) => ({
     created: Math.round(created * share),
@@ -850,14 +855,16 @@ function reports(ctx: Ctx): ReportsOverview {
       none: created - Math.round(created * 0.02) - Math.round(created * 0.07) - Math.round(created * 0.16) - Math.round(created * 0.21),
     },
     by_agent: solved
-      ? agentShares.map((share, i) => {
-          const u = db.users[i];
-          return {
-            user: { id: u.id, name: u.name, email: u.email, avatar_url: u.avatar_url },
-            solved: Math.round(solved * share),
-            first_response_p50_minutes: frp(u.id),
-          };
-        })
+      ? agentShares
+          .map((share, i) => {
+            const u = db.users[i];
+            return {
+              user: { id: u.id, name: u.name, email: u.email, avatar_url: u.avatar_url },
+              solved: personF ? solved : Math.round(solved * share),
+              first_response_p50_minutes: frp(u.id),
+            };
+          })
+          .filter((a) => !personF || a.user.id === personF)
       : [],
     by_team: teamRows,
     by_brand: brandRows,
@@ -873,6 +880,11 @@ const OPENISH_REPORT: TicketStatus[] = ["open", "pending", "on_hold"];
  * (settings.agent_online_time false) gets none.
  */
 function agentReports(ctx: Ctx): ReportsAgents {
+  // assignee_id picks the row, not the tickets: the member's figures stay as unfiltered.
+  const person = (ctx.query.get("assignee_id") ?? "").trim();
+  if (person && !ctx.ws.members.some((m) => m.user_id === person)) throw invalid("assignee_id must be a member of the workspace");
+  if (person && person !== db.meId && !isAdmin(ctx.ws, db.meId)) throw forbidden();
+  ctx.query.delete("assignee_id");
   const o = reports(ctx);
   const ws = ctx.ws;
   const teamF = (ctx.query.get("team_id") ?? "").trim();
@@ -888,7 +900,7 @@ function agentReports(ctx: Ctx): ReportsAgents {
   const off = ws.workspace.settings.agent_online_time === false;
   const data = roster.flatMap((m) => {
     const user = userRef(m.user_id);
-    if (!user || (!all && m.user_id !== db.meId)) return [];
+    if (!user || (!all && m.user_id !== db.meId) || (person && m.user_id !== person)) return [];
     const h = (k: string) => hash(key + m.user_id + k);
     const share = weight.get(m.user_id) ?? 0;
     const solved = Math.round(o.solved * share);

@@ -699,9 +699,9 @@ export function reportsRange(s: { from?: string; to?: string }) {
   return { from: s.from ?? d.from, to: s.to ?? d.to };
 }
 
-/** The overview query from the URL: the range, and the team (`none`: no team) and brand filters. */
-export function reportsQuery(s: { from?: string; to?: string; team?: string; brand?: string }) {
-  return { ...reportsRange(s), team_id: s.team, brand_id: s.brand };
+/** The overview query from the URL: the range, and the team (`none`: no team), brand and person filters. */
+export function reportsQuery(s: { from?: string; to?: string; team?: string; brand?: string; person?: string }) {
+  return { ...reportsRange(s), team_id: s.team, brand_id: s.brand, assignee_id: s.person };
 }
 
 const isRef = (v: unknown): v is string => typeof v === "string" && /^[\w-]{1,64}$/.test(v);
@@ -709,11 +709,12 @@ const isRef = (v: unknown): v is string => typeof v === "string" && /^[\w-]{1,64
 const reportsRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/reports",
-  validateSearch: (s: Record<string, unknown>): { from?: string; to?: string; team?: string; brand?: string } => ({
+  validateSearch: (s: Record<string, unknown>): { from?: string; to?: string; team?: string; brand?: string; person?: string } => ({
     from: isDay(s.from) ? s.from : undefined,
     to: isDay(s.to) ? s.to : undefined,
     team: isRef(s.team) ? s.team : undefined,
     brand: isRef(s.brand) ? s.brand : undefined,
+    person: isRef(s.person) ? s.person : undefined,
   }),
   loaderDeps: ({ search }) => search,
   loader: async ({ context, deps }) => {
