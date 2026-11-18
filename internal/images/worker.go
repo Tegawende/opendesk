@@ -386,11 +386,12 @@ func Sweep(ctx context.Context, d *deps.Deps) error {
 	})
 }
 
-// Collect deletes images older than an hour that their owner no longer shows.
+// Collect deletes images older than an hour that their owner no longer shows. A signature
+// picture is kept: emails already sent show it.
 func Collect(ctx context.Context, d *deps.Deps) error {
 	rows, err := d.DB.Pool.Query(ctx, `DELETE FROM images i WHERE i.id IN (
 		SELECT i2.id FROM images i2 WHERE i2.created_at < now() - interval '1 hour' AND NOT CASE i2.owner_type
-			WHEN 'user' THEN EXISTS (SELECT 1 FROM users u WHERE u.id = i2.owner_id AND u.avatar_url = 'img:' || i2.id)
+			WHEN 'user' THEN i2.slot = '`+SlotSignature+`' OR EXISTS (SELECT 1 FROM users u WHERE u.id = i2.owner_id AND u.avatar_url = 'img:' || i2.id)
 			WHEN 'contact' THEN EXISTS (SELECT 1 FROM contacts c WHERE c.id = i2.owner_id AND c.avatar_url = 'img:' || i2.id)
 			WHEN 'company' THEN EXISTS (SELECT 1 FROM companies c WHERE c.id = i2.owner_id AND c.avatar_url = 'img:' || i2.id)
 			WHEN 'brand' THEN EXISTS (SELECT 1 FROM brands b WHERE b.id = i2.owner_id AND b.images ->> i2.slot = 'img:' || i2.id)

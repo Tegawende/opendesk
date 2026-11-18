@@ -6,6 +6,7 @@ description: Profile pictures and logos, agent availability, assignment rules, t
 | Method | Path | Description |
 | --- | --- | --- |
 | `PUT`, `DELETE` | `/v1/me/avatar` | Upload or remove your own picture |
+| `POST` | `/v1/signature-images` | Upload a picture for a signature |
 | `POST` | `/v1/me/heartbeat` | Mark yourself as seen (204), for auto-away |
 | `PATCH` | `/v1/members/{user_id}/availability` | Set availability and the assignment cap. `user_id` may be `me` |
 | `PUT`, `DELETE` | `/v1/workspace/images/{slot}` | Workspace logo and brand images (admin) |
@@ -115,6 +116,18 @@ curl -X PUT https://api.opendesk.sh/v1/workspace/images/help_center_logo \
 ```
 
 `PATCH /v1/me` with `{"avatar_url": "https://..."}` copies a picture from a URL instead. It is fetched server-side, and `member.updated` follows when it is ready.
+
+### Signature pictures
+
+`POST /v1/signature-images` stores a picture for an `<img>` in a personal, team, mailbox or address signature, and answers `201` with its public URL and size. Any member may upload, signed in; API keys cannot. Unlike other pictures it keeps its shape, at most 600 px on its longer side, and it is never replaced or removed while the workspace exists, since emails already sent show it. A member keeps at most 200 (`422 too_many_images`).
+
+```sh
+curl -X POST https://api.opendesk.sh/v1/signature-images   -H "Authorization: Bearer $ACCESS_TOKEN"   -H "OD-Workspace: $WORKSPACE_ID"   -F file=@logo.png
+```
+
+```json
+{ "url": "https://api.opendesk.sh/v1/images/6f1d3c1e-58b2-4f7a-9d55-0d0b7b0c4c11", "width": 600, "height": 150 }
+```
 
 ## Serving pictures
 
