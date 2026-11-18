@@ -65,8 +65,8 @@ func agentsReport(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS s
 	if scope == onlineSelf {
 		rowsFor = onlineFor
 	}
-	var on bool
-	if err := q.QueryRow(ctx, `SELECT `+domain.OnlineTimeSQL+` FROM workspaces w WHERE w.id = $1`, wid).Scan(&on); err != nil {
+	var on, byPeople bool
+	if err := q.QueryRow(ctx, `SELECT `+domain.OnlineTimeSQL+`, `+reportsTeamMembersSQL+` FROM workspaces w WHERE w.id = $1`, wid).Scan(&on, &byPeople); err != nil {
 		return ReportAgents{Data: []ReportAgentRow{}, OnlineTime: scope}, err
 	}
 	if !on {
@@ -78,6 +78,13 @@ func agentsReport(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS s
 	rf, err := rf.validate()
 	if err != nil {
 		return out, err
+	}
+	// A team counted by its people (settings.reports_team_members) names whose rows, not which
+	// tickets: its leads and members alone, each with the figures they have without it.
+	var rowTeam *string
+	if rf.TeamMembers = byPeople; rf.byMembers() {
+		team := rf.Team
+		rowTeam, rf.Team = &team, ""
 	}
 	from, to, _, err := reportPeriod(ctx, q, wid, fromS, toS)
 	if err != nil {
@@ -166,7 +173,9 @@ func agentsReport(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS s
 				SELECT 1 FROM team_members tm JOIN teams tt ON tt.id = tm.team_id
 				WHERE tt.workspace_id = $1 AND tt.id::text = $4 AND tm.user_id = m.user_id AND tm.role <> 'observer'))))
 			AND ($7::uuid IS NULL OR m.user_id = $7)
-		ORDER BY 6 DESC, 7 DESC, u.name, u.id LIMIT 500`, wid, from, to, rf.Team, rf.Brand, onlineFor, rowsFor)
+			AND ($8::text IS NULL OR EXISTS (SELECT 1 FROM team_members tm JOIN teams tt ON tt.id = tm.team_id
+				WHERE tt.workspace_id = $1 AND tt.id::text = $8 AND tm.user_id = m.user_id AND tm.role <> 'observer'))
+		ORDER BY 6 DESC, 7 DESC, u.name, u.id LIMIT 500`, wid, from, to, rf.Team, rf.Brand, onlineFor, rowsFor, rowTeam)
 	if err != nil {
 		return out, err
 	}

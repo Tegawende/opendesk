@@ -53,18 +53,41 @@ type ReportBrand struct {
 	FirstResponseP50Minutes *float64  `json:"first_response_p50_minutes"`
 }
 
-// reportFilter narrows the overview to a team ("none": no team) and a brand.
+// reportFilter narrows the overview to a team ("none": no team) and a brand. TeamMembers is
+// the workspace's settings.reports_team_members: a team's tickets are also those assigned to
+// its leads and members.
 type reportFilter struct {
-	Team  string
-	Brand string
+	Team        string
+	Brand       string
+	TeamMembers bool
+}
+
+// reportsTeamMembersSQL is settings.reports_team_members (alias w), default false: in the
+// reports, a team is its people (contracts/api.md "Agents report").
+const reportsTeamMembersSQL = `COALESCE((w.settings ->> 'reports_team_members')::boolean, false)`
+
+// teamMemberSQL is "the user in col is a lead or member of the team bound as $n" (observers
+// watch a team without being on it), for a team of the workspace in wcol.
+func teamMemberSQL(n int, col, wcol string) string {
+	return fmt.Sprintf(`EXISTS (SELECT 1 FROM team_members tm JOIN teams tt ON tt.id = tm.team_id
+		WHERE tm.team_id = $%[1]d::uuid AND tt.workspace_id = %[3]s AND tm.user_id = %[2]s AND tm.role <> 'observer')`, n, col, wcol)
+}
+
+// byMembers is whether a team id is picked and counts by its people.
+func (f reportFilter) byMembers() bool {
+	return f.TeamMembers && f.Team != "" && f.Team != hd.TeamNone
 }
 
 // sql binds the filter as $n and $n+1. Merged tickets count nowhere: a merge moved their
 // messages, calls and threads to the ticket they went into and closed what was left, so they
 // would make one conversation two tickets created, and the merge a solve.
 func (f reportFilter) sql(n int) string {
-	return fmt.Sprintf(` AND ($%[1]d = '' OR ($%[1]d = 'none' AND t.team_id IS NULL) OR t.team_id::text = $%[1]d)
-		AND ($%[2]d = '' OR t.brand_id::text = $%[2]d) AND t.merged_into_id IS NULL`, n, n+1)
+	members := ""
+	if f.byMembers() {
+		members = ` OR ` + teamMemberSQL(n, "t.assignee_id", "t.workspace_id")
+	}
+	return fmt.Sprintf(` AND ($%[1]d = '' OR ($%[1]d = 'none' AND t.team_id IS NULL) OR t.team_id::text = $%[1]d%[3]s)
+		AND ($%[2]d = '' OR t.brand_id::text = $%[2]d) AND t.merged_into_id IS NULL`, n, n+1, members)
 }
 
 // firstResponseSQL is a ticket's first response as the reports measure it (alias t): how long
@@ -191,6 +214,9 @@ func overview(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS strin
 	if err != nil {
 		return o, err
 	}
+	if err := q.QueryRow(ctx, `SELECT `+reportsTeamMembersSQL+` FROM workspaces w WHERE w.id = $1`, wid).Scan(&rf.TeamMembers); err != nil {
+		return o, err
+	}
 	from, to, loc, err := reportPeriod(ctx, q, wid, fromS, toS)
 	if err != nil {
 		return o, err
@@ -284,13 +310,18 @@ func overview(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS strin
 		return o, err
 	}
 
+	// A team counted by its people lists its people alone, as the agents report does.
+	agents := ""
+	if rf.byMembers() {
+		agents = ` AND ` + teamMemberSQL(4, "t.assignee_id", "t.workspace_id")
+	}
 	rows, err = q.Query(ctx, `SELECT u.id, u.name, u.email, u.avatar_url,
 			count(*) FILTER (WHERE t.solved_at >= $2 AND t.solved_at < $3),
 			percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM `+firstResponseSQL+` - t.created_at) / 60)
 				FILTER (WHERE t.first_responded_at IS NOT NULL AND t.created_at >= $2 AND t.created_at < $3)
 		FROM tickets t JOIN users u ON u.id = t.assignee_id
 		JOIN members m ON m.workspace_id = t.workspace_id AND m.user_id = u.id
-		WHERE t.workspace_id = $1 AND t.deleted_at IS NULL AND NOT t.spam`+rf.sql(4)+`
+		WHERE t.workspace_id = $1 AND t.deleted_at IS NULL AND NOT t.spam`+rf.sql(4)+agents+`
 			AND ((t.solved_at >= $2 AND t.solved_at < $3) OR (t.created_at >= $2 AND t.created_at < $3))
 		GROUP BY u.id, u.name, u.email, u.avatar_url
 		ORDER BY 5 DESC, u.name LIMIT 100`, wid, from, to, rf.Team, rf.Brand)

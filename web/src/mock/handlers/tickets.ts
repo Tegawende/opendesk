@@ -35,6 +35,7 @@ function filtersFrom(ctx: Ctx): ListFilters {
     assignee: q.get("assignee") ?? undefined,
     team_id: q.get("team_id") ?? undefined,
     team_not: q.get("team_not") ?? undefined,
+    team_members: q.get("team_members") === "true" || undefined,
     mailbox_id: q.get("mailbox_id") ?? undefined,
     mailbox_not: q.get("mailbox_not") ?? undefined,
     received_at: q.get("received_at")?.trim().toLowerCase() || undefined,
@@ -873,17 +874,22 @@ const OPENISH_REPORT: TicketStatus[] = ["open", "pending", "on_hold"];
  * (settings.agent_online_time false) gets none.
  */
 function agentReports(ctx: Ctx): ReportsAgents {
-  const o = reports(ctx);
   const ws = ctx.ws;
   const teamF = (ctx.query.get("team_id") ?? "").trim();
   const team = teamF && teamF !== "none" ? ws.teams.find((t) => t.id === teamF) : undefined;
-  const roster = ws.members.filter((m) => m.role !== "viewer" && (!team || team.members.some((x) => x.user_id === m.user_id && x.role !== "observer")));
+  // settings.reports_team_members: a team names whose rows, each with the figures it has without it.
+  const byPeople = !!team && ws.workspace.settings.reports_team_members === true;
+  const query = new URLSearchParams(ctx.query);
+  if (byPeople) query.delete("team_id");
+  const o = reports({ ...ctx, query });
+  const staff = ws.members.filter((m) => m.role !== "viewer");
+  const roster = staff.filter((m) => !team || team.members.some((x) => x.user_id === m.user_id && x.role !== "observer"));
   const weight = shares(
-    roster.map((m) => m.user_id),
+    (byPeople ? staff : roster).map((m) => m.user_id),
     (id) => 0.3 + hash(id),
   );
   const days = o.by_day.length;
-  const key = `${o.by_day[0]?.date}-${days}-${teamF}-${ctx.query.get("brand_id") ?? ""}`;
+  const key = `${o.by_day[0]?.date}-${days}-${byPeople ? "" : teamF}-${ctx.query.get("brand_id") ?? ""}`;
   const all = isAdmin(ws, db.meId);
   const off = ws.workspace.settings.agent_online_time === false;
   const data = roster.flatMap((m) => {

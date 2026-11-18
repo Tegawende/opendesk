@@ -19,6 +19,7 @@ import { ChannelBars } from "@/components/reports/ChannelBars";
 import { SeverityBars } from "@/components/reports/SeverityBars";
 import { AgentTable } from "@/components/reports/AgentTable";
 import { AgentWorkTable } from "@/components/reports/AgentWork";
+import { openWorkTeam, useTeamByPeople } from "@/components/reports/teamMembers";
 import { AnimatedNumber } from "@/components/motion";
 import { Bar, BreakdownBars, ShareBar, type BarRow } from "@/components/reports/Bars";
 import { BrandFilter, GroupTable, NO_TEAM, TeamFilter, brandRows, teamRows, useReportScope, type GroupRow } from "@/components/reports/TeamBrand";
@@ -44,8 +45,8 @@ function previous<R extends ReportsRange>(r: R): R {
 const OPEN_STATUSES = ["open", "pending", "on_hold"] as Ticket["status"][];
 
 /** The open tickets behind the backlog and open work cards, narrowed like the report. */
-function openWork(r: ReportsQuery) {
-  return { status: OPEN_STATUSES, team_id: r.team_id, brand_id: r.brand_id };
+function openWork(r: ReportsQuery, byPeople: boolean) {
+  return { status: OPEN_STATUSES, ...openWorkTeam(r.team_id, byPeople), brand_id: r.brand_id };
 }
 
 export default function ReportsPage() {
@@ -343,8 +344,9 @@ function BacklogCard({ filter, openNow }: { filter: ReportsQuery; openNow: numbe
   const { t } = useTranslation("reports");
   useTranslation("indicators");
   const narrowed = !!(filter.team_id || filter.brand_id);
+  const byPeople = useTeamByPeople();
   const counts = useQuery({ ...q.counts(), enabled: !narrowed });
-  const list = useInfiniteQuery({ ...q.tickets(openWork(filter)), enabled: narrowed });
+  const list = useInfiniteQuery({ ...q.tickets(openWork(filter, byPeople)), enabled: narrowed });
   const tickets = list.data?.pages.flatMap((pg) => pg.data) ?? [];
   const c = narrowed
     ? list.data && {
@@ -423,7 +425,8 @@ function BrandCard({ rows }: { rows: GroupRow[] }) {
 function OpenWorkCards({ filter }: { filter: ReportsQuery }) {
   const { t } = useTranslation("reports");
   useTranslation("indicators");
-  const list = useInfiniteQuery(q.tickets(openWork(filter)));
+  const byPeople = useTeamByPeople();
+  const list = useInfiniteQuery(q.tickets(openWork(filter, byPeople)));
   const tickets = list.data?.pages.flatMap((pg) => pg.data) ?? [];
   const sample = list.hasNextPage ? t("open.sample", { count: tickets.length }) : t("open.subtitle");
 
