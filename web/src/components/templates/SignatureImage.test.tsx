@@ -1,5 +1,6 @@
 // A picture in a signature from the editor's own picture button, uploaded to a public
-// address, inserted at a signature size with a description, and kept in the visual editor.
+// address as it goes in (not when it is picked), inserted at a signature size with a
+// description, and kept in the visual editor while it is a plain sized picture.
 // Through the app's own query and HTTP clients: only fetch is replaced.
 import type { Editor } from "@tiptap/react";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -13,7 +14,7 @@ import { WorkspaceQueryClient } from "@/lib/queryClient";
 import { useSession } from "@/lib/session";
 import { altFromFileName, defaultWidth, signatureImageHtml, widthChoices } from "./SignatureImage";
 import { SignatureEditor } from "./SignatureEditor";
-import { htmlReasons, needsHtml } from "./TemplateEditor";
+import { hasHtmlImage, htmlReasons, needsHtml } from "./TemplateEditor";
 
 const URL_ = "https://api.example.test/v1/images/6f1d3c1e-58b2-4f7a-9d55-0d0b7b0c4c11";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -33,6 +34,10 @@ beforeEach(async () => {
   await i18n.changeLanguage("en");
   uploads = [];
   upload = () => json({ url: URL_, width: 600, height: 150 }, 201);
+  // The preview of a picture chosen comes from the device (jsdom has no object URLs).
+  let blobs = 0;
+  URL.createObjectURL = () => `blob:preview-${++blobs}`;
+  URL.revokeObjectURL = () => {};
   vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.includes("/v1/signature-images") && init?.method === "POST") {
@@ -121,6 +126,25 @@ describe("a sized picture stays in the visual editor", () => {
     // What the visual editor cannot keep still opens as HTML.
     expect(needsHtml(`<table><tr><td>x</td></tr></table>`)).toBe(true);
     expect(needsHtml(`<p style="color:red">x</p>`)).toBe(true);
+    expect(needsHtml(`<p>x</p><img src='${URL_}' alt="A > B" title="Acme" width=120 height="30" />`)).toBe(false);
+  });
+
+  it("does not with anything more than a source, a description, a title and a size in pixels", () => {
+    for (const extra of [`border="0"`, `align="left"`, `hspace="8"`, `vspace="4"`, `class="logo"`, `usemap="#m"`, `ismap`, `BORDER=0`, `width="50%"`, `height="auto"`]) {
+      const sig = `<p>Kind regards</p><img src="${URL_}" alt="Acme" width="200" ${extra}>`;
+      expect(hasHtmlImage(sig), extra).toBe(true);
+      expect(needsHtml(sig), extra).toBe(true);
+      expect(htmlReasons(sig), extra).toEqual(["pictures with HTML attributes"]);
+    }
+    // Only an <img> counts: the same words elsewhere do not.
+    expect(needsHtml(`<p>align="left" class="x"</p><img src="${URL_}" alt="class=logo">`)).toBe(false);
+  });
+
+  it("opens in the HTML mode with what the visual editor would drop, and stays there", async () => {
+    await mount(`<p>Kind regards</p><img src="${URL_}" alt="Acme" width="200" height="50" border="0" align="left" hspace="8">`);
+    expect(htmlArea()).not.toBeNull();
+    expect(document.body.textContent).toContain("pictures with HTML attributes");
+    expect((htmlArea() as HTMLTextAreaElement).value).toContain(`border="0" align="left" hspace="8"`);
   });
 
   it("opens in the visual editor with its size and description", async () => {
@@ -155,8 +179,9 @@ describe("the picture button", () => {
     expect(insert.disabled).toBe(true);
 
     await pick("acme-logo_2x.png");
-    expect(uploads).toHaveLength(1);
-    expect((uploads[0].get("file") as File).name).toBe("acme-logo_2x.png");
+    // Shown from the device: nothing is uploaded until it goes in.
+    expect(document.querySelector('[role="dialog"] img')!.getAttribute("src")).toMatch(/^blob:/);
+    expect(uploads).toHaveLength(0);
     // Medium by default; the description starts from the file name.
     expect(byText('[role="radio"]', "Medium · 200 px")!.getAttribute("aria-checked")).toBe("true");
     const alt = document.querySelector<HTMLInputElement>('[role="dialog"] input:not([type="file"])')!;
@@ -168,8 +193,11 @@ describe("the picture button", () => {
     await setInput(alt, "Acme logo");
     await act(async () => byText('[role="radio"]', "Small · 120 px")!.click());
     await act(async () => (byText('[role="dialog"] button', "Insert") as HTMLButtonElement).click());
+    await until(() => !document.querySelector('[role="dialog"]'));
 
     expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(uploads).toHaveLength(1);
+    expect((uploads[0].get("file") as File).name).toBe("acme-logo_2x.png");
     const last = saved[saved.length - 1];
     expect(last).toContain(`<img src="${URL_}" alt="Acme logo" width="120" height="30">`);
     expect(needsHtml(last)).toBe(false);
@@ -177,13 +205,36 @@ describe("the picture button", () => {
     expect(htmlArea()).toBeNull();
   });
 
+  it("uploads nothing for a picture replaced or a dialog cancelled, only the one that goes in", async () => {
+    const { saved } = await mount("<p>Lea</p>");
+    await act(async () => byLabel("Image")!.click());
+    await pick("first.png");
+    await pick("second.png");
+    await act(async () => (byText('[role="dialog"] button', "Cancel") as HTMLButtonElement).click());
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(uploads).toHaveLength(0);
+    expect(saved).toEqual([]);
+
+    await act(async () => byLabel("Image")!.click());
+    await pick("third.png");
+    await pick("fourth.png");
+    await act(async () => (byText('[role="dialog"] button', "Insert") as HTMLButtonElement).click());
+    await until(() => !document.querySelector('[role="dialog"]'));
+    expect(uploads.map((f) => (f.get("file") as File).name)).toEqual(["fourth.png"]);
+    // The description kept from the first file chosen.
+    expect(saved[saved.length - 1]).toContain(`<img src="${URL_}" alt="third" width="200" height="50">`);
+  });
+
   it("says why an upload failed and inserts nothing", async () => {
     upload = () => json({ status: 422, title: "Unprocessable Entity", detail: "Use a PNG, JPEG, GIF or WebP picture.", code: "unsupported_image" }, 422);
     const { saved } = await mount("<p>Lea</p>");
     await act(async () => byLabel("Image")!.click());
     await pick("notes.pdf");
+    await act(async () => (byText('[role="dialog"] button', "Insert") as HTMLButtonElement).click());
+    await until(() => !!document.querySelector('[role="dialog"] [role="alert"]'));
     expect(document.querySelector('[role="dialog"] [role="alert"]')!.textContent).toContain("Use a PNG, JPEG, GIF or WebP picture.");
-    expect((byText('[role="dialog"] button', "Insert") as HTMLButtonElement).disabled).toBe(true);
+    // Still open, to choose another picture.
+    expect(byText('[role="dialog"] button', "Replace the picture")).not.toBeNull();
     expect(saved).toEqual([]);
   });
 
@@ -213,6 +264,7 @@ describe("the picture button", () => {
     await act(async () => byLabel("Image")!.click());
     await pick("logo.png");
     await act(async () => (byText('[role="dialog"] button', "Insert") as HTMLButtonElement).click());
+    await until(() => !document.querySelector('[role="dialog"]'));
     expect(saved[saved.length - 1]).toContain(`<img src="${URL_}" alt="logo" width="200" height="50">`);
   });
 });

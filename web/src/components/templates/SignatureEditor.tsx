@@ -1,7 +1,7 @@
 // The one editor of every signature: a mail account's (synced with Gmail), an address's, a
 // team's and a member's own. A signature is never degraded by opening it: one the visual
 // editor can hold opens there (pictures with their size too), a designed one (tables,
-// inline styles) opens as HTML and says why, and onChange runs only for the person's own
+// inline styles, pictures with other HTML attributes) opens as HTML and says why, and onChange runs only for the person's own
 // edits, so a page sends a signature only when it was changed. Its preview shows it as
 // recipients get it: the server's, filled, for signatures that take variables (a Collab
 // signature brings its own, filled for the person writing); drawn live otherwise.

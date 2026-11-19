@@ -119,7 +119,7 @@ curl -X PUT https://api.opendesk.sh/v1/workspace/images/help_center_logo \
 
 ### Signature pictures
 
-`POST /v1/signature-images` stores a picture for an `<img>` in a personal, team, mailbox or address signature, and answers `201` with its public URL and size. Any member may upload, signed in; API keys cannot. Unlike other pictures it keeps its shape, at most 600 px on its longer side, and it is never replaced or removed while the workspace exists, since emails already sent show it. A member keeps at most 200 (`422 too_many_images`).
+`POST /v1/signature-images` stores a picture for an `<img>` in a personal, team, mailbox or address signature, and answers `201` with its public URL and size, or `200` with the one you already uploaded when you send the same picture again. Any member may upload, signed in; API keys cannot. Unlike other pictures it keeps its shape, at most 600 px on its longer side. Once a saved signature uses it, it stays for as long as you are a member of the workspace, since emails already sent show it. A picture no saved signature used is removed a day after its upload, and when you leave the workspace or delete your account your pictures go as soon as no signature uses them. A member keeps at most 200 (`422 too_many_images`).
 
 ```sh
 curl -X POST https://api.opendesk.sh/v1/signature-images   -H "Authorization: Bearer $ACCESS_TOKEN"   -H "OD-Workspace: $WORKSPACE_ID"   -F file=@logo.png

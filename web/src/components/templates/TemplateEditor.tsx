@@ -17,9 +17,25 @@ import { insertCode, matchVars, refreshTags, templateExtension, VarSuggestPopup,
 import { VariablePicker } from "./VariablePicker";
 import { SignatureImageDialog, signatureImageHtml, type SignaturePicture } from "./SignatureImage";
 
-/** Markup the visual editor cannot keep: layout tables, styles. It keeps a picture's width and height. */
+/** Markup the visual editor cannot keep: layout tables, styles, pictures with more than a source, a description, a title and a size in pixels. */
 export function needsHtml(html: string): boolean {
-  return /<(table|td|tr|div|font|center|span)\b|\sstyle=/i.test(html);
+  return /<(table|td|tr|div|font|center|span)\b|\sstyle=/i.test(html) || hasHtmlImage(html);
+}
+
+const IMG_TAG = /<img\b((?:"[^"]*"|'[^']*'|[^'">])*)>/gi;
+const IMG_ATTR = /([^\s"'=/>]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]*))?/g;
+
+/** Whether an <img> has what the visual editor drops: an attribute other than src, alt and title, or a width or height that is not a number of pixels (border, align, hspace, class, width="50%"). */
+export function hasHtmlImage(html: string): boolean {
+  for (const [, attrs] of html.matchAll(IMG_TAG)) {
+    for (const [, name, raw = ""] of attrs.matchAll(IMG_ATTR)) {
+      const n = name.toLowerCase();
+      if (n === "src" || n === "alt" || n === "title") continue;
+      if ((n === "width" || n === "height") && /^\d+$/.test(raw.replace(/^(["'])(.*)\1$/, "$2").trim())) continue;
+      return true;
+    }
+  }
+  return false;
 }
 
 /** What in html the visual editor would lose, in plain words (needsHtml's reasons). */
@@ -27,6 +43,7 @@ export function htmlReasons(html: string): string[] {
   const out: string[] = [];
   if (/<(table|td|tr)\b/i.test(html)) out.push("a table layout");
   if (/\sstyle=/i.test(html)) out.push("inline styles");
+  if (hasHtmlImage(html)) out.push("pictures with HTML attributes");
   if (!out.length && /<(div|font|center|span)\b/i.test(html)) out.push("lines and fonts set in HTML");
   return out;
 }
