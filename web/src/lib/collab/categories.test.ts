@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MailAccount, MailAccountCategories, MailCategory, MailCounts } from "../api/types";
-import { accountCategories, categoryProblem, categoryTabs, categoryTone, ruleSender, slugKey, withKeys } from "./categories";
+import { accountCategories, canMoveToCategory, categoryProblem, categoryTabs, categoryTone, ruleSender, slugKey, withKeys } from "./categories";
 
 const cat = (key: string, name = key[0].toUpperCase() + key.slice(1), color: MailCategory["color"] = "gray"): MailCategory => ({ key, name, description: "", color });
 
@@ -26,13 +26,31 @@ describe("categoryTabs", () => {
     expect(categoryTabs([account("a", null), account("b", null)])).toEqual([]);
   });
 
-  it("joins the accounts' categories by key, Primary first, in the order they first appear, with the first account's name", () => {
+  it("keeps a set's own order when it was reordered, even when an account on the default is listed first (hob1)", () => {
+    const defaults = [cat("primary"), cat("updates"), cat("newsletters"), cat("promotions")];
+    const shared = account("shared", defaults);
+    const mine = account("mine", [cat("primary"), cat("codes", "Codes / Logins"), cat("updates"), cat("newsletters"), cat("tech", "Tech Updates"), cat("promotions")]);
+    expect(categoryTabs([shared, mine]).map((t) => t.key)).toEqual(["primary", "codes", "updates", "newsletters", "tech", "promotions"]);
+    expect(categoryTabs([mine, shared]).map((t) => t.key)).toEqual(["primary", "codes", "updates", "newsletters", "tech", "promotions"]);
+  });
+
+  it("follows the order most accounts share, ties going to the first account, with its names", () => {
+    const a = account("a", [cat("primary"), cat("updates"), cat("promotions")]);
+    const b = account("b", [cat("primary"), cat("promotions", "Deals"), cat("updates")]);
+    const c = account("c", [cat("primary"), cat("promotions", "Deals"), cat("updates")]);
+    const tabs = categoryTabs([a, b, c]);
+    expect(tabs.map((t) => t.key)).toEqual(["primary", "promotions", "updates"]);
+    expect(tabs[1].name).toBe("Deals");
+    expect(categoryTabs([a, b]).map((t) => t.key)).toEqual(["primary", "updates", "promotions"]);
+  });
+
+  it("puts another account's own categories after the one they follow in that account, with the first account's name for a shared key", () => {
     const work = account("w", [cat("primary", "Important", "blue"), cat("updates"), cat("clients", "Clients", "green")]);
     const sales = account("s", [cat("primary"), cat("leads"), cat("updates", "Robots")]);
     const tabs = categoryTabs([work, sales]);
-    expect(tabs.map((t) => t.key)).toEqual(["primary", "updates", "clients", "leads"]);
+    expect(tabs.map((t) => t.key)).toEqual(["primary", "leads", "updates", "clients"]);
     expect(tabs[0].name).toBe("Important");
-    expect(tabs[1].name).toBe("Updates");
+    expect(tabs.find((t) => t.key === "updates")?.name).toBe("Updates");
   });
 
   it("sums each tab's unread conversations, and counts an account that is not split under Primary", () => {
@@ -68,9 +86,9 @@ describe("slugKey", () => {
 });
 
 describe("categoryProblem", () => {
-  it("needs 2 to 8 categories", () => {
+  it("needs 2 to 10 categories", () => {
     expect(categoryProblem([cat("primary")])).toBe("count");
-    expect(categoryProblem(Array.from({ length: 9 }, (_, i) => cat(`c${i}`)))).toBe("count");
+    expect(categoryProblem(Array.from({ length: 11 }, (_, i) => cat(`c${i}`)))).toBe("count");
     expect(categoryProblem([cat("primary"), cat("updates")])).toBeNull();
   });
 
@@ -103,5 +121,24 @@ describe("accountCategories and categoryTone", () => {
   it("reads an unknown colour as grey", () => {
     expect(categoryTone({ color: "violet" })).toBe("violet");
     expect(categoryTone({ color: "chartreuse" as MailCategory["color"] })).toBe("gray");
+  });
+});
+
+describe("canMoveToCategory", () => {
+  const work = account("w", [cat("primary"), cat("codes"), cat("updates")]);
+  const sales = account("s", [cat("primary"), cat("updates")]);
+  const plain = account("p", null);
+  const byId = new Map([work, sales, plain].map((a) => [a.id, a]));
+
+  it("takes conversations whose accounts all have the category", () => {
+    expect(canMoveToCategory([{ account_id: "w" }, { account_id: "s" }], byId, "updates")).toBe(true);
+    expect(canMoveToCategory([{ account_id: "w" }], byId, "codes")).toBe(true);
+  });
+
+  it("refuses when one conversation's account lacks it, is not split, is unknown, or when there are none", () => {
+    expect(canMoveToCategory([{ account_id: "w" }, { account_id: "s" }], byId, "codes")).toBe(false);
+    expect(canMoveToCategory([{ account_id: "p" }], byId, "primary")).toBe(false);
+    expect(canMoveToCategory([{ account_id: "gone" }], byId, "updates")).toBe(false);
+    expect(canMoveToCategory([], byId, "updates")).toBe(false);
   });
 });

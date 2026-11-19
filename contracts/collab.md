@@ -496,7 +496,7 @@ interface MailCategory {
 
 interface MailCategorySet {
   enabled: boolean             // false: "off", the inbox is not split (it wins over the levels below it)
-  categories: MailCategory[]   // 2..8 when enabled, "primary" first; [] when off
+  categories: MailCategory[]   // 2..10 when enabled, "primary" first; [] when off
   updated_at: string
   updated_by: UserRef | null
 }
@@ -602,9 +602,17 @@ the account's inbox is not split); one whose key the account no longer has reads
 `GET /v1/collab/threads?box=inbox&category=<key>` lists one tab (`primary` also lists conversations
 not sorted yet and those of accounts not split); `GET /v1/collab/counts` gives each tab's unread
 conversations. The mail page shows the tabs above the inbox while one account in scope is split,
-the union of their categories in All inboxes (the first account's name and colour for a key),
-each with its unread count. Moving a conversation offers "Always for this sender" to whoever manages
-the account, which adds the sender rule and moves that sender's other inbox conversations too.
+each with its unread count, in the order of the account's categories. In All inboxes they are the
+union of the split accounts' categories by key: in the order of the set most of them share (the same
+keys in the same order; on a tie, the set of the account listed first), with that set's names and
+colours, and a key only other accounts have comes right after the key before it in that account's
+own order (accounts taken in list order). So a set that was reordered or extended keeps its order
+whatever other accounts in view follow. Moving a conversation offers "Always for this sender" to
+whoever manages the account, which adds the sender rule and moves that sender's other inbox
+conversations too. A conversation dragged from the list onto a tab is moved there as the row menu
+moves it (`categorize`, the same toast and Undo); dragging a selected row moves the selection. A
+tab takes the drop only while every dragged conversation's account has its key, and the tab in view
+takes none.
 
 **Privacy.** A category and a sender rule are seen by whoever sees the account, no one else: an
 admin sets categories for private accounts without ever seeing their mail or how it was sorted. What
@@ -1263,7 +1271,7 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | GET | `/v1/collab/person` | member | `?email=&exclude=&limit=` → `MailPerson` ("People"); `422 validation_failed` for an address that is not one |
 | POST | `/v1/collab/threads/actions` | act | `{thread_ids: string[1..100], action, folder_id?, category?, until?}` → `{threads: MailThread[]}`. `done`, `needs_action` and `snooze` are available only for a shared account with handling enabled and do not create a provider job; `snooze` needs `until` in the future ("Snooze"). Threads the caller cannot act on are `404` (all or nothing). `categorize` needs a `category` every one of their accounts has (`422 validation_failed`) |
 | GET | `/v1/collab/categories` | member | `MailCategorySettings` ("Categories") |
-| PUT | `/v1/collab/categories/workspace` | admin | `{enabled, categories?, locked?}` → `MailCategorySettings`. Categories: 2..8, `primary` first, keys and names once each (`422 validation_failed`); names through `internal/displayname`. Every account is sorted again where its categories changed |
+| PUT | `/v1/collab/categories/workspace` | admin | `{enabled, categories?, locked?}` → `MailCategorySettings`. Categories: 2..10, `primary` first, keys and names once each (`422 validation_failed`); names through `internal/displayname`. Every account is sorted again where its categories changed |
 | DELETE | `/v1/collab/categories/workspace` | admin | → `MailCategorySettings`: no default |
 | PUT | `/v1/collab/categories/teams/{team_id}` | admin | `{enabled, categories?}` → `MailCategorySettings`; a new team set goes last in the order |
 | DELETE | `/v1/collab/categories/teams/{team_id}` | admin | → `MailCategorySettings`: the team follows the workspace |

@@ -43,7 +43,7 @@ import { accountName, boxForRole, isMailBox, mailListQuery, type MailSearch } fr
 import { cachedFolders } from "@/lib/collab/cache";
 import { compose } from "@/lib/collab/compose";
 import { addressNumbers } from "@/lib/collab/badges";
-import { accountCategories, categoryTabs, PRIMARY, ruleSender } from "@/lib/collab/categories";
+import { accountCategories, canMoveToCategory, categoryTabs, PRIMARY, ruleSender } from "@/lib/collab/categories";
 import { assignChanges, useAllFolders, useAssignThreads, useCanAct, useMailAccounts, useSelectEvery, useSidebarPrefs, useThreadAction } from "@/lib/collab/hooks";
 import { type ComposeMode } from "@/lib/collab/recipients";
 import { identitiesOf, ownEmails as ownEmailsOf } from "@/lib/collab/identities";
@@ -735,6 +735,8 @@ export default function MailPage() {
   dropRef.current = (ids, to) => {
     const items = threads.filter((x) => ids.includes(x.id));
     if (!items.length) return;
+    // A category tab (it took them only while each one's account has it): moved there as the row menu moves them.
+    if (to.category) return act(items, "categorize", { category: to.category, label: tabs.find((c) => c.key === to.category)?.name ?? to.category });
     const folderTo = to.box === "folder" && to.folder ? Object.values(folderMap).flatMap((fs) => fs ?? []).find((f) => f.id === to.folder) : undefined;
     const accountId = folderTo?.account_id ?? to.account;
     const its = accountId ? items.filter((x) => x.account_id === accountId) : items;
@@ -768,7 +770,19 @@ export default function MailPage() {
         return assignMe(its);
     }
   };
-  useEffect(() => (canAct ? takeThreadDrops((ids, to) => dropRef.current(ids, to)) : undefined), [canAct]);
+  /** Whether the conversations being dragged may drop on a place: a category tab takes them while each one's account has its category. */
+  const acceptsRef = useRef<(ids: string[], to: ThreadDropTarget) => boolean>(() => true);
+  acceptsRef.current = (ids, to) => !to.category || canMoveToCategory(threads.filter((x) => ids.includes(x.id)), accountsById, to.category);
+  useEffect(
+    () =>
+      canAct
+        ? takeThreadDrops(
+            (ids, to) => dropRef.current(ids, to),
+            (ids, to) => acceptsRef.current(ids, to),
+          )
+        : undefined,
+    [canAct],
+  );
 
   useShortcuts({
     "mail.next": () => move(1),

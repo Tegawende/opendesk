@@ -1,5 +1,6 @@
 // Inbox categories above the mail list (contracts/collab.md "Categories"): the tabs of
-// an inbox that is split, and, while none in view is, a quiet offer to split one.
+// an inbox that is split, and, while none in view is, a quiet offer to split one. A
+// conversation dragged from the list onto a tab moves to its category (lib/collab/threadDrag.ts).
 
 import { Link } from "@tanstack/react-router";
 import { SlidersHorizontal, X } from "lucide-react";
@@ -9,6 +10,7 @@ import type { MailAccount } from "@/lib/api/types";
 import type { MailSearch } from "@/lib/collab/boxes";
 import { categoryTone, PRIMARY, type CategoryTab } from "@/lib/collab/categories";
 import { cn } from "@/lib/cn";
+import { dropOverCls, useThreadDrop } from "@/lib/collab/threadDrag";
 import { atLeast, useRole, useSession } from "@/lib/session";
 import { AI_TONE, tone } from "@/lib/tones";
 import { OllieMark } from "@/components/assistant/OllieMark";
@@ -21,29 +23,9 @@ export function CategoryTabs({ tabs, active, search, settings }: { tabs: Categor
   const { t } = useTranslation("collab");
   return (
     <nav aria-label={t("categories.tabs")} className="flex h-10 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-line-soft px-3 [scrollbar-width:none]">
-      {tabs.map((c) => {
-        const on = c.key === active;
-        return (
-          <Link
-            key={c.key}
-            to="/mail/$box/{-$threadId}"
-            params={{ box: "inbox", threadId: undefined }}
-            search={{ ...search, category: c.key === PRIMARY ? undefined : c.key }}
-            aria-current={on ? "page" : undefined}
-            title={c.description || undefined}
-            className={cn(
-              "flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] outline-none transition-colors duration-100 focus-visible:shadow-[0_0_0_2px_var(--focus)]",
-              on ? "bg-active font-medium text-fg" : "text-fg-3 hover:bg-hover hover:text-fg-2",
-            )}
-          >
-            <span aria-hidden className={cn("size-2 shrink-0 rounded-full", tone[categoryTone(c)].solid)} />
-            <span className="max-w-[160px] truncate">{c.name}</span>
-            {c.unread > 0 && (
-              <span className={cn("mono rounded-sm px-1 text-[10.5px] tabular-nums", on ? "text-fg-3" : tone[categoryTone(c)].chip)}>{c.unread > 999 ? "999+" : c.unread}</span>
-            )}
-          </Link>
-        );
-      })}
+      {tabs.map((c) => (
+        <CategoryTabLink key={c.key} tab={c} on={c.key === active} search={search} />
+      ))}
       {settings && (
         <Tooltip content={t("categories.settings")}>
           {settings === "workspace" ? (
@@ -58,6 +40,30 @@ export function CategoryTabs({ tabs, active, search, settings }: { tabs: Categor
         </Tooltip>
       )}
     </nav>
+  );
+}
+
+/** One tab; conversations dragged from the list drop on it, except on the tab in view, where they already are. */
+function CategoryTabLink({ tab: c, on, search }: { tab: CategoryTab; on: boolean; search: MailSearch }) {
+  const drop = useThreadDrop(on ? null : { box: "inbox", category: c.key });
+  return (
+    <Link
+      {...drop.props}
+      to="/mail/$box/{-$threadId}"
+      params={{ box: "inbox", threadId: undefined }}
+      search={{ ...search, category: c.key === PRIMARY ? undefined : c.key }}
+      aria-current={on ? "page" : undefined}
+      title={c.description || undefined}
+      className={cn(
+        "flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] outline-none transition-[background-color,color,box-shadow] duration-100 focus-visible:shadow-[0_0_0_2px_var(--focus)] motion-reduce:transition-none",
+        on ? "bg-active font-medium text-fg" : "text-fg-3 hover:bg-hover hover:text-fg-2",
+        drop.over && cn(dropOverCls, "text-fg"),
+      )}
+    >
+      <span aria-hidden className={cn("size-2 shrink-0 rounded-full", tone[categoryTone(c)].solid)} />
+      <span className="max-w-[160px] truncate">{c.name}</span>
+      {c.unread > 0 && <span className={cn("mono rounded-sm px-1 text-[10.5px] tabular-nums", on ? "text-fg-3" : tone[categoryTone(c)].chip)}>{c.unread > 999 ? "999+" : c.unread}</span>}
+    </Link>
   );
 }
 
