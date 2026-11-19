@@ -35,6 +35,15 @@ describe("ownAddresses", () => {
     expect([...own].sort()).toEqual(["help@example-desk.test", "info@example-desk.test", "nora@example-desk.test", "support@example-desk.test"]);
     expect(ownAddresses(undefined, null).size).toBe(0);
   });
+  it("has each mailbox's forwarding address too, so Reply all never Cc's where our own mail arrives", () => {
+    const fwd = ownAddresses([
+      { email: "support@example-desk.test", aliases: [], forwarding_address: "Support-x1@Inbound.opendesk.test" },
+      { email: "info@example-desk.test", aliases: [], forwarding_address: "" },
+    ]);
+    expect([...fwd].sort()).toEqual(["info@example-desk.test", "support-x1@inbound.opendesk.test", "support@example-desk.test"]);
+    const m = msg({ to: ["support-x1@inbound.opendesk.test", "bart@agent.test"] });
+    expect(replyAllExtras(m, { own: fwd, contactEmail: "sales@supplier.test", to: ["sales@supplier.test"] })).toEqual(["bart@agent.test"]);
+  });
 });
 
 describe("latestInbound", () => {
@@ -53,6 +62,12 @@ describe("latestInbound", () => {
     expect(latestInbound([msg({ direction: "outbound" })])).toBeUndefined();
     expect(latestInbound(undefined)).toBeUndefined();
   });
+  it("passes over an email that failed sender authentication, as the server's reply recipient does", () => {
+    const ok = msg();
+    const spoofed = msg({ auth_failed: true, cc: ["someone@elsewhere.test"] });
+    expect(latestInbound([ok, spoofed])?.id).toBe(ok.id);
+    expect(latestInbound([spoofed])).toBeUndefined();
+  });
 });
 
 describe("replyAllExtras", () => {
@@ -68,11 +83,20 @@ describe("replyAllExtras", () => {
       "Bart@Agent.test",
     ]);
   });
-  it("adds the sender (its Reply-To when it named one) when it is not the contact", () => {
+  it("adds the sender (where the server says replies go) when it is not the contact", () => {
     const m = msg({ from_email: "colleague@supplier.test", to: ["info@example-desk.test"] });
     expect(replyAllExtras(m, { own, contactEmail: "sales@supplier.test", to: ["sales@supplier.test"] })).toEqual(["colleague@supplier.test"]);
-    const r = msg({ from_email: "sales@supplier.test", reply_to: "orders@supplier.test", to: ["info@example-desk.test"] });
+    // A Reply-To at the sender's own organisation: the server's reply_address.
+    const r = msg({ from_email: "sales@supplier.test", reply_to: "orders@supplier.test", reply_address: "orders@supplier.test", to: ["info@example-desk.test"] });
     expect(replyAllExtras(r, { own, contactEmail: "sales@supplier.test", to: ["sales@supplier.test"] })).toEqual(["orders@supplier.test"]);
+  });
+  it("never adds a Reply-To at another organisation: the server leaves reply_address empty and the sender stays", () => {
+    const r = msg({ from_email: "colleague@supplier.test", reply_to: "collect@elsewhere.test", reply_address: "", to: ["info@example-desk.test"] });
+    expect(replyAllExtras(r, { own, contactEmail: "sales@supplier.test", to: ["sales@supplier.test"] })).toEqual(["colleague@supplier.test"]);
+  });
+  it("adds nobody from an email that failed sender authentication", () => {
+    const m = msg({ auth_failed: true, from_email: "colleague@supplier.test", cc: ["bart@agent.test"] });
+    expect(replyAllExtras(m, { own, contactEmail: "sales@supplier.test", to: ["sales@supplier.test"] })).toEqual([]);
   });
   it("is empty when nobody else was on the email", () => {
     expect(replyAllExtras(msg(), { own, contactEmail: "sales@supplier.test", to: ["sales@supplier.test"] })).toEqual([]);

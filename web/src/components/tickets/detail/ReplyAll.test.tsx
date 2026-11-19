@@ -15,7 +15,7 @@ beforeAll(() => loadAgentCatalogs("fr"));
 
 const ticket = { id: "t1", channel: "email", contact: { id: "c1", name: "Supplier", email: "sales@supplier.test", avatar_url: "" } } as unknown as Ticket;
 const mailboxes = [
-  { id: "mb1", email: "info@example-desk.test", aliases: [] },
+  { id: "mb1", email: "info@example-desk.test", aliases: [], forwarding_address: "info-x1@inbound.opendesk.test" },
   { id: "mb2", email: "support@example-desk.test", aliases: ["help@example-desk.test"] },
 ] as unknown as Mailbox[];
 const inbound = (p: Partial<Message>): Message =>
@@ -118,6 +118,26 @@ describe("ReplyAllButton", () => {
 
   it("is not offered when the reply already reaches them (To or Bcc)", async () => {
     await mount(<Box to={["sales@supplier.test", "bart@agent.test"]} bcc={["info@agent.test"]} />, [inbound({ to: ["bart@agent.test", "info@agent.test", "info@example-desk.test"] })]);
+    expect(button()).toBeNull();
+  });
+
+  it("reads the latest email that passed sender checks, follows its reply address and leaves out our forwarding address", async () => {
+    await mount(<Box />, [
+      inbound({
+        id: "ok",
+        from_email: "colleague@supplier.test",
+        reply_to: "collect@elsewhere.test",
+        reply_address: "",
+        to: ["info-x1@inbound.opendesk.test", "bart@agent.test"],
+      }),
+      inbound({ id: "spoofed", auth_failed: true, cc: ["someone@elsewhere.test"] }),
+    ]);
+    await act(async () => button()!.click());
+    expect(cc()).toBe("colleague@supplier.test|bart@agent.test");
+  });
+
+  it("is not offered when the only email naming others failed sender checks", async () => {
+    await mount(<Box />, [inbound({ auth_failed: true, cc: ["someone@elsewhere.test"] })]);
     expect(button()).toBeNull();
   });
 

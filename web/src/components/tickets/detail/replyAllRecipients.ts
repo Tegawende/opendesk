@@ -6,43 +6,56 @@
 import type { Mailbox, Message } from "@/lib/api/types";
 import { dedupe, isEmail, normEmail } from "@/lib/collab/recipients";
 
-/** Every address of ours: each mailbox's own and its aliases (all of the workspace's), and the writer's. */
-export function ownAddresses(mailboxes: readonly Pick<Mailbox, "email" | "aliases">[] | undefined, userEmail?: string | null): Set<string> {
+/**
+ * Every address of ours: each mailbox's own, its aliases and its forwarding address (all of the
+ * workspace's), and the writer's. Reply all never Cc's an address our own mail arrives at.
+ */
+export function ownAddresses(
+  mailboxes: readonly (Pick<Mailbox, "email" | "aliases"> & { forwarding_address?: string | null })[] | undefined,
+  userEmail?: string | null,
+): Set<string> {
   const own = new Set<string>();
   for (const mb of mailboxes ?? []) {
     if (mb.email) own.add(normEmail(mb.email));
     for (const a of mb.aliases ?? []) own.add(normEmail(a));
+    if (mb.forwarding_address) own.add(normEmail(mb.forwarding_address));
   }
   if (userEmail) own.add(normEmail(userEmail));
   return own;
 }
 
-/** The ticket's latest email from the customer's side: not a note, a side conversation, a deleted or a held copy. */
+/**
+ * The ticket's latest email from the customer's side: not a note, a side conversation, a deleted
+ * or a held copy, and not one that failed sender authentication (`auth_failed`). As with the
+ * server's reply recipient (internal/domain/replyto.go), such mail never changes who a reply reaches.
+ */
 export function latestInbound(messages: readonly Message[] | undefined): Message | undefined {
   const list = messages ?? [];
   for (let i = list.length - 1; i >= 0; i--) {
     const m = list[i];
-    if (m.kind !== "reply" || m.direction !== "inbound" || m.thread_id || m.deleted_at || m.id.startsWith("tmp-")) continue;
+    if (m.kind !== "reply" || m.direction !== "inbound" || m.thread_id || m.deleted_at || m.auth_failed || m.id.startsWith("tmp-")) continue;
     return m;
   }
   return undefined;
 }
 
 /**
- * The addresses Reply all adds: the message's sender (its Reply-To when it named one), To and
- * Cc, without our own, the contact's, the ones the reply already goes to (To) or hides (Bcc),
- * deduplicated case-insensitively, in the message's order.
+ * The addresses Reply all adds: the message's sender (where the server says replies to it go,
+ * `reply_address`: a Reply-To at the sender's own organisation, else from_email, as
+ * internal/domain/replyto.go decides), To and Cc, without our own, the contact's, the ones the
+ * reply already goes to (To) or hides (Bcc), deduplicated case-insensitively, in the message's
+ * order. A message that failed sender authentication adds nobody.
  */
 export function replyAllExtras(
-  m: Pick<Message, "from_email" | "reply_to" | "to" | "cc"> | undefined,
+  m: Pick<Message, "from_email" | "reply_address" | "auth_failed" | "to" | "cc"> | undefined,
   opts: { own: ReadonlySet<string>; contactEmail?: string; to?: readonly string[]; bcc?: readonly string[] },
 ): string[] {
-  if (!m) return [];
+  if (!m || m.auth_failed) return [];
   const skip = new Set(opts.own);
   if (opts.contactEmail) skip.add(normEmail(opts.contactEmail));
   for (const a of opts.to ?? []) skip.add(normEmail(a));
   for (const a of opts.bcc ?? []) skip.add(normEmail(a));
-  const sender = m.reply_to || m.from_email;
+  const sender = m.reply_address || m.from_email;
   return dedupe([sender, ...m.to, ...m.cc].filter((a) => !!a && isEmail(a) && !skip.has(normEmail(a))));
 }
 
