@@ -407,7 +407,12 @@
     "edited": "editado",
     "someone": "Un antiguo compañero",
     "empty": "Todavía no hay comentarios. Habla aquí de esta conversación con tu equipo.",
-    "menu": "Acciones del comentario"
+    "menu": "Acciones del comentario",
+    "reply": "Responder",
+    "replyingTo": "Respondiendo a {{name}}:",
+    "cancelReply": "Cancelar respuesta",
+    "parentDeleted": "Comentario original eliminado",
+    "showParent": "Ir al comentario original de {{name}}"
   },
   "share": {
     "title": "Compartir conversación",
@@ -706,6 +711,8 @@
     "assignedAnon": "Se te asignó una conversación",
     "mention": "{{who}} te mencionó en un comentario",
     "mentionAnon": "Te mencionaron en un comentario",
+    "reply": "{{who}} respondió a tu comentario",
+    "replyAnon": "Alguien respondió a tu comentario",
     "open": "Abrir"
   },
   "shortcuts": {

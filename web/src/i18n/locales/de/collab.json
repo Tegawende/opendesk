@@ -374,7 +374,12 @@
     "edited": "bearbeitet",
     "someone": "Ein ehemaliges Teammitglied",
     "empty": "Noch keine Kommentare. Besprich diese Unterhaltung hier mit deinem Team.",
-    "menu": "Kommentaraktionen"
+    "menu": "Kommentaraktionen",
+    "reply": "Antworten",
+    "replyingTo": "Antwort an {{name}}:",
+    "cancelReply": "Antwort abbrechen",
+    "parentDeleted": "Ursprünglicher Kommentar gelöscht",
+    "showParent": "Zum ursprünglichen Kommentar von {{name}}"
   },
   "share": {
     "title": "Unterhaltung teilen",
@@ -664,6 +669,8 @@
     "assignedAnon": "Dir wurde eine Unterhaltung zugewiesen",
     "mention": "{{who}} hat dich in einem Kommentar erwähnt",
     "mentionAnon": "Du wurdest in einem Kommentar erwähnt",
+    "reply": "{{who}} hat auf deinen Kommentar geantwortet",
+    "replyAnon": "Jemand hat auf deinen Kommentar geantwortet",
     "open": "Öffnen"
   },
   "shortcuts": {

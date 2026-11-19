@@ -385,7 +385,12 @@
     "edited": "edited",
     "someone": "A former teammate",
     "empty": "No comments yet. Discuss this conversation with your team here.",
-    "menu": "Comment actions"
+    "menu": "Comment actions",
+    "reply": "Reply",
+    "replyingTo": "Replying to {{name}}:",
+    "cancelReply": "Cancel reply",
+    "parentDeleted": "Original comment deleted",
+    "showParent": "Go to the original comment by {{name}}"
   },
   "share": {
     "title": "Share conversation",
@@ -681,6 +686,8 @@
     "assignedAnon": "A conversation was assigned to you",
     "mention": "{{who}} mentioned you in a comment",
     "mentionAnon": "You were mentioned in a comment",
+    "reply": "{{who}} replied to your comment",
+    "replyAnon": "Someone replied to your comment",
     "open": "Open"
   },
   "shortcuts": {

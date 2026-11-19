@@ -397,7 +397,12 @@
     "edited": "modifié",
     "someone": "Un ancien collègue",
     "empty": "Aucun commentaire pour le moment. Discutez de cette conversation avec votre équipe ici.",
-    "menu": "Actions du commentaire"
+    "menu": "Actions du commentaire",
+    "reply": "Répondre",
+    "replyingTo": "En réponse à {{name}} :",
+    "cancelReply": "Annuler la réponse",
+    "parentDeleted": "Commentaire d’origine supprimé",
+    "showParent": "Aller au commentaire d’origine de {{name}}"
   },
   "share": {
     "title": "Partager la conversation",
@@ -690,6 +695,8 @@
     "assignedAnon": "Une conversation vous a été attribuée",
     "mention": "{{who}} vous a mentionné dans un commentaire",
     "mentionAnon": "Vous avez été mentionné dans un commentaire",
+    "reply": "{{who}} a répondu à votre commentaire",
+    "replyAnon": "Quelqu’un a répondu à votre commentaire",
     "open": "Ouvrir"
   },
   "shortcuts": {

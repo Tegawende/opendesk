@@ -360,7 +360,12 @@
     "edited": "已编辑",
     "someone": "已离开的同事",
     "empty": "还没有评论。在这里和团队讨论这个会话。",
-    "menu": "评论操作"
+    "menu": "评论操作",
+    "reply": "回复",
+    "replyingTo": "回复 {{name}}：",
+    "cancelReply": "取消回复",
+    "parentDeleted": "原评论已删除",
+    "showParent": "转到 {{name}} 的原评论"
   },
   "share": {
     "title": "共享会话",
@@ -652,6 +657,8 @@
     "assignedAnon": "有一个会话分配给了你",
     "mention": "{{who}} 在评论中提到了你",
     "mentionAnon": "有人在评论中提到了你",
+    "reply": "{{who}} 回复了你的评论",
+    "replyAnon": "有人回复了你的评论",
     "open": "打开"
   },
   "shortcuts": {

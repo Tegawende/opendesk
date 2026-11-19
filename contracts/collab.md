@@ -363,6 +363,30 @@ On a shared account with handling on, the work view keeps spam in sight:
 - Needs action and Ready for review say, above the list, how many unread conversations of the
   handling accounts in view are in spam, with a link to them.
 
+### Replies
+
+A comment can reply to another comment of the same conversation (`reply_to` on
+`POST /v1/collab/threads/{id}/comments`), so it says whom it answers instead of leaving it to order.
+
+- `reply_to` must be a comment of that conversation, in the caller's workspace: anything else, a comment
+  of another conversation or workspace or one that does not exist, is `422 validation_failed`. The
+  database keeps the same rule (`collab_comments.reply_to`). A reply's `reply_to` never changes; an edit
+  changes its text only.
+- `MailComment.reply_to` is the comment it replies to and `parent` quotes it: its author and its first
+  line of text (at most 120 characters). Deleting that comment keeps the reply: `reply_to` and `parent`
+  become `null` and `parent_deleted` is `true` ("Original comment deleted").
+- A reply answers the author of the comment it replies to, unless that is its own author: they follow the
+  conversation again ("Mentions") and get a `collab_mention` notification with `reply_to` set, once even
+  when the reply mentions them too. Unlike a mention, a reply shares nothing: its author is told only
+  while they still see the conversation.
+- Web: hovering a comment shows **Reply** beside its menu (also in the menu). It puts "Replying to
+  Name: first line" above the pinned comment bar, with an X, and focuses it; Escape or the X cancels.
+  The reply target waits with the unsent comment of its conversation. A reply shows a one-line quote
+  of its parent above its text; choosing it scrolls to the parent and highlights it briefly. The iPhone
+  app shows the quote, read only.
+- A new reply publishes `collab.changed` like any comment, and deleting a comment publishes it too, so
+  open conversations refetch and their replies show the parent gone.
+
 ### Mentions
 
 A mention in a comment would otherwise reach a member as a notification alone, while the conversation
@@ -372,10 +396,10 @@ apart, for each member:
 - A member **follows** a conversation when a comment mentions them (`mentions`, or a mention an edit
   adds), when a comment answers theirs, or by hand (`PUT /v1/collab/threads/{id}/follow`). Their own
   comments never make them follow.
-- **Answers**: comments have no reply link, so a comment answers a member when, since that member's
-  latest comment in the conversation, only its author has commented: the first comments after
-  theirs, however many the author writes. Someone else commenting after that answers no one but the
-  person before them.
+- **Answers**: a reply ("Replies") answers the author of the comment it replies to, and no one else.
+  A comment that replies to nothing answers a member when, since that member's latest comment in the
+  conversation, only its author has commented: the first comments after theirs, however many the
+  author writes. Someone else commenting after that answers no one but the person before them.
 - Mentioned or answered again, a member who removed themselves follows again.
 - Only members who see the conversation follow it ("Who sees what"): a mention of someone who
   cannot see it shares it with them first, an answer does not. Following never changes who sees
@@ -976,6 +1000,9 @@ interface MailComment {
   author: UserRef | null
   body_html: string            // sanitized like a note
   mentions: string[]           // user ids
+  reply_to: string | null      // the comment of this conversation it replies to ("Replies")
+  parent: { author: UserRef | null; excerpt: string } | null  // that comment's author and first line, with reply_to
+  parent_deleted: boolean      // it replied to a comment since deleted
   created_at: string
   updated_at: string
 }
@@ -1283,7 +1310,7 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | DELETE | `/v1/collab/accounts/{id}/category-rules/{rule_id}` | manage | → 204 |
 | PUT | `/v1/collab/threads/{id}/shares` | act | `{shares: Audience}` → `MailThreadDetail`. Empty unshares. Audit `collab.thread_shared` (ids only) |
 | PUT | `/v1/collab/threads/{id}/assignees` | act | `{user_ids: string[0..20]}` → `MailThreadDetail`; each must be a member (agent+); assigning lets them see it. Each new assignee gets a `collab_assigned` notification |
-| POST | `/v1/collab/threads/{id}/comments` | act | `{body_html: 1..20000, mentions?: string[]}` → `MailComment`; each mentioned member who can see it gets a `collab_mention` notification; a mention of someone who cannot see it shares the conversation with them. The people it mentions or answers follow it ("Mentions") |
+| POST | `/v1/collab/threads/{id}/comments` | act | `{body_html: 1..20000, mentions?: string[], reply_to?: string}` → `MailComment`; each mentioned member who can see it gets a `collab_mention` notification; a mention of someone who cannot see it shares the conversation with them. `reply_to`: a comment of the same conversation it replies to (`422 validation_failed` otherwise), whose author is notified and follows it ("Replies"). The people it mentions or answers follow it ("Mentions") |
 | PUT | `/v1/collab/threads/{id}/follow` | see | → 204: the caller follows it, in their Mentions ("Mentions"); following already moves it to the top |
 | DELETE | `/v1/collab/threads/{id}/follow` | see | → 204: out of the caller's Mentions; nothing else changes. Not following is fine |
 | PATCH | `/v1/collab/comments/{id}` | its author | `{body_html}` → `MailComment`; people newly mentioned are notified and follow it |
@@ -1557,9 +1584,11 @@ subject, body or credential.
 
 ## Notifications
 
-`collab_assigned` (`{thread_id, account_id, by, subject}`) and `collab_mention` (`{thread_id, comment_id, by, subject, preview}`), group `mail`:
+`collab_assigned` (`{thread_id, account_id, by, subject}`) and `collab_mention` (`{thread_id, comment_id, by, subject, preview, reply_to?}`), group `mail`:
 in-app and push like other notifications, emailed by the member's notification preferences
-(on by default). Their text names who assigned or mentioned and the conversation's subject.
+(on by default). Their text names who assigned or mentioned and the conversation's subject. A
+`collab_mention` with `reply_to` (the member's comment it answers) is a reply ("Replies") and says
+"replied to your comment".
 
 ## Data
 
@@ -1589,3 +1618,6 @@ in-app and push like other notifications, emailed by the member's notification p
 - `collab_thread_followers` (`migrations/000770_collab_thread_followers.up.sql`): who follows each
   conversation ("Mentions") and when it last had something for them (`activity_at`). It goes with the
   conversation, the user or the workspace.
+- `collab_comments.reply_to` and `replied` (`migrations/000771_collab_comment_replies.up.sql`): the
+  comment a comment replies to, kept in its workspace and conversation by a trigger and cleared when that
+  comment is deleted, and whether it was written as a reply ("Replies").
