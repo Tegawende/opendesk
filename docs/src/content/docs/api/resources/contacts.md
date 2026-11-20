@@ -13,6 +13,7 @@ Scopes: `contacts:read` to read, `contacts:write` to change.
 | `PATCH` | `/v1/contacts/{id}` | Update a contact |
 | `DELETE` | `/v1/contacts/{id}` | Delete a contact |
 | `GET` | `/v1/contacts/{id}/tickets` | The contact's tickets |
+| `GET` | `/v1/tickets/{id}/customer-tickets` | The customer's other tickets, from any of their addresses: those of the ticket's contact, of every contact who wrote in it, and of every contact with one of their addresses (primary, extra, or typed in the chat). Not the ticket itself, deleted or merged tickets. Newest first, at most 50, with `total`; each names the contact it is filed under. Needs `tickets:read` too |
 | `POST` | `/v1/contacts/bulk` | Label, set a custom field or the company of, or delete many contacts: `ids` (up to 100) or `query` (the list's filters, at most 1000 contacts), with `patch` or `delete: true` |
 | `GET` | `/v1/contacts/{id}/portal` | The contact's customer portal access: `status` (`none`, `invited`, `active`), the last sign-in and the brands an invitation can come from |
 | `POST` | `/v1/contacts/{id}/portal/invite` | Email the contact a 7-day link to choose a portal password, from `brand_id` or the default brand |
