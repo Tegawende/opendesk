@@ -22,6 +22,8 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 let root: Root | null = null;
 let uploads: FormData[];
 let upload: () => Response;
+let drawn: HTMLCanvasElement[];
+let objectUrls: { mock: { calls: unknown[] } };
 
 // ProseMirror scrolls the selection into view after an insert; jsdom has no layout.
 const rect = () => ({ height: 0, width: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} }) as DOMRect;
@@ -34,10 +36,17 @@ beforeEach(async () => {
   await i18n.changeLanguage("en");
   uploads = [];
   upload = () => json({ url: URL_, width: 600, height: 150 }, 201);
-  // The preview of a picture chosen comes from the device (jsdom has no object URLs).
-  let blobs = 0;
-  URL.createObjectURL = () => `blob:preview-${++blobs}`;
-  URL.revokeObjectURL = () => {};
+  // The preview of a picture chosen is drawn from the file's pixels (jsdom decodes no pictures
+  // and draws nothing): a 600 x 150 logo, and nothing for a file that is not a picture.
+  drawn = [];
+  vi.stubGlobal("createImageBitmap", (f: File) =>
+    f.type.startsWith("image/") ? Promise.resolve({ width: 600, height: 150, close() {} }) : Promise.reject(new DOMException("not a picture", "InvalidStateError")),
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(function (this: HTMLCanvasElement) {
+    return { drawImage: () => drawn.push(this) } as never;
+  });
+  // No address is ever made from the file chosen.
+  objectUrls = vi.spyOn(URL, "createObjectURL");
   vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.includes("/v1/signature-images") && init?.method === "POST") {
@@ -57,6 +66,7 @@ afterEach(async () => {
   document.body.innerHTML = "";
   useSession.setState({ memberships: [], workspaceId: null, user: null });
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 const wait = (ms: number) => act(() => new Promise((r) => setTimeout(r, ms)));
@@ -110,12 +120,12 @@ const setInput = async (el: HTMLInputElement, value: string) => {
     el.dispatchEvent(new Event("input", { bubbles: true }));
   });
 };
-async function pick(name: string) {
+async function pick(name: string, type = "image/png") {
   const input = byLabel("Picture file") as HTMLInputElement;
-  const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], name, { type: "image/png" });
+  const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], name, { type });
   Object.defineProperty(input, "files", { value: [file], configurable: true });
   await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
-  await until(() => !!document.querySelector(`[role="dialog"] img`) || !!document.querySelector('[role="dialog"] [role="alert"]'));
+  await until(() => !!document.querySelector(`[role="dialog"] canvas`) || !type.startsWith("image/"));
 }
 
 describe("a sized picture stays in the visual editor", () => {
@@ -179,8 +189,14 @@ describe("the picture button", () => {
     expect(insert.disabled).toBe(true);
 
     await pick("acme-logo_2x.png");
-    // Shown from the device: nothing is uploaded until it goes in.
-    expect(document.querySelector('[role="dialog"] img')!.getAttribute("src")).toMatch(/^blob:/);
+    // Drawn from the device's file, not loaded from an address: nothing is uploaded until it goes in.
+    const preview = document.querySelector<HTMLCanvasElement>('[role="dialog"] canvas')!;
+    expect(drawn).toEqual([preview]);
+    expect([preview.width, preview.height]).toEqual([600, 150]);
+    expect(preview.style.width).toBe("200px");
+    expect(preview.getAttribute("aria-label")).toBe("acme logo 2x");
+    expect(document.querySelector('[role="dialog"] img')).toBeNull();
+    expect(objectUrls.mock.calls).toHaveLength(0);
     expect(uploads).toHaveLength(0);
     // Medium by default; the description starts from the file name.
     expect(byText('[role="radio"]', "Medium · 200 px")!.getAttribute("aria-checked")).toBe("true");
@@ -229,7 +245,9 @@ describe("the picture button", () => {
     upload = () => json({ status: 422, title: "Unprocessable Entity", detail: "Use a PNG, JPEG, GIF or WebP picture.", code: "unsupported_image" }, 422);
     const { saved } = await mount("<p>Lea</p>");
     await act(async () => byLabel("Image")!.click());
-    await pick("notes.pdf");
+    await pick("notes.pdf", "application/pdf");
+    // Not a picture: nothing drawn, and the server says why.
+    expect(document.querySelector('[role="dialog"] canvas')).toBeNull();
     await act(async () => (byText('[role="dialog"] button', "Insert") as HTMLButtonElement).click());
     await until(() => !!document.querySelector('[role="dialog"] [role="alert"]'));
     expect(document.querySelector('[role="dialog"] [role="alert"]')!.textContent).toContain("Use a PNG, JPEG, GIF or WebP picture.");
@@ -266,6 +284,46 @@ describe("the picture button", () => {
     await act(async () => (byText('[role="dialog"] button', "Insert") as HTMLButtonElement).click());
     await until(() => !document.querySelector('[role="dialog"]'));
     expect(saved[saved.length - 1]).toContain(`<img src="${URL_}" alt="logo" width="200" height="50">`);
+  });
+
+  it("never turns a file name or a description with <, \" or & into markup", async () => {
+    const { saved } = await mount(`<table><tr><td>Lea</td></tr></table>`);
+    await act(async () => byLabel("Image")!.click());
+    await pick(`<img src=x onerror=alert(1)>&"logo".png`);
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const alt = dialog.querySelector<HTMLInputElement>('input:not([type="file"])')!;
+    expect(alt.value).toBe("img src=x onerror=alert(1)&logo");
+    // The preview is drawn, with the description as its plain-text label.
+    expect(dialog.querySelectorAll("img")).toHaveLength(0);
+    const text = `"Hi" <b>you</b> & <img src=x onerror=alert(1)>`;
+    await setInput(alt, text);
+    expect(dialog.querySelector("canvas")!.getAttribute("aria-label")).toBe(text);
+    expect(dialog.querySelectorAll("b, img")).toHaveLength(0);
+    expect(objectUrls.mock.calls).toHaveLength(0);
+
+    await act(async () => (byText('[role="dialog"] button', "Insert") as HTMLButtonElement).click());
+    await until(() => !document.querySelector('[role="dialog"]'));
+    // In the HTML it goes in as one attribute value, escaped.
+    const last = saved[saved.length - 1];
+    expect(last).toContain(`<img src="${URL_}" alt="&quot;Hi&quot; &lt;b>you&lt;/b> &amp; &lt;img src=x onerror=alert(1)>" width="200" height="50">`);
+    expect(last.match(/<img/g)).toHaveLength(1);
+    expect(last).not.toContain("<b>");
+  });
+
+  it("keeps a description with <, \" or & as text in the visual editor", async () => {
+    const { saved, editor } = await mount("<p>Lea</p>");
+    await act(async () => byLabel("Image")!.click());
+    await pick("logo.png");
+    const text = `"Hi" <b>you</b> & co`;
+    await setInput(document.querySelector<HTMLInputElement>('[role="dialog"] input:not([type="file"])')!, text);
+    await act(async () => (byText('[role="dialog"] button', "Insert") as HTMLButtonElement).click());
+    await until(() => !document.querySelector('[role="dialog"]'));
+    const imgs = document.querySelectorAll<HTMLImageElement>(".tiptap img");
+    expect(imgs).toHaveLength(1);
+    expect(imgs[0].getAttribute("alt")).toBe(text);
+    expect(document.querySelectorAll(".tiptap b")).toHaveLength(0);
+    expect(editor()!.getHTML()).toContain(`alt="&quot;Hi&quot; &lt;b&gt;you&lt;/b&gt; &amp; co"`);
+    expect(saved[saved.length - 1]).not.toContain("<b>");
   });
 });
 

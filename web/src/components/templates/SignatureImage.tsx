@@ -1,5 +1,5 @@
 // A picture in a signature. The editor's picture button opens this dialog: the picture chosen
-// shows from the device until it goes in, then it is uploaded to POST /v1/signature-images,
+// is drawn from the device's file until it goes in (no address is made from the file), then it is uploaded to POST /v1/signature-images,
 // which gives a public, stable URL (the recipients' mail clients load it from there), and goes
 // in at a signature size with a description for when pictures are blocked. A picture replaced
 // or a dialog cancelled uploads nothing. Clicking a picture in the signature and then the
@@ -87,12 +87,28 @@ function Title({ editing }: { editing: boolean }) {
   return <>{editing ? ui("signatureImage.editTitle") : ui("signatureImage.title")}</>;
 }
 
+/** A picture chosen on the device, drawn from its decoded pixels: never loaded from an address. */
+function DrawnPicture({ bitmap, label, width }: { bitmap: ImageBitmap; label: string; width: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    c.width = bitmap.width;
+    c.height = bitmap.height;
+    c.getContext("2d")?.drawImage(bitmap, 0, 0);
+  }, [bitmap]);
+  // Its shape comes from the canvas size, so the height follows the width.
+  return <canvas ref={ref} role="img" aria-label={label} style={{ width }} className="block h-auto max-w-full" />;
+}
+
 function Body({ initial, onDone, onCancel }: { initial?: SignaturePicture; onDone: (p: SignaturePicture) => void; onCancel: () => void }) {
   const { t: ui } = useTranslation("ui");
   const fileRef = useRef<HTMLInputElement>(null);
+  // The picture already in the signature, at its public address.
   const [src, setSrc] = useState(initial?.src ?? "");
-  // A picture chosen and not uploaded yet: src is its preview from the device.
+  // A picture chosen and not uploaded yet, and its pixels once decoded (none for a file that is not a picture).
   const [file, setFile] = useState<File>();
+  const [bitmap, setBitmap] = useState<ImageBitmap>();
   const [alt, setAlt] = useState(initial?.alt ?? "");
   const [natural, setNatural] = useState<Natural>();
   // The shape, kept when the size changes: from the loaded picture, the upload, or the stored size.
@@ -101,30 +117,48 @@ function Body({ initial, onDone, onCancel }: { initial?: SignaturePicture; onDon
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
 
-  const preview = file ? src : "";
-  useEffect(() => (preview ? () => URL.revokeObjectURL(preview) : undefined), [preview]);
-
   const choose = (f: File) => {
     setFile(f);
-    setSrc(URL.createObjectURL(f));
+    setSrc("");
+    setBitmap(undefined);
     setNatural(undefined);
     setRatio(undefined);
     setError("");
     if (!alt.trim()) setAlt(altFromFileName(f.name));
   };
-  const loaded = (img: HTMLImageElement) => {
-    if (natural || img.naturalWidth <= 0) return;
+  const loaded = (naturalWidth: number, naturalHeight: number, chosen: boolean) => {
+    if (naturalWidth <= 0 || naturalHeight <= 0) return;
     // As the server will keep it: at most 600 px on its longer side.
-    const scale = Math.min(1, STORED_MAX / Math.max(img.naturalWidth, img.naturalHeight));
-    const n = { width: Math.max(1, Math.round(img.naturalWidth * scale)), height: Math.max(1, Math.round(img.naturalHeight * scale)) };
-    setNatural(n);
-    setRatio((r) => r ?? img.naturalHeight / img.naturalWidth);
-    if (file) setWidth((w) => (initial ? Math.min(w, n.width) : defaultWidth(n.width)));
+    const scale = Math.min(1, STORED_MAX / Math.max(naturalWidth, naturalHeight));
+    const n = { width: Math.max(1, Math.round(naturalWidth * scale)), height: Math.max(1, Math.round(naturalHeight * scale)) };
+    setNatural((cur) => cur ?? n);
+    setRatio((r) => r ?? naturalHeight / naturalWidth);
+    if (chosen) setWidth((w) => (initial ? Math.min(w, n.width) : defaultWidth(n.width)));
   };
+
+  // Decode the file chosen; one that is not a picture shows nothing and the server says why.
+  useEffect(() => {
+    if (!file) return;
+    let live = true;
+    let decoded: ImageBitmap | undefined;
+    createImageBitmap(file).then(
+      (b) => {
+        if (!live) return b.close();
+        decoded = b;
+        setBitmap(b);
+        loaded(b.width, b.height, true);
+      },
+      () => {},
+    );
+    return () => {
+      live = false;
+      decoded?.close();
+    };
+  }, [file]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A picture already in at another width keeps it on offer.
   const choices = [...new Set([...widthChoices(natural?.width), ...(initial ? [initial.width] : [])])].sort((a, b) => a - b);
-  const ready = !!src && !!alt.trim() && !uploading;
+  const ready = (!!src || !!file) && !!alt.trim() && !uploading;
   const done = async () => {
     if (!ready) return;
     if (!file) {
@@ -170,17 +204,21 @@ function Body({ initial, onDone, onCancel }: { initial?: SignaturePicture; onDon
           if (f) choose(f);
         }}
       />
-      {src ? (
+      {src || file ? (
         <div className="flex flex-col items-start gap-2">
           <div className="max-w-full overflow-hidden rounded-md border border-line bg-white p-2">
-            <img
-              src={src}
-              alt={alt}
-              width={width}
-              height={heightFor(width, ratio)}
-              className="block max-w-full"
-              onLoad={(e) => loaded(e.currentTarget)}
-            />
+            {file ? (
+              bitmap && <DrawnPicture bitmap={bitmap} label={alt} width={width} />
+            ) : (
+              <img
+                src={src}
+                alt={alt}
+                width={width}
+                height={heightFor(width, ratio)}
+                className="block max-w-full"
+                onLoad={(e) => loaded(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight, false)}
+              />
+            )}
           </div>
           <Button type="button" size="sm" variant="ghost" disabled={uploading} onClick={() => fileRef.current?.click()}>
             {ui("signatureImage.replace")}
