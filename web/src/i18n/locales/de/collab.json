@@ -954,6 +954,12 @@
       "body": "E-Mails von Menschen bleiben in Allgemein, während Newsletter, Updates und Werbung eigene Tabs bekommen. Ollie kann Kategorien aus deinen E-Mails vorschlagen.",
       "action": "Kategorien einrichten",
       "dismiss": "Nicht jetzt"
+    },
+    "reorder": {
+      "hint": "Zum Umsortieren ziehen oder {{left}} bzw. {{right}} drücken",
+      "hintDrag": "Zum Umsortieren ziehen",
+      "moved": "{{name}} an Stelle {{position}} von {{count}} verschoben",
+      "failed": "Die neue Reihenfolge der Tabs konnte nicht gespeichert werden"
     }
   },
   "aiFeedback": {

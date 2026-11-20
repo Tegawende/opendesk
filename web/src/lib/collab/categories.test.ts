@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MailAccount, MailAccountCategories, MailCategory, MailCounts } from "../api/types";
-import { accountCategories, canMoveToCategory, categoryProblem, categoryTabs, categoryTone, ruleSender, slugKey, withKeys } from "./categories";
+import { accountCategories, canMoveToCategory, categoryOrderSet, categoryProblem, categoryTabs, categoryTone, inKeyOrder, moveCategory, ruleSender, showsOrderSet, slugKey, withKeys } from "./categories";
 
 const cat = (key: string, name = key[0].toUpperCase() + key.slice(1), color: MailCategory["color"] = "gray"): MailCategory => ({ key, name, description: "", color });
 
@@ -140,5 +140,86 @@ describe("canMoveToCategory", () => {
     expect(canMoveToCategory([{ account_id: "p" }], byId, "primary")).toBe(false);
     expect(canMoveToCategory([{ account_id: "gone" }], byId, "updates")).toBe(false);
     expect(canMoveToCategory([], byId, "updates")).toBe(false);
+  });
+});
+
+describe("categoryOrderSet", () => {
+  const defaults = [cat("primary"), cat("updates"), cat("promotions")];
+  const teamSet = [cat("primary"), cat("promotions"), cat("social")];
+  const mine = (c: Partial<MailAccountCategories> = {}, id = "mine") => {
+    const a = account(id, defaults);
+    return { ...a, can_manage: true, categories: { ...a.categories, ...c } } as MailAccount;
+  };
+  const onTeam = (id: string, team = "sales") => mine({ categories: teamSet, source: "team", team: { id: team, name: team } }, id);
+
+  it("is the caller's own account when it is the one split account in view, whether it follows a set or has its own", () => {
+    const following = mine();
+    const set = categoryOrderSet([following], following);
+    expect(set).toEqual({ kind: "account", account: following, categories: defaults });
+    expect(showsOrderSet(following, set!)).toBe(true);
+    const own = mine({ mode: "custom", source: "account", own: defaults });
+    expect(categoryOrderSet([own, account("whole", null)], own)?.kind).toBe("account");
+  });
+
+  it("refuses an account locked for the caller, on Gmail's fixed set, not theirs, or sharing the tabs with another split account", () => {
+    const locked = mine({ locked: true });
+    expect(categoryOrderSet([locked], locked)).toBeNull();
+    const gmail = mine({ mode: "gmail", engine: "gmail", source: "account" });
+    expect(categoryOrderSet([gmail], gmail)).toBeNull();
+    const shared = { ...mine(), can_manage: false } as MailAccount;
+    expect(categoryOrderSet([shared], shared)).toBeNull();
+    const own = mine();
+    expect(categoryOrderSet([own, mine({}, "other")], own)).toBeNull();
+    expect(categoryOrderSet([own], null)).toBeNull();
+  });
+
+  it("is the workspace default for an admin when every split account in view follows it", () => {
+    const set = categoryOrderSet([mine({}, "a"), mine({}, "b"), account("whole", null)], "workspace");
+    expect(set).toEqual({ kind: "workspace", categories: defaults });
+    expect(showsOrderSet(onTeam("t"), set!)).toBe(false);
+    expect(showsOrderSet(mine({ mode: "custom", source: "account" }), set!)).toBe(false);
+  });
+
+  it("is a team's set for an admin when every split account in view follows that team", () => {
+    const set = categoryOrderSet([onTeam("a"), onTeam("b")], "workspace");
+    expect(set).toEqual({ kind: "team", team: "sales", categories: teamSet });
+    expect(showsOrderSet(onTeam("c", "support"), set!)).toBe(false);
+  });
+
+  it("has no set for an admin when the tabs merge several sets or one is an account's own", () => {
+    expect(categoryOrderSet([mine({}, "a"), onTeam("b")], "workspace")).toBeNull();
+    expect(categoryOrderSet([onTeam("a"), onTeam("b", "support")], "workspace")).toBeNull();
+    expect(categoryOrderSet([mine({ mode: "custom", source: "account" })], "workspace")).toBeNull();
+  });
+});
+
+describe("inKeyOrder", () => {
+  const list = [cat("primary"), cat("updates"), cat("promotions")];
+
+  it("puts a set in the keys' order", () => {
+    expect(inKeyOrder(list, ["primary", "promotions", "updates"])?.map((c) => c.key)).toEqual(["primary", "promotions", "updates"]);
+  });
+
+  it("refuses an order with Primary anywhere but first, or keys that are not the set's", () => {
+    expect(inKeyOrder(list, ["updates", "primary", "promotions"])).toBeNull();
+    expect(inKeyOrder(list, ["primary", "updates"])).toBeNull();
+    expect(inKeyOrder(list, ["primary", "updates", "updates"])).toBeNull();
+    expect(inKeyOrder(list, ["primary", "updates", "social"])).toBeNull();
+  });
+});
+
+describe("moveCategory", () => {
+  const keys = ["primary", "updates", "promotions", "social"];
+
+  it("moves a category one place either way", () => {
+    expect(moveCategory(keys, "promotions", -1)).toEqual(["primary", "promotions", "updates", "social"]);
+    expect(moveCategory(keys, "updates", 1)).toEqual(["primary", "promotions", "updates", "social"]);
+  });
+
+  it("keeps Primary first: it does not move and nothing moves before it", () => {
+    expect(moveCategory(keys, "primary", 1)).toBeNull();
+    expect(moveCategory(keys, "updates", -1)).toBeNull();
+    expect(moveCategory(keys, "social", 1)).toBeNull();
+    expect(moveCategory(keys, "missing", 1)).toBeNull();
   });
 });

@@ -884,6 +884,12 @@
       "body": "Les e-mails des personnes restent dans Principale, tandis que les newsletters, les notifications et les promotions ont leurs propres onglets. Ollie peut proposer des catégories à partir de vos e-mails.",
       "action": "Configurer les catégories",
       "dismiss": "Plus tard"
+    },
+    "reorder": {
+      "hint": "Faites glisser pour réordonner, ou appuyez sur {{left}} ou {{right}}",
+      "hintDrag": "Faites glisser pour réordonner",
+      "moved": "{{name}} déplacé en position {{position}} sur {{count}}",
+      "failed": "Impossible d’enregistrer le nouvel ordre des onglets"
     }
   },
   "aiFeedback": {

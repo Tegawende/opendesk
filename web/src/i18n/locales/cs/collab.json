@@ -1038,6 +1038,12 @@
       "body": "Pošta od lidí zůstane v kategorii „Hlavní“, zatímco zpravodaje, aktualizace a propagační sdělení dostanou vlastní karty. Ollie může navrhnout kategorie podle vaší pošty.",
       "action": "Nastavit kategorie",
       "dismiss": "Teď ne"
+    },
+    "reorder": {
+      "hint": "Přetažením změníte pořadí, nebo stiskněte {{left}} či {{right}}",
+      "hintDrag": "Přetažením změníte pořadí",
+      "moved": "{{name}} přesunuto na {{position}}. místo z {{count}}",
+      "failed": "Nové pořadí karet se nepodařilo uložit"
     }
   },
   "aiFeedback": {

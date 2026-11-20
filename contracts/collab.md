@@ -638,6 +638,27 @@ moves it (`categorize`, the same toast and Undo); dragging a selected row moves 
 tab takes the drop only while every dragged conversation's account has its key, and the tab in view
 takes none.
 
+**Reordering the tabs.** Whoever may change the one set the tabs show reorders them on the mail page:
+a tab dragged along the row (a pointer drag past a few pixels; a press that does not move opens the
+tab) or moved with the keys that move a sidebar row, sideways (`mail.tabLeft` and `mail.tabRight`,
+mod+Shift+Left and Right by default) while it has the focus, announced to screen readers.
+Primary stays first and nothing goes before it. A reorder is never the conversation drag above (it
+carries no conversations, and conversations dropped on a tab never reorder). It saves what the
+settings behind the tab bar's settings link would save for the same order, through the same endpoint:
+
+- an account the caller manages and is the only split account in view (its local categories, not
+  `locked`): `PUT …/accounts/{id}/categories` with `{mode: "custom", categories}`. An account that
+  followed its team or the workspace becomes `custom` with a copy of those categories in the new
+  order, as choosing Custom in its settings does; it follows the set again by choosing Follow;
+- for an admin, while every split account in view follows the workspace default, or one team's set:
+  `PUT /v1/collab/categories/workspace` with `{enabled: true, categories}` (the lock unchanged), or
+  `PUT /v1/collab/categories/teams/{team_id}` with `{enabled: true, categories}`.
+
+Otherwise (viewers, Gmail's fixed set, a set `locked` for the caller, tabs merged from several sets,
+or an account's own set seen from All inboxes, whose link leads to the workspace's settings) the tabs
+do not move. The new order shows at once and goes back, with an error, if the save fails; other
+viewers get it through the accounts' events, as for any change of categories.
+
 **Privacy.** A category and a sender rule are seen by whoever sees the account, no one else: an
 admin sets categories for private accounts without ever seeing their mail or how it was sorted. What
 Ollie reads is listed above; nothing is logged or kept apart from the category. A member may turn

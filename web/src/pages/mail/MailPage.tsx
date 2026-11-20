@@ -66,7 +66,7 @@ import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import { AIDraftFeedbackDialog } from "@/components/collab/AIDraftFeedback";
 import { AccountDot, boxIcon, FolderGlyph } from "@/components/collab/bits";
-import { canOfferCategories, CategoryOffer, CategoryTabs, useCategorySettingsTarget } from "@/components/collab/CategoryTabs";
+import { canOfferCategories, CategoryOffer, CategoryTabs, useCategoryReorder, useCategorySettingsTarget } from "@/components/collab/CategoryTabs";
 import { FolderBar } from "@/components/collab/FolderBar";
 import { holdSend, undoSendSeconds, useUndoneSends } from "@/components/collab/outbox";
 import { SearchCoverage, SpamBesideWork, StorageFullBanner } from "@/components/collab/MailNotices";
@@ -161,6 +161,7 @@ export default function MailPage() {
   const tabs = useMemo(() => categoryTabs(tabAccounts, counts), [tabAccounts, counts]);
   const category = tabs.length ? (tabs.some((c) => c.key === search.category) ? search.category : PRIMARY) : undefined;
   const settingsTarget = useCategorySettingsTarget(tabAccounts);
+  const reorderTabs = useCategoryReorder(tabAccounts, settingsTarget);
   const offer = !tabs.length && canAct ? tabAccounts.find(canOfferCategories) : undefined;
   const query = useMemo(() => mailListQuery(box, { ...search, category }), [box, search.account, search.folder, search.q, search.to, search.with, category]); // eslint-disable-line react-hooks/exhaustive-deps
   const listKey = JSON.stringify(query);
@@ -937,7 +938,7 @@ export default function MailPage() {
             prefs={prefs}
           />
         )}
-        {tabs.length > 0 && category && <CategoryTabs tabs={tabs} active={category} search={search} settings={settingsTarget} />}
+        {tabs.length > 0 && category && <CategoryTabs tabs={tabs} active={category} search={search} settings={settingsTarget} reorder={reorderTabs} />}
         {offer && <CategoryOffer account={offer} />}
         {!noAccounts && <StorageFullBanner />}
         {(box === "needs_action" || box === "ai_review") && accounts && <SpamBesideWork accounts={account ? [account] : accounts} counts={counts} />}

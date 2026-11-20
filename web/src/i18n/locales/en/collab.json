@@ -975,6 +975,12 @@
       "body": "Mail from people stays in Primary, while newsletters, updates and promotions get their own tabs. Ollie can suggest categories from your mail.",
       "action": "Set up categories",
       "dismiss": "Not now"
+    },
+    "reorder": {
+      "hint": "Drag to reorder, or press {{left}} or {{right}}",
+      "hintDrag": "Drag to reorder",
+      "moved": "{{name}} moved to place {{position}} of {{count}}",
+      "failed": "Couldn't save the new order of the tabs"
     }
   },
   "aiFeedback": {

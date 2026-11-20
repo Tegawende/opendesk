@@ -1009,6 +1009,12 @@
       "body": "El correo de las personas se queda en Principal, y los boletines, las actualizaciones y las promociones tienen sus propias pestañas. Ollie puede sugerir categorías a partir de tu correo.",
       "action": "Configurar categorías",
       "dismiss": "Ahora no"
+    },
+    "reorder": {
+      "hint": "Arrastra para reordenar, o pulsa {{left}} o {{right}}",
+      "hintDrag": "Arrastra para reordenar",
+      "moved": "{{name}} movida al puesto {{position}} de {{count}}",
+      "failed": "No se pudo guardar el nuevo orden de las pestañas"
     }
   },
   "aiFeedback": {

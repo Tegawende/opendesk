@@ -47,6 +47,60 @@ export function categoryTabs(accounts: MailAccount[], counts?: MailCounts): Cate
   return tabs;
 }
 
+/**
+ * The one set the inbox tabs' order belongs to, as the settings behind the tab bar's gear would save it
+ * (`target`, from useCategorySettingsTarget), or null when the tabs cannot be reordered there:
+ * - an account the caller manages, when it is the only split account in view and its categories are
+ *   local and not locked for the caller. Its account settings change the order by choosing Custom, so a
+ *   reorder makes the account custom with these tabs in the new order, whatever it followed;
+ * - for an admin's workspace settings, the workspace default or one team's set, when every split
+ *   account in view follows that same set (an account shows a set it follows as the set is).
+ * Tabs merged from several sets, Gmail's fixed set and a set locked for the caller have no one order to save.
+ */
+export type CategoryOrderSet =
+  | { kind: "account"; account: MailAccount; categories: MailCategory[] }
+  | { kind: "workspace"; categories: MailCategory[] }
+  | { kind: "team"; team: string; categories: MailCategory[] };
+
+export function categoryOrderSet(accounts: MailAccount[], target: MailAccount | "workspace" | null): CategoryOrderSet | null {
+  const split = accounts.filter((a) => a.categories?.enabled && a.categories.categories.length > 1);
+  if (!target || !split.length) return null;
+  if (target !== "workspace") {
+    const c = target.categories;
+    const alone = split.length === 1 && split[0].id === target.id;
+    return alone && target.can_manage && !c.locked && c.engine === "local" ? { kind: "account", account: target, categories: c.categories } : null;
+  }
+  const { source, team, categories } = split[0].categories;
+  if (!split.every((a) => a.categories.engine === "local" && a.categories.source === source && a.categories.team?.id === team?.id)) return null;
+  if (source === "workspace") return { kind: "workspace", categories };
+  return source === "team" && team ? { kind: "team", team: team.id, categories } : null;
+}
+
+/** Whether an account shows this set: its own, or the one it follows. */
+export function showsOrderSet(a: MailAccount, set: CategoryOrderSet): boolean {
+  if (set.kind === "account") return a.id === set.account.id;
+  const c = a.categories;
+  return c.enabled && c.engine === "local" && c.source === set.kind && (set.kind === "workspace" || c.team?.id === set.team);
+}
+
+/** A set in the order of these keys, Primary first; null unless the keys are the set's, once each. */
+export function inKeyOrder(list: MailCategory[], keys: string[]): MailCategory[] | null {
+  if (keys[0] !== PRIMARY || keys.length !== list.length) return null;
+  const byKey = new Map(list.map((c) => [c.key, c]));
+  const out = keys.map((k) => byKey.get(k));
+  return new Set(keys).size === keys.length && out.every(Boolean) ? (out as MailCategory[]) : null;
+}
+
+/** The keys with one moved a place left (-1) or right (1); null for Primary, which stays first, and at either end. */
+export function moveCategory(keys: string[], key: string, dir: -1 | 1): string[] | null {
+  const i = keys.indexOf(key);
+  const j = i + dir;
+  if (i < 1 || j < 1 || j >= keys.length) return null;
+  const out = keys.slice();
+  [out[i], out[j]] = [out[j], out[i]];
+  return out;
+}
+
 /** A category's tone; an unknown colour reads as grey. */
 export const categoryTone = (c: Pick<MailCategory, "color">): Tone => (isTone(c.color) ? c.color : "gray");
 
