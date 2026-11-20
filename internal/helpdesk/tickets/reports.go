@@ -54,11 +54,13 @@ type ReportBrand struct {
 }
 
 // reportFilter narrows the overview to a team ("none": no team), a brand and a mailbox
-// ("none": no mailbox).
+// ("none": no mailbox). AgentRow, when set, keeps by_agent to that member's row: a member who
+// sees their own row alone (onlineScope).
 type reportFilter struct {
-	Team    string
-	Brand   string
-	Mailbox string
+	Team     string
+	Brand    string
+	Mailbox  string
+	AgentRow *uuid.UUID
 }
 
 // sql binds the filter as $n and $n+1. Merged tickets count nowhere: a merge moved their
@@ -311,9 +313,10 @@ func overview(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS strin
 		FROM tickets t JOIN users u ON u.id = t.assignee_id
 		JOIN members m ON m.workspace_id = t.workspace_id AND m.user_id = u.id
 		WHERE t.workspace_id = $1 AND t.deleted_at IS NULL AND NOT t.spam`+rf.sql(4)+`
+			AND ($6::uuid IS NULL OR t.assignee_id = $6)
 			AND ((t.solved_at >= $2 AND t.solved_at < $3) OR (t.created_at >= $2 AND t.created_at < $3))
 		GROUP BY u.id, u.name, u.email, u.avatar_url
-		ORDER BY 5 DESC, u.name LIMIT 100`, wid, from, to, rf.Team, rf.Brand)
+		ORDER BY 5 DESC, u.name LIMIT 100`, wid, from, to, rf.Team, rf.Brand, rf.AgentRow)
 	if err != nil {
 		return o, err
 	}
@@ -481,7 +484,8 @@ func registerInsights(d *deps.Deps, api huma.API) {
 
 	huma.Register(api, huma.Operation{OperationID: "report-overview", Method: http.MethodGet, Path: "/v1/reports/overview",
 		Summary: "Helpdesk overview report", Tags: []string{"Reports"},
-		Description: "from and to are YYYY-MM-DD (days in the workspace timezone, to inclusive) or RFC 3339. Default: the last 30 days. Spam, deleted and merged tickets are excluded. First response is how long a customer waited for a person's reply, never a bot's or an automation's: none on tickets the team started. team_id (or none), brand_id and mailbox_id (or none) narrow every figure."},
+		Description: "from and to are YYYY-MM-DD (days in the workspace timezone, to inclusive) or RFC 3339. Default: the last 30 days. Spam, deleted and merged tickets are excluded. First response is how long a customer waited for a person's reply, never a bot's or an automation's: none on tickets the team started. team_id (or none), brand_id and mailbox_id (or none) narrow every figure. " +
+			"by_agent is personal, as the agents report: admins (and API keys) get every member's row, other members their own row alone."},
 		func(ctx context.Context, in *struct {
 			From      string `query:"from"`
 			To        string `query:"to"`
@@ -493,7 +497,11 @@ func registerInsights(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			o, err := overview(ctx, d.DB.Pool, p.WorkspaceID, in.From, in.To, reportFilter{Team: in.TeamID, Brand: in.BrandID, Mailbox: in.MailboxID})
+			rf := reportFilter{Team: in.TeamID, Brand: in.BrandID, Mailbox: in.MailboxID}
+			if scope, self := onlineScope(ctx, p); scope == onlineSelf {
+				rf.AgentRow = self
+			}
+			o, err := overview(ctx, d.DB.Pool, p.WorkspaceID, in.From, in.To, rf)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}

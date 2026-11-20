@@ -41,7 +41,7 @@ export const shots = [
     name: 'collab/overview',
     path: '/mail',
     highlight: [
-      { target: (p) => sidebar(p).getByRole('button', { name: 'Compose', exact: true }), label: 1 },
+      { target: (p) => p.locator('main').getByRole('button', { name: 'Compose', exact: true }), label: 1 },
       { target: (p) => ['Work', 'Personal', 'Sales'].map((name) => sidebar(p).getByRole('link', { name: new RegExp(`^${name}`) })), label: 2, inset: 5 },
       { target: (p) => p.getByRole('navigation', { name: 'Folders', exact: true }), label: 3 },
     ],

@@ -330,13 +330,24 @@ type MailAttachment struct {
 }
 
 type MailComment struct {
-	ID        uuid.UUID       `json:"id"`
-	ThreadID  uuid.UUID       `json:"thread_id"`
-	Author    *domain.UserRef `json:"author"`
-	BodyHTML  string          `json:"body_html"`
-	Mentions  []uuid.UUID     `json:"mentions"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
+	ID       uuid.UUID       `json:"id"`
+	ThreadID uuid.UUID       `json:"thread_id"`
+	Author   *domain.UserRef `json:"author"`
+	BodyHTML string          `json:"body_html"`
+	Mentions []uuid.UUID     `json:"mentions"`
+	// ReplyTo is the comment it replies to (contracts/collab.md "Replies"); Parent quotes it.
+	ReplyTo *uuid.UUID    `json:"reply_to"`
+	Parent  *CommentQuote `json:"parent"`
+	// ParentDeleted: it replied to a comment that has since been deleted.
+	ParentDeleted bool      `json:"parent_deleted"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// CommentQuote is what a reply shows of the comment it answers: who wrote it and its first line.
+type CommentQuote struct {
+	Author  *domain.UserRef `json:"author"`
+	Excerpt string          `json:"excerpt"`
 }
 
 // ThreadAccount is the account a conversation belongs to, as its detail shows it.
@@ -367,6 +378,8 @@ type MailThreadDetail struct {
 	// UnusedAIDrafts are the conversation's AI drafts that were discarded, replaced or
 	// abandoned and are gone, so feedback on them stays reachable ("AI draft outcomes").
 	UnusedAIDrafts []UnusedAIDraft `json:"unused_ai_drafts"`
+	// Following: the caller follows it, so it is in their Mentions box ("Mentions").
+	Following bool `json:"following"`
 }
 
 // UnusedAIDraft is an AI draft a person did not use, with when that was known.
