@@ -96,7 +96,8 @@
     "title": "Tiempos de respuesta",
     "subtitle": "Medianas del período",
     "fastest": "Primera respuesta más rápida",
-    "none": "Todavía no hay respuestas en este período."
+    "none": "Todavía no hay respuestas en este período.",
+    "yours": "Tu primera respuesta"
   },
   "filter": {
     "teamLabel": "Equipo: {{value}}",

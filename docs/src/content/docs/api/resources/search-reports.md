@@ -42,6 +42,8 @@ curl "https://api.opendesk.sh/v1/reports/overview?from=2026-09-01&to=2026-09-30"
 
 `team_id` (a team, or `none`) and `brand_id` narrow every figure, and `assignee_id` narrows it to the tickets assigned to one member. Signed in, a member who is not an owner or admin may only name themselves in `assignee_id`.
 
+`by_agent` is personal, as in the agents report: API keys, owners and admins get every member's row, and other members their own row alone. The other figures are the same for everyone.
+
 See [Reports](/guides/reports/) for what each metric means.
 
 ## Agents report

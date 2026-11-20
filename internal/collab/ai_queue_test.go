@@ -278,7 +278,7 @@ func TestAIQueueCategories(t *testing.T) {
 	}
 
 	var e apiError
-	for _, bad := range [][]string{{"Not a key"}, {"a", "b", "c", "d", "e", "f", "g", "h", "i"}} {
+	for _, bad := range [][]string{{"Not a key"}, {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}} {
 		if st := doJSON(t, "POST", bot.URL+"/v1/collab/ai-queue/claim", map[string]any{"categories": bad}, &e); st != 422 {
 			t.Fatalf("categories %v: %d", bad, st)
 		}

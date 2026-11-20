@@ -865,6 +865,8 @@ function reports(ctx: Ctx): ReportsOverview {
             };
           })
           .filter((a) => !personF || a.user.id === personF)
+          // Personal, as the agents report: a member who is not an admin gets their own row alone.
+          .filter((a) => isAdmin(ws, db.meId) || a.user.id === db.meId)
       : [],
     by_team: teamRows,
     by_brand: brandRows,
