@@ -29,6 +29,7 @@
     "all": "Todo el correo",
     "shared": "Compartido conmigo",
     "assigned": "Asignado a mí",
+    "mentions": "Menciones",
     "needs_action": "Requiere acción",
     "snoozed": "Pospuestos",
     "ai_review": "Listo para revisar",
@@ -143,6 +144,8 @@
       "sharedHint": "Cuando un compañero comparte una conversación o una cuenta contigo, aparece aquí.",
       "assigned": "Nada asignado a ti",
       "assignedHint": "Las conversaciones que los compañeros te asignan aparecen aquí.",
+      "mentions": "Sin menciones",
+      "mentionsHint": "Las conversaciones en las que alguien del equipo te menciona o responde a tu comentario aparecen aquí hasta que las quites.",
       "aiReview": "No hay borradores de IA para revisar",
       "aiReviewHint": "Cuando un cliente de IA redacta una respuesta, la conversación espera aquí hasta que alguien envía, edita o descarta el borrador.",
       "starred": "No hay conversaciones destacadas",
@@ -214,6 +217,8 @@
     "openAccount": "Ajustes de la cuenta",
     "syncAccount": "Sincronizar la cuenta ahora",
     "copyLink": "Copiar enlace",
+    "follow": "Añadir a Menciones",
+    "unfollow": "Quitar de Menciones",
     "linkCopied": "Enlace copiado",
     "movePlaceholder": "Mover a una carpeta",
     "labelPlaceholder": "Aplicar etiquetas",
@@ -276,6 +281,8 @@
     "starred_other": "{{count}} conversaciones destacadas",
     "starred_many": "{{count}} de conversaciones destacadas",
     "undo": "Deshacer",
+    "followed": "Añadida a tus Menciones",
+    "unfollowed": "Quitada de tus Menciones",
     "failed": "Eso no funcionó. Nada cambió.",
     "syncing": "Sincronizando {{name}}",
     "sent": "Enviado desde {{email}}",
@@ -292,6 +299,7 @@
     "snoozedUntil": "Pospuesta hasta {{when}}",
     "sharedWith": "Compartida con {{who}}",
     "assignedTo": "Asignada a {{who}}",
+    "following": "En tus Menciones",
     "everyone": "todos",
     "and": "{{a}} y {{b}}",
     "andMore": "{{list}} y {{count}} más",
@@ -399,7 +407,12 @@
     "edited": "editado",
     "someone": "Un antiguo compañero",
     "empty": "Todavía no hay comentarios. Habla aquí de esta conversación con tu equipo.",
-    "menu": "Acciones del comentario"
+    "menu": "Acciones del comentario",
+    "reply": "Responder",
+    "replyingTo": "Respondiendo a {{name}}:",
+    "cancelReply": "Cancelar respuesta",
+    "parentDeleted": "Comentario original eliminado",
+    "showParent": "Ir al comentario original de {{name}}"
   },
   "share": {
     "title": "Compartir conversación",
@@ -698,6 +711,8 @@
     "assignedAnon": "Se te asignó una conversación",
     "mention": "{{who}} te mencionó en un comentario",
     "mentionAnon": "Te mencionaron en un comentario",
+    "reply": "{{who}} respondió a tu comentario",
+    "replyAnon": "Alguien respondió a tu comentario",
     "open": "Abrir"
   },
   "shortcuts": {
@@ -994,6 +1009,12 @@
       "body": "El correo de las personas se queda en Principal, y los boletines, las actualizaciones y las promociones tienen sus propias pestañas. Ollie puede sugerir categorías a partir de tu correo.",
       "action": "Configurar categorías",
       "dismiss": "Ahora no"
+    },
+    "reorder": {
+      "hint": "Arrastra para reordenar, o pulsa {{left}} o {{right}}",
+      "hintDrag": "Arrastra para reordenar",
+      "moved": "{{name}} movida al puesto {{position}} de {{count}}",
+      "failed": "No se pudo guardar el nuevo orden de las pestañas"
     }
   },
   "aiFeedback": {
@@ -1094,8 +1115,8 @@
     "add": "Añadir",
     "newSection": "Nueva sección",
     "newSectionTitle": "Nueva sección",
-    "emptySection": "Arrastra filas aquí o añade algunas",
-    "emptyFavorites": "Arrastra filas aquí para convertirlas en favoritos",
+    "emptySection": "Suelta filas aquí",
+    "emptyFavorites": "Suelta favoritos aquí",
     "spaceSettings": "Ajustes del Space",
     "editingSpace": "Editando {{name}}",
     "hintTitle": "Haz tuya la barra lateral",
@@ -1119,9 +1140,7 @@
     "customize": "Personalizar",
     "customizeHint": "Organiza tu barra lateral: arrastra, renombra y oculta",
     "doneHint": "Terminar de organizar la barra lateral",
-    "doneEditing": "Listo",
-    "layoutsShort": "Diseños",
-    "barHint": "Arrastra para mover. Haz clic en un nombre para renombrarlo. El ojo lo oculta."
+    "doneEditing": "Listo"
   },
   "layouts": {
     "title": "Empezar desde un diseño",

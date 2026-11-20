@@ -25,6 +25,7 @@ import type {
   SidebarPrefs,
   UseForTicketsBody,
 } from "@/lib/api/types";
+import { firstLine } from "@/lib/collab/html";
 import { collabFromName } from "@/lib/collab/identities";
 import { LABEL_TONES, toneHex, type LabelTone } from "@/lib/collab/labelTones";
 import { defaultSidebarPrefs, normalizePrefs, SECTION_IDS } from "@/lib/collab/sidebarPrefs";
@@ -46,7 +47,12 @@ import { PRIMARY } from "@/lib/collab/categories";
  */
 type Account = Omit<MailAccount, "identities" | "default_from" | "categories"> & { ownerId: string | null; aliases: MailIdentity[]; defaultFrom: string; catChoice: AccountChoice; catRules: MailCategoryRule[] };
 /** category: its tab once sorted (undefined: not yet); byPerson: someone moved it, so sorting leaves it. */
-type ThreadMeta = { id: string; account_id: string; subject: string; shares: MailAudience; assignees: string[]; comments: MailComment[]; needsAction?: boolean; snoozedUntil?: string; category?: string; categoryByPerson?: boolean };
+/** followers: who follows it in their Mentions box, with when it last had something for them (contracts/collab.md "Mentions"). */
+type ThreadMeta = { id: string; account_id: string; subject: string; shares: MailAudience; assignees: string[]; comments: MailComment[]; needsAction?: boolean; snoozedUntil?: string; category?: string; categoryByPerson?: boolean; followers?: Record<string, string> };
+
+/** A comment's reply fields when it replies to nothing. */
+const noReply = { reply_to: null, parent: null, parent_deleted: false } satisfies Pick<MailComment, "reply_to" | "parent" | "parent_deleted">;
+
 type State = { accounts: Account[]; folders: MailFolder[]; threads: Map<string, ThreadMeta>; messages: MailMessage[]; prefs: Record<string, SidebarPrefs> };
 
 const states = new Map<string, State>();
@@ -386,7 +392,9 @@ function seedState(ws: WsData): State {
   const salesThreads = [...threads.values()].filter((t) => t.account_id === sales.id);
   if (salesThreads[1]) {
     salesThreads[1].assignees = [me];
-    salesThreads[1].comments.push({ id: uuid(), thread_id: salesThreads[1].id, author: userRef(other), body_html: `<p>Can you take this one? They asked about the annual discount.</p>`, mentions: [me], created_at: new Date(now - 2 * HOUR).toISOString(), updated_at: new Date(now - 2 * HOUR).toISOString() });
+    salesThreads[1].comments.push({ id: uuid(), thread_id: salesThreads[1].id, author: userRef(other), body_html: `<p>Can you take this one? They asked about the annual discount.</p>`, mentions: [me], ...noReply, created_at: new Date(now - 2 * HOUR).toISOString(), updated_at: new Date(now - 2 * HOUR).toISOString() });
+    // The mention put it in your Mentions.
+    salesThreads[1].followers = { [me]: new Date(now - 2 * HOUR).toISOString() };
   }
   const workThreads = [...threads.values()].filter((t) => t.account_id === work.id);
   if (workThreads[2]) workThreads[2].shares = { everyone: false, team_ids: [], user_ids: [other] };
@@ -567,7 +575,7 @@ function seedState(ws: WsData): State {
     const from = { name: "Webdrop", email: "newsletter@webdrop.dev" };
     const text = "New web apps this week. Featuring Base44, Plane, and Quo.";
     const at = (ago: number) => new Date(now - ago).toISOString();
-    const comment = (author: string, body: string, ago: number): MailComment => ({ id: uuid(), thread_id: tid, author: userRef(author), body_html: `<p>${body}</p>`, mentions: [], created_at: at(ago), updated_at: at(ago) });
+    const comment = (author: string, body: string, ago: number): MailComment => ({ id: uuid(), thread_id: tid, author: userRef(author), body_html: `<p>${body}</p>`, mentions: [], ...noReply, created_at: at(ago), updated_at: at(ago) });
     threads.set(tid, {
       id: tid,
       account_id: sales.id,
@@ -949,6 +957,7 @@ function detailOut(ws: WsData, t: ThreadMeta): MailThreadDetail {
     can_act: canActRole(ws, db.meId),
     // The demo keeps no AI draft records once a draft is gone.
     unused_ai_drafts: [],
+    following: !!t.followers?.[db.meId],
   };
 }
 
@@ -980,7 +989,7 @@ function listThreads(ws: WsData, ctx: Ctx) {
   else {
     if (accountId) rows = rows.filter((t) => t.account_id === accountId);
     // A person's conversations (with) include those shared with you on their own.
-    else if (box !== "shared" && box !== "assigned" && box !== "needs_action" && box !== "snoozed" && !ctx.query.get("with")) rows = rows.filter((t) => seeAcc.has(t.account_id));
+    else if (box !== "shared" && box !== "assigned" && box !== "mentions" && box !== "needs_action" && box !== "snoozed" && !ctx.query.get("with")) rows = rows.filter((t) => seeAcc.has(t.account_id));
     rows = rows.filter((t) => {
       const junk = inRole(s, t, "trash") || inRole(s, t, "spam");
       switch (box) {
@@ -1002,6 +1011,8 @@ function listThreads(ws: WsData, ctx: Ctx) {
           return t.shared || (s.accounts.find((a) => a.id === t.account_id)?.ownerId !== me && !junk && !!s.accounts.find((a) => a.id === t.account_id && a.visibility === "shared"));
         case "assigned":
           return t.assignees.some((x) => x.id === me);
+        case "mentions":
+          return !!s.threads.get(t.id)?.followers?.[me] && !junk;
         case "needs_action":
           return t.needs_action && s.accounts.some((a) => a.id === t.account_id && a.visibility === "shared" && a.handling_enabled) && inRole(s, t, "inbox");
         case "snoozed":
@@ -1032,7 +1043,12 @@ function listThreads(ws: WsData, ctx: Ctx) {
         t.participants.some((p) => p.email.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)) ||
         msgsOf(s, t.id).some((m) => m.body_text.toLowerCase().includes(q)),
     );
-  rows.sort((a, b) => b.last_message_at.localeCompare(a.last_message_at));
+  // Mentions: newest activity first, a comment or a follow as well as mail.
+  const key = (t: MailThread) => {
+    const at = !folderId && box === "mentions" ? s.threads.get(t.id)?.followers?.[me] : undefined;
+    return at && at > t.last_message_at ? at : t.last_message_at;
+  };
+  rows.sort((a, b) => key(b).localeCompare(key(a)));
   const limit = Math.min(Math.max(Number(ctx.query.get("limit") ?? 50) || 50, 1), 100);
   const offset = Number(ctx.query.get("cursor") ?? 0) || 0;
   return { data: rows.slice(offset, offset + limit), next_cursor: offset + limit < rows.length ? String(offset + limit) : null };
@@ -1117,6 +1133,7 @@ function counts(ws: WsData) {
       unread: mine.filter((t) => t.unread && !inRole(s, t, "trash") && !inRole(s, t, "spam")).length,
       shared: all.filter((t) => t.shared && inRole(s, t, "inbox")).length,
       assigned: assignedOpen.length,
+      mentions: all.filter((t) => !!s.threads.get(t.id)?.followers?.[me] && !inRole(s, t, "trash") && !inRole(s, t, "spam")).length,
       drafts: mine.filter((t) => inRole(s, t, "drafts")).length,
       needs_action: mine.filter((t) => t.needs_action && s.accounts.some((a) => a.id === t.account_id && a.visibility === "shared" && a.handling_enabled) && inRole(s, t, "inbox")).length,
       snoozed: mine.filter((t) => !!t.snoozed_until && s.accounts.some((a) => a.id === t.account_id && a.visibility === "shared" && a.handling_enabled) && inRole(s, t, "inbox")).length,
@@ -1155,6 +1172,21 @@ function emit(ws: WsData, type: "collab.changed" | "collab.accounts", data: Reco
 
 function changed(ws: WsData, accountId: string | null, threadIds: string[], folders = true) {
   emit(ws, "collab.changed", { account_id: accountId, thread_ids: threadIds, folders }, audienceOf(ws, accountId, threadIds));
+}
+
+/**
+ * Who a new comment by `author` answers (contracts/collab.md "Mentions"): each other commenter
+ * since whose latest comment only `author` has commented.
+ */
+export function answeredBy(comments: MailComment[], author: string): string[] {
+  const out: string[] = [];
+  for (let i = comments.length - 1; i >= 0; i--) {
+    const by = comments[i].author?.id;
+    if (by === author) continue;
+    if (by && !out.includes(by)) out.push(by);
+    break;
+  }
+  return out;
 }
 
 function threadOr404(ws: WsData, id: string): ThreadMeta {
@@ -1940,15 +1972,45 @@ export function registerCollab() {
     if (!html.trim() || html.length > 20000) throw invalid("body_html must be 1 to 20000 characters");
     const mentions = (strArr(ctx.body.mentions) ?? []).filter((id) => ctx.ws.members.some((m) => m.user_id === id));
     const at = nowIso();
-    const c: MailComment = { id: uuid(), thread_id: t.id, author: userRef(db.meId), body_html: html, mentions, created_at: at, updated_at: at };
+    // A reply answers a comment of this conversation, and its author (contracts/collab.md "Replies").
+    const replyTo = typeof ctx.body.reply_to === "string" ? ctx.body.reply_to : null;
+    const parent = replyTo ? t.comments.find((x) => x.id === replyTo) : undefined;
+    if (replyTo && !parent) throw invalid("The comment you reply to is not in this conversation.");
+    const reply = parent ? { reply_to: parent.id, parent: { author: parent.author, excerpt: firstLine(parent.body_html) }, parent_deleted: false } : noReply;
+    const c: MailComment = { id: uuid(), thread_id: t.id, author: userRef(db.meId), body_html: html, mentions, ...reply, created_at: at, updated_at: at };
+    // Who it answers: the author of the comment it replies to, or else those who commented and since
+    // whose latest comment only you have (before it is added).
+    const parentAuthor = parent?.author?.id;
+    const answered = parent ? (parentAuthor && parentAuthor !== db.meId ? [parentAuthor] : []) : answeredBy(t.comments, db.meId);
     t.comments.push(c);
     for (const uid of mentions) {
       if (!seesThread(ctx.ws, t, uid)) t.shares = { ...t.shares, user_ids: [...new Set([...t.shares.user_ids, uid])] };
       if (uid !== db.meId) notifyUser(ctx.ws, uid, "collab_mention", { thread_id: t.id, comment_id: c.id, subject: t.subject });
     }
+    if (parent && parentAuthor && parentAuthor !== db.meId && !mentions.includes(parentAuthor) && seesThread(ctx.ws, t, parentAuthor))
+      notifyUser(ctx.ws, parentAuthor, "collab_mention", { thread_id: t.id, comment_id: c.id, reply_to: parent.id, subject: t.subject });
+    // Every follower sees new activity; the people it mentions or answers follow it.
+    const followers = { ...t.followers };
+    for (const uid of Object.keys(followers)) followers[uid] = at;
+    for (const uid of [...mentions, ...answered]) if (uid !== db.meId && seesThread(ctx.ws, t, uid)) followers[uid] = at;
+    t.followers = followers;
     changed(ctx.ws, t.account_id, [t.id], false);
     return respond(201, c);
   });
+
+  // In or out of your Mentions box: yours alone (contracts/collab.md "Mentions").
+  const setFollow = (ctx: Ctx, on: boolean) => {
+    requireCollab(ctx.ws);
+    const t = threadOr404(ctx.ws, ctx.params.id);
+    const followers = { ...t.followers };
+    if (on) followers[db.meId] = nowIso();
+    else delete followers[db.meId];
+    t.followers = followers;
+    emit(ctx.ws, "collab.changed", { account_id: t.account_id, thread_ids: [t.id], folders: true }, [db.meId]);
+    return respond(204);
+  };
+  put("/v1/collab/threads/:id/follow", (ctx) => setFollow(ctx, true));
+  del("/v1/collab/threads/:id/follow", (ctx) => setFollow(ctx, false));
 
   patch("/v1/collab/comments/:id", (ctx) => {
     requireCollab(ctx.ws);
@@ -1972,7 +2034,7 @@ export function registerCollab() {
       if (!c) continue;
       threadOr404(ctx.ws, t.id);
       if (c.author?.id !== db.meId && !isAdmin(ctx.ws, db.meId)) throw new HttpError(403, "forbidden", "Only its author or an admin can delete a comment.");
-      t.comments = t.comments.filter((x) => x.id !== c.id);
+      t.comments = t.comments.filter((x) => x.id !== c.id).map((x) => (x.reply_to === c.id ? { ...x, reply_to: null, parent: null, parent_deleted: true } : x));
       changed(ctx.ws, t.account_id, [t.id], false);
       return respond(204);
     }
